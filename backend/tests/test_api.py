@@ -31,6 +31,49 @@ def test_private_routes_require_authentication() -> None:
     assert response.json() == {"detail": "Authentication required"}
 
 
+def test_production_frontend_origin_passes_cors_preflight() -> None:
+    response = client.options(
+        "/auth/login",
+        headers={
+            "Origin": "https://novachatbot.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "https://novachatbot.vercel.app"
+
+
+def test_project_preview_origin_passes_cors_preflight() -> None:
+    preview_origin = "https://nova-ai-agent-preview-123-thazg-s-projects.vercel.app"
+    response = client.options(
+        "/auth/login",
+        headers={
+            "Origin": preview_origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == preview_origin
+
+
+def test_unrelated_vercel_origin_is_rejected_by_cors() -> None:
+    response = client.options(
+        "/auth/login",
+        headers={
+            "Origin": "https://unrelated-project.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Access-Control-Allow-Origin" not in response.headers
+
+
 def test_readiness_reports_provider_state(monkeypatch) -> None:
     async def fake_probe():
         return ({

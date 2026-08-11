@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NovaMark } from '../brand/NovaMark';
+import { API_BASE_URL } from '../../services/api';
 
 interface StartupScreenProps {
   onReady: () => void;
@@ -26,10 +27,9 @@ export const StartupScreen = ({ onReady }: StartupScreenProps) => {
       try {
         setStepIndex(1);
 
-        const res = await fetch(
-          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/health/ready`,
-          { signal: AbortSignal.timeout(10000) }
-        );
+        const res = await fetch(`${API_BASE_URL}/health/ready`, {
+          signal: AbortSignal.timeout(10000),
+        });
         const data = await res.json();
 
         if (!isMounted) return;

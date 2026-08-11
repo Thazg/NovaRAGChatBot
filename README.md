@@ -169,8 +169,11 @@ frontend/
 
 ## Deployment
 
+- Live frontend: [novachatbot.vercel.app](https://novachatbot.vercel.app/)
+- Production API: `https://novaaiagent-4.onrender.com`
 - `render.yaml` provisions the FastAPI service on Render.
-- The Vite frontend can deploy to Vercel with `VITE_API_BASE_URL` pointing to the backend.
+- The Vite production build uses the Render API URL from `frontend/.env.production`; a Vercel environment variable can override it.
+- Render allows the production frontend origin plus preview URLs belonging to this Vercel project.
 - Backblaze B2 variables enable durable uploads, indexes, users, and conversations.
 
 ## License

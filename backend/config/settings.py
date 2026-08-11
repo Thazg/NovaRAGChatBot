@@ -58,10 +58,16 @@ class Settings:
             "CORS_ORIGINS",
             "http://localhost:3000,http://localhost:5173,"
             "http://127.0.0.1:3000,http://127.0.0.1:5173,"
-            "https://novaaiagent.vercel.app",
+            "https://novachatbot.vercel.app",
         ).split(",")
         if origin.strip()
     ]
+    # Vercel creates a unique hostname for every preview deployment. Restrict
+    # previews to this project/team instead of allowing every *.vercel.app site.
+    CORS_ORIGIN_REGEX: str = os.getenv(
+        "CORS_ORIGIN_REGEX",
+        r"^https://nova-ai-agent(?:-[a-z0-9-]+)?-thazg-s-projects\.vercel\.app$",
+    ).strip()
 
     # Auth
     JWT_SECRET: str = os.getenv("JWT_SECRET", "nova-ai-default-secret")

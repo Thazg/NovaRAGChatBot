@@ -32,14 +32,14 @@ The WebM video, screenshots, and trace are written to `frontend/demo-artifacts/`
 
 1. Create a Render Blueprint from `render.yaml`.
 2. Set `GROQ_API_KEY`, a long random `JWT_SECRET`, and optional B2 credentials.
-3. Confirm `ENVIRONMENT=production` and the exact Vercel origin in `CORS_ORIGINS`.
+3. Confirm `ENVIRONMENT=production`, `CORS_ORIGINS=https://novachatbot.vercel.app`, and the project-scoped `CORS_ORIGIN_REGEX` from `render.yaml`.
 4. Verify `/health`, then `/health/ready?refresh=true`.
 5. Send a real chat request and inspect `X-Request-ID`, `X-Response-Time-Ms`, and rate-limit headers.
 
 ## Vercel deployment checklist
 
 1. Set the project root to `frontend`.
-2. Set `VITE_API_BASE_URL` to the HTTPS Render backend URL.
+2. Confirm `VITE_API_BASE_URL=https://novaaiagent-4.onrender.com` (already committed in `frontend/.env.production`, and optionally overridden in Vercel).
 3. Deploy using `frontend/vercel.json` and verify SPA refresh routes.
 4. Test sign-up, upload, streaming, citation rendering, logout, and a mobile viewport.
 

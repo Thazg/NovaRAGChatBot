@@ -20,7 +20,9 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: CORS_ORIGINS
-        value: https://novaaiagent.vercel.app
+        value: https://novachatbot.vercel.app
+      - key: CORS_ORIGIN_REGEX
+        value: '^https://nova-ai-agent(?:-[a-z0-9-]+)?-thazg-s-projects\.vercel\.app$'
       - key: LOG_LEVEL
         value: INFO
       - key: RATE_LIMIT_ENABLED
