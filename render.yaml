@@ -9,12 +9,26 @@ services:
     envVars:
       - key: LLM_PROVIDER
         value: groq
+      - key: ENVIRONMENT
+        value: production
+      - key: APP_VERSION
+        value: 2.1.0
       - key: GROQ_MODEL
         value: llama-3.1-8b-instant
       - key: GROQ_API_KEY
         sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://novaaiagent.vercel.app
       - key: LOG_LEVEL
         value: INFO
+      - key: RATE_LIMIT_ENABLED
+        value: true
+      - key: RATE_LIMIT_REQUESTS
+        value: 120
+      - key: AUTH_RATE_LIMIT_REQUESTS
+        value: 10
       - key: TOP_K
         value: 5
       - key: MIN_SIMILARITY_SCORE

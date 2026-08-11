@@ -6,10 +6,17 @@ dist/
 *.egg
 .venv/
 venv/
+.coverage
+coverage.xml
+htmlcov/
+*.log
 
 # Node
 node_modules/
 frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+frontend/demo-artifacts/
 
 # Env
 .env
@@ -29,3 +36,7 @@ Thumbs.db
 backend/storage/
 backend/uploads/
 backend/Dataset/
+backend/.pytest-tmp/
+backend/pytest_tmp/
+backend/tests/_users_test.json
+backend/tests/_conversations_test.json

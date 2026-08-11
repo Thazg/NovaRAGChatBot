@@ -2,6 +2,7 @@ import json
 import logging
 import pickle
 import re
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -157,11 +158,16 @@ class HybridVectorStore:
         from rag.embeddings import get_embeddings_batch
         texts = [n.get("content", "") for n in nodes]
         new_embeddings = get_embeddings_batch(texts, prefix="search_document:")
-        if new_embeddings is not None:
+        if new_embeddings is not None and len(new_embeddings) == len(nodes):
             if self.embeddings is None or len(self.embeddings) == 0:
                 self.embeddings = new_embeddings
             else:
                 self.embeddings = np.vstack([self.embeddings, new_embeddings])
+        elif self.embeddings is not None:
+            # Never keep a partial dense index whose rows no longer align with
+            # the document list. BM25 remains fully functional.
+            self.embeddings = None
+            self.faiss_index = None
         self.documents.extend(nodes)
         self._build_bm25()
         if self.embeddings is not None and len(self.embeddings) > 0:
@@ -176,7 +182,11 @@ class HybridVectorStore:
         self.documents = [d for d, m in zip(self.documents, mask) if m]
         removed = before - len(self.documents)
         if removed and self.embeddings is not None and len(self.embeddings) > 0:
-            self.embeddings = self.embeddings[mask]
+            if len(self.embeddings) == len(mask):
+                self.embeddings = self.embeddings[mask]
+            else:
+                self.embeddings = None
+                self.faiss_index = None
         if self.documents:
             self._build_bm25()
             if self.embeddings is not None and len(self.embeddings) > 0:
@@ -236,10 +246,16 @@ class HybridVectorStore:
         embeddings = None
         if ef.exists():
             embeddings = np.load(ef)
+            if len(embeddings) != len(documents):
+                logger.warning("Ignoring misaligned embeddings for user %s", user_id)
+                embeddings = None
         faiss_index = None
-        if ff.exists():
+        if ff.exists() and embeddings is not None:
             import faiss
             faiss_index = faiss.read_index(str(ff))
+            if faiss_index.ntotal != len(documents):
+                logger.warning("Ignoring misaligned FAISS index for user %s", user_id)
+                faiss_index = None
         bm25 = None
         if bf.exists():
             with bf.open("rb") as f:
@@ -289,7 +305,12 @@ class HybridVectorStore:
                 rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (rrf_k + rank + 1)
 
         ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
-        candidates = [(idx, rrf_score) for idx, rrf_score in ranked if rrf_score > min_score]
+        max_rrf = ranked[0][1] if ranked else 0.0
+        candidates = [
+            (idx, rrf_score)
+            for idx, rrf_score in ranked
+            if min_score <= 0 or (max_rrf > 0 and rrf_score / max_rrf >= min_score)
+        ]
 
         query_terms = {w.lower() for w in re.findall(r"[a-zA-Z]\w+", expanded) if len(w) > 3}
         candidate_count = min(top_k * 4, len(candidates))
@@ -343,8 +364,6 @@ class HybridVectorStore:
                         break
 
         results = []
-        rrf_values = np.array([rrf_scores.get(i, 0.0) for i in range(n)])
-        max_rrf = float(np.max(rrf_values)) if len(rrf_values) > 0 else 1.0
         for idx in top_indices:
             if 0 <= idx < len(self.documents):
                 node = dict(self.documents[idx])
@@ -381,3 +400,16 @@ def load_vector_store(user_id: str = "") -> HybridVectorStore:
         if not mf.exists():
             raise FileNotFoundError(f"Vector store not found for user {user_id}.")
     return HybridVectorStore.load(user_id)
+
+
+def delete_vector_store(user_id: str = "") -> None:
+    """Remove local and remote index artifacts for a user."""
+    index_dir = BASE_INDEX_DIR / user_id
+    if index_dir.exists():
+        shutil.rmtree(index_dir)
+    try:
+        from services.remote_storage import delete_file
+        for remote_path in _b2_backup_paths(user_id):
+            delete_file(remote_path)
+    except Exception:
+        pass

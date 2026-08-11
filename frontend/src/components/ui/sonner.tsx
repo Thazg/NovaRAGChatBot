@@ -6,11 +6,12 @@ import {
   TriangleAlert,
 } from "lucide-react"
 import { Toaster as Sonner } from "sonner"
+import { useChatStore } from "@/store/useChatStore"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const theme = document.documentElement.classList.contains("dark") ? "dark" : "light"
+  const theme = useChatStore((state) => state.theme)
 
   return (
     <Sonner

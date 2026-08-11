@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogOut, Menu, Sparkles, User, MessageSquare, FolderOpen, Plus } from 'lucide-react';
+import { LogOut, Menu, Sparkles, User, MessageSquare, FolderOpen, Plus, ShieldCheck } from 'lucide-react';
 import { Sidebar } from '../sidebar/Sidebar';
 import { ChatArea } from '../chat/ChatArea';
 import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
@@ -7,31 +7,29 @@ import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
 import { useChatStore } from '../../store/useChatStore';
 import { SettingsDrawer } from './SettingsDrawer';
 import { cn } from '../../lib/utils';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 
 export const Layout = () => {
   const { theme, avatar, sidebarActiveTab, setSidebarActiveTab, createConversation } = useChatStore();
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const resolvedTheme = useResolvedTheme(theme);
 
   // Apply dark mode by default if theme is 'system'
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
 
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
+    root.classList.add(resolvedTheme);
+  }, [resolvedTheme]);
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden text-foreground">
+    <div className="nova-shell relative flex h-dvh w-full overflow-hidden text-foreground">
+      <div className="nova-grid" />
       {/* Sidebar */}
       <Sidebar />
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col min-w-0 relative overflow-hidden">
+      <main className="z-10 flex-1 flex flex-col min-w-0 relative overflow-hidden">
 
         {/* ===== MOBILE HEADER ===== */}
         <header className="md:hidden shrink-0 z-20 sticky top-0 bg-background/80 backdrop-blur-2xl border-b border-border/30">
@@ -112,7 +110,7 @@ export const Layout = () => {
         </header>
 
         {/* ===== DESKTOP HEADER ===== */}
-        <header className="hidden md:flex h-[60px] border-b border-border/40 items-center justify-between px-5 bg-background/50 backdrop-blur-2xl z-20 sticky top-0 shrink-0">
+        <header className="hidden md:flex h-[64px] border-b border-border/40 items-center justify-between px-6 bg-background/45 backdrop-blur-2xl z-20 sticky top-0 shrink-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary/30 via-primary/20 to-violet-500/20 border border-primary/25 flex items-center justify-center shadow-sm">
@@ -120,12 +118,16 @@ export const Layout = () => {
               </div>
               <div>
                 <span className="font-bold tracking-tight text-[14px] text-foreground">Nova AI</span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground/60 font-medium">Private RAG</span>
+                <span className="ml-1.5 text-[11px] text-muted-foreground/60 font-medium">Knowledge OS</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5 flex-1 justify-end">
+            <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[10px] font-semibold text-emerald-500/80">
+              <ShieldCheck className="h-3 w-3" />
+              Private workspace
+            </div>
             <SettingsDrawer />
             <div className={cn(
               "w-8 h-8 rounded-full overflow-hidden border-2 shrink-0 transition-all",

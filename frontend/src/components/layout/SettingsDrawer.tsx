@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { Settings as SettingsIcon, Monitor, User, Info, Upload, Keyboard, Globe, Shield, Trash2, Heart, Code, Cpu, Database, FileText, Loader2, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Settings as SettingsIcon, Monitor, User, Info, Upload, Keyboard, Globe, Shield, Trash2, Heart, Code, Cpu, Database, FileText, Loader2, ExternalLink, AlertTriangle, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { useChatStore } from '../../store/useChatStore';
@@ -8,7 +8,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Input } from '../ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
-import { api, type Document } from '../../services/api';
+import { api, type Document, type HealthStatus, type ReadinessStatus } from '../../services/api';
 
 export const SettingsDrawer = () => {
   const { theme, setTheme, avatar, setAvatar, displayName, setDisplayName, settingsOpen, setSettingsOpen, customInstructions, setCustomInstructions, characterStyle, setCharacterStyle, nickname, setNickname, developerMode, setDeveloperMode, language, setLanguage } = useChatStore();
@@ -21,6 +21,8 @@ export const SettingsDrawer = () => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [systemInfo, setSystemInfo] = useState<HealthStatus | null>(null);
+  const [readiness, setReadiness] = useState<ReadinessStatus | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
@@ -29,12 +31,6 @@ export const SettingsDrawer = () => {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
-
-  const devSections = developerMode
-    ? [
-        { id: 'system', icon: Cpu, label: 'System' },
-      ]
-    : [];
 
   const sections = useMemo(() => {
     const all = [
@@ -45,7 +41,7 @@ export const SettingsDrawer = () => {
       { id: 'privacy', icon: Shield, label: 'Privacy & Data' },
       { id: 'shortcuts', icon: Keyboard, label: 'Shortcuts' },
       { id: 'storage', icon: Database, label: 'Storage' },
-      ...devSections,
+      ...(developerMode ? [{ id: 'system', icon: Cpu, label: 'System' }] : []),
       { id: 'developer', icon: Code, label: 'Developer' },
       { id: 'about', icon: Info, label: 'About' },
     ];
@@ -62,9 +58,24 @@ export const SettingsDrawer = () => {
     }
   }, [settingsOpen, activeSection]);
 
+  useEffect(() => {
+    if (!developerMode && activeSection === 'system') setActiveSection('general');
+  }, [activeSection, developerMode]);
+
+  useEffect(() => {
+    if (settingsOpen && activeSection === 'system') {
+      api.healthCheck().then(setSystemInfo).catch(() => setSystemInfo(null));
+      api.readinessCheck().then(setReadiness).catch(() => setReadiness(null));
+    }
+  }, [activeSection, settingsOpen]);
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error('Avatar must be smaller than 2 MB');
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setAvatar(reader.result as string);
@@ -76,7 +87,7 @@ export const SettingsDrawer = () => {
   return (
     <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground group">
+        <Button aria-label="Open settings" variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground group">
           <SettingsIcon className="h-5 w-5 transition-transform group-hover:rotate-45 duration-300" />
         </Button>
       </SheetTrigger>
@@ -193,10 +204,10 @@ export const SettingsDrawer = () => {
                     Appearance
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    {['light', 'dark', 'system'].map((t) => (
+                    {(['light', 'dark', 'system'] as const).map((t) => (
                       <button
                         key={t}
-                        onClick={() => setTheme(t as any)}
+                        onClick={() => setTheme(t)}
                         className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                           theme === t 
                             ? 'bg-primary text-primary-foreground shadow-sm' 
@@ -627,9 +638,49 @@ export const SettingsDrawer = () => {
                     System
                   </div>
                   <div className="space-y-3 p-4 bg-muted/20 rounded-xl border border-border/50">
+                    <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background/70 p-3">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "grid h-7 w-7 place-items-center rounded-lg",
+                          readiness?.ready ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500",
+                        )}>
+                          <Activity className="h-3.5 w-3.5" />
+                        </span>
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">AI readiness</p>
+                          <p className="text-[10px] text-muted-foreground">{readiness?.message || 'Checking provider…'}</p>
+                        </div>
+                      </div>
+                      <span className={cn(
+                        "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
+                        readiness?.ready ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500",
+                      )}>
+                        {readiness?.ready ? 'Ready' : 'Checking'}
+                      </span>
+                    </div>
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">AI Provider</label>
-                      <div className="text-sm font-mono p-2 bg-background rounded-md border text-foreground">Groq (llama-3.1-8b-instant)</div>
+                      <div className="text-sm font-mono p-2 bg-background rounded-md border text-foreground">
+                        {systemInfo?.llm_provider === 'groq'
+                          ? `Groq (${systemInfo.groq_model || 'configured model'})`
+                          : systemInfo?.llm_provider === 'ollama'
+                            ? `Ollama (${systemInfo.model || 'local model'})`
+                            : 'Checking…'}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-lg border border-border/40 bg-background/55 p-2">
+                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Version</p>
+                        <p className="mt-1 font-mono text-xs text-foreground">v{systemInfo?.version || '—'}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/40 bg-background/55 p-2">
+                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Environment</p>
+                        <p className="mt-1 truncate font-mono text-xs capitalize text-foreground">{systemInfo?.environment || '—'}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/40 bg-background/55 p-2">
+                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Uptime</p>
+                        <p className="mt-1 font-mono text-xs text-foreground">{systemInfo?.uptime_seconds != null ? `${Math.floor(systemInfo.uptime_seconds)}s` : '—'}</p>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium text-foreground">Retrieval Top-K</label>
@@ -642,7 +693,10 @@ export const SettingsDrawer = () => {
                     <div className="pt-2 border-t border-border/30 space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">RAG Pipeline</label>
                       <div className="flex gap-1.5 flex-wrap">
-                        {['BM25', 'FAISS (Groq)', 'RRF Fusion', 'Context Builder', 'Prompt Assembly'].map((step) => (
+                        {(systemInfo?.retrieval === 'hybrid'
+                          ? ['BM25', 'Semantic vectors', 'RRF fusion', 'Context builder', 'Prompt assembly']
+                          : ['BM25 lexical search', 'Query expansion', 'Context builder', 'Prompt assembly']
+                        ).map((step) => (
                           <span key={step} className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-medium">{step}</span>
                         ))}
                       </div>

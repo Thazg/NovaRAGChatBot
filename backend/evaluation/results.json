@@ -1,0 +1,73 @@
+{
+  "k": 5,
+  "query_count": 6,
+  "recall_at_k": 1.0,
+  "mrr": 0.9166666666666666,
+  "citation_precision": 1.0,
+  "queries": [
+    {
+      "query": "How are BM25 and FAISS rankings combined?",
+      "retrieved_ids": [
+        "retrieval-1",
+        "security-1",
+        "interface-1",
+        "storage-1",
+        "streaming-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "query": "How does Nova hash user passwords?",
+      "retrieved_ids": [
+        "security-1",
+        "architecture-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "query": "How are generated tokens streamed to React?",
+      "retrieved_ids": [
+        "security-1",
+        "streaming-1",
+        "deployment-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "query": "How does startup verify the Groq model is reachable?",
+      "retrieved_ids": [
+        "health-1",
+        "streaming-1",
+        "deployment-1",
+        "retrieval-1",
+        "interface-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "query": "Where are uploaded files persisted in cloud object storage?",
+      "retrieved_ids": [
+        "storage-1",
+        "security-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "query": "Which platforms host the backend and frontend?",
+      "retrieved_ids": [
+        "deployment-1",
+        "health-1",
+        "interface-1",
+        "streaming-1",
+        "architecture-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0
+    }
+  ]
+}

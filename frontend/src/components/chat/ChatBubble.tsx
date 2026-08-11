@@ -1,8 +1,15 @@
 import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
+import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
 import { User, Copy, Check, ThumbsUp, ThumbsDown, RotateCcw, Sparkles, Share2 } from 'lucide-react';
 import type { Message } from '../../types';
 import { cn } from '../../lib/utils';
@@ -10,6 +17,19 @@ import { Button } from '../ui/button';
 import { motion } from 'framer-motion';
 import { useChatStore } from '../../store/useChatStore';
 import { toast } from 'sonner';
+
+SyntaxHighlighter.registerLanguage('javascript', javascript);
+SyntaxHighlighter.registerLanguage('js', javascript);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('ts', typescript);
+SyntaxHighlighter.registerLanguage('tsx', typescript);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('py', python);
+SyntaxHighlighter.registerLanguage('bash', bash);
+SyntaxHighlighter.registerLanguage('shell', bash);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('html', markup);
 
 interface ChatBubbleProps {
   message: Message;
@@ -22,11 +42,15 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
   const { avatar, setMessageFeedback, currentConversationId } = useChatStore();
   const isUser = message.role === 'user';
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast.success('Copied to clipboard');
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success('Copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Clipboard access is unavailable');
+    }
   };
 
   const handleFeedback = (feedback: 'like' | 'dislike') => {
@@ -35,9 +59,17 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
     setMessageFeedback(currentConversationId, message.id, newFeedback);
   };
 
-  const handleShare = () => {
-    navigator.clipboard.writeText(message.content);
-    toast.success('Message copied to clipboard');
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Nova AI response', text: message.content });
+      } else {
+        await handleCopy(message.content);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      toast.error('Could not share this message');
+    }
   };
 
   return (
@@ -84,7 +116,7 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  code({ node, inline, className, children, ...props }: any) {
+                  code({ node: _node, inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');
                     const language = match ? match[1] : '';
                     const codeString = String(children).replace(/\n$/, '');

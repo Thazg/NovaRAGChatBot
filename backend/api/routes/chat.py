@@ -11,11 +11,21 @@ from config.settings import settings
 from rag.llm_client import stream_tokens
 from rag.prompts import build_prompt, no_context_template, empty_db_template
 from rag.rag_chain import retrieve_context, get_retriever
-from services.conversation_store import append_session_message, get_session_history
+from services.conversation_store import (
+    append_session_message,
+    get_session_history,
+    prepare_regeneration,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _contains_trigger(text: str, trigger: str) -> bool:
+    if " " in trigger:
+        return trigger in text
+    return re.search(rf"\b{re.escape(trigger)}\b", text) is not None
 
 
 class ChatRequest(BaseModel):
@@ -24,6 +34,7 @@ class ChatRequest(BaseModel):
     stream: bool = True
     instructions: str = ""
     language: str = ""
+    regenerate: bool = False
 
 
 async def _retrieve_nodes(question: str, rewritten_question: str, user_id: str):
@@ -73,13 +84,18 @@ async def chat_stream(http_request: Request, request: ChatRequest):
             media_type="text/event-stream",
         )
 
+    if request.regenerate:
+        prepare_regeneration(session_id, user_id)
+
     question_lower = question.lower().strip()
     greetings = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
     if any(re.search(r'\b' + re.escape(greeting) + r'\b', question_lower) for greeting in greetings):
+        greeting_response = "Hi! I'm Nova — your intelligent research companion. What would you like to explore today?"
+        if not request.regenerate:
+            append_session_message(session_id, "user", question, user_id)
+        append_session_message(session_id, "assistant", greeting_response, user_id)
         return StreamingResponse(
-            single_token_stream(
-                "Hi! I'm Nova — your intelligent research companion. What would you like to explore today?"
-            ),
+            single_token_stream(greeting_response),
             media_type="text/event-stream",
         )
 
@@ -92,7 +108,7 @@ async def chat_stream(http_request: Request, request: ChatRequest):
         "cụ thể", "chi tiết", "cụ thể hơn", "rõ hơn", "kể tiếp", "tiếp theo", "nói rõ",
     ]
     if history and (
-        any(word in question_lower for word in trigger_words)
+        any(_contains_trigger(question_lower, word) for word in trigger_words)
         or len(question.split()) <= 3
     ):
         history_text = "\n".join(f"{m['role']}: {m['content'][:200]}" for m in history)
@@ -145,8 +161,8 @@ async def chat_stream(http_request: Request, request: ChatRequest):
 
     logger.info("Prompt length: %d chars, retrieved %d nodes, no_context_found=%s", len(prompt), len(nodes), no_context_found)
 
-    history.append({"role": "user", "content": question})
-    append_session_message(session_id, "user", question, user_id)
+    if not request.regenerate:
+        append_session_message(session_id, "user", question, user_id)
 
     async def sse_generator():
         full_response = ""

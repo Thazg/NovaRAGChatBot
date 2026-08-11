@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from config.settings import settings
 
@@ -33,7 +33,7 @@ def upload_file(remote_path: str, local_path: Path) -> bool:
     try:
         client.upload_file(str(local_path), settings.B2_BUCKET, remote_path)
         return True
-    except ClientError as exc:
+    except (BotoCoreError, ClientError) as exc:
         logger.error("B2 upload failed: %s", exc)
         return False
 
@@ -46,7 +46,7 @@ def download_file(remote_path: str, local_path: Path) -> bool:
         local_path.parent.mkdir(parents=True, exist_ok=True)
         client.download_file(settings.B2_BUCKET, remote_path, str(local_path))
         return True
-    except ClientError:
+    except (BotoCoreError, ClientError):
         return False
 
 
@@ -57,7 +57,7 @@ def file_exists(remote_path: str) -> bool:
     try:
         client.head_object(Bucket=settings.B2_BUCKET, Key=remote_path)
         return True
-    except ClientError:
+    except (BotoCoreError, ClientError):
         return False
 
 
@@ -66,9 +66,19 @@ def list_files(prefix: str = "") -> List[str]:
     if not client:
         return []
     try:
-        response = client.list_objects_v2(Bucket=settings.B2_BUCKET, Prefix=prefix)
-        return [obj["Key"] for obj in response.get("Contents", [])]
-    except ClientError:
+        keys: List[str] = []
+        continuation_token = None
+        while True:
+            params = {"Bucket": settings.B2_BUCKET, "Prefix": prefix}
+            if continuation_token:
+                params["ContinuationToken"] = continuation_token
+            response = client.list_objects_v2(**params)
+            keys.extend(obj["Key"] for obj in response.get("Contents", []))
+            if not response.get("IsTruncated"):
+                break
+            continuation_token = response.get("NextContinuationToken")
+        return keys
+    except (BotoCoreError, ClientError):
         return []
 
 
@@ -79,7 +89,7 @@ def delete_file(remote_path: str) -> bool:
     try:
         client.delete_object(Bucket=settings.B2_BUCKET, Key=remote_path)
         return True
-    except ClientError as exc:
+    except (BotoCoreError, ClientError) as exc:
         logger.error("B2 delete failed: %s", exc)
         return False
 
@@ -91,7 +101,7 @@ def upload_bytes(remote_path: str, data: bytes) -> bool:
     try:
         client.put_object(Bucket=settings.B2_BUCKET, Key=remote_path, Body=data)
         return True
-    except ClientError as exc:
+    except (BotoCoreError, ClientError) as exc:
         logger.error("B2 upload failed: %s", exc)
         return False
 
@@ -103,5 +113,5 @@ def download_bytes(remote_path: str) -> Optional[bytes]:
     try:
         response = client.get_object(Bucket=settings.B2_BUCKET, Key=remote_path)
         return response["Body"].read()
-    except ClientError:
+    except (BotoCoreError, ClientError):
         return None

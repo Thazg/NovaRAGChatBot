@@ -1,0 +1,66 @@
+{
+  "corpus": [
+    {
+      "id": "architecture-1",
+      "content": "Nova uses a retrieval augmented generation pipeline that parses documents, creates overlapping chunks, retrieves evidence, builds a grounded prompt, and streams the answer.",
+      "metadata": {"file_name": "architecture.md", "chunk_index": 1}
+    },
+    {
+      "id": "security-1",
+      "content": "User passwords are protected with salted PBKDF2 HMAC SHA256 using 310000 iterations. Authentication tokens are signed with HMAC SHA256.",
+      "metadata": {"file_name": "security.md", "chunk_index": 1}
+    },
+    {
+      "id": "streaming-1",
+      "content": "Server Sent Events deliver language model tokens incrementally from FastAPI to the React client and allow generation cancellation.",
+      "metadata": {"file_name": "streaming.md", "chunk_index": 1}
+    },
+    {
+      "id": "retrieval-1",
+      "content": "Hybrid retrieval combines BM25 lexical ranking with FAISS semantic vectors. Reciprocal rank fusion merges the two ranked lists.",
+      "metadata": {"file_name": "retrieval.md", "chunk_index": 1}
+    },
+    {
+      "id": "storage-1",
+      "content": "Backblaze B2 provides optional durable object storage for uploaded documents, vector indexes, users, and conversation history.",
+      "metadata": {"file_name": "storage.md", "chunk_index": 1}
+    },
+    {
+      "id": "interface-1",
+      "content": "The responsive interface supports light, dark, and system themes, keyboard shortcuts, reduced motion, voice input, and animated transitions.",
+      "metadata": {"file_name": "interface.md", "chunk_index": 1}
+    },
+    {
+      "id": "health-1",
+      "content": "The readiness endpoint contacts the configured AI provider and verifies that the selected Groq or Ollama model is available before startup completes.",
+      "metadata": {"file_name": "operations.md", "chunk_index": 1}
+    },
+    {
+      "id": "deployment-1",
+      "content": "The FastAPI backend can deploy to Render while the Vite React frontend deploys to Vercel. Docker Compose supports local development.",
+      "metadata": {"file_name": "deployment.md", "chunk_index": 1}
+    }
+  ],
+  "queries": [
+    {"query": "How are BM25 and FAISS rankings combined?", "relevant_ids": ["retrieval-1"]},
+    {"query": "How does Nova hash user passwords?", "relevant_ids": ["security-1"]},
+    {"query": "How are generated tokens streamed to React?", "relevant_ids": ["streaming-1"]},
+    {"query": "How does startup verify the Groq model is reachable?", "relevant_ids": ["health-1"]},
+    {"query": "Where are uploaded files persisted in cloud object storage?", "relevant_ids": ["storage-1"]},
+    {"query": "Which platforms host the backend and frontend?", "relevant_ids": ["deployment-1"]}
+  ],
+  "citation_samples": [
+    {
+      "answer": "Nova merges BM25 and FAISS rankings with reciprocal rank fusion. (Source: retrieval.md)",
+      "relevant_sources": ["retrieval.md"]
+    },
+    {
+      "answer": "Passwords use salted PBKDF2-HMAC-SHA256. (Source: security.md)",
+      "relevant_sources": ["security.md"]
+    },
+    {
+      "answer": "Render hosts the API and Vercel hosts the client. (Source: deployment.md)",
+      "relevant_sources": ["deployment.md"]
+    }
+  ]
+}

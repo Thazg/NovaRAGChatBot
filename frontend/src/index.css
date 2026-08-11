@@ -1,19 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Premium Light palette (fallback) */
-    --background: 220 27% 98%;
-    --foreground: 222 47% 8%;
+    --background: 224 44% 98%;
+    --foreground: 229 47% 9%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 8%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 8%;
-    --primary: 243 75% 59%;
+    --primary: 251 82% 60%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 20% 94%;
     --secondary-foreground: 222 47% 8%;
@@ -25,23 +22,23 @@
     --destructive-foreground: 0 0% 100%;
     --border: 220 15% 88%;
     --input: 220 15% 88%;
-    --ring: 243 75% 59%;
+    --ring: 251 82% 60%;
     --radius: 0.875rem;
-    --primary-rgb: 99, 102, 241;
+    --primary-rgb: 112, 78, 250;
     --sidebar-bg: 220 25% 97%;
     --chat-surface: 0 0% 100%;
-    --glow-primary: rgba(99, 102, 241, 0.15);
+    --glow-primary: rgba(112, 78, 250, 0.16);
+    --glow-cyan: rgba(14, 165, 233, 0.12);
   }
 
   .dark {
-    /* Premium Dark palette — deep midnight navy with vibrant indigo/violet accents */
-    --background: 228 22% 7%;
+    --background: 232 31% 6%;
     --foreground: 214 28% 93%;
-    --card: 228 20% 10.5%;
+    --card: 231 27% 10%;
     --card-foreground: 214 28% 93%;
     --popover: 228 20% 10.5%;
     --popover-foreground: 214 28% 93%;
-    --primary: 248 85% 68%;
+    --primary: 255 91% 72%;
     --primary-foreground: 0 0% 100%;
     --secondary: 228 18% 15%;
     --secondary-foreground: 214 28% 93%;
@@ -51,13 +48,14 @@
     --accent-foreground: 0 0% 100%;
     --destructive: 0 76% 54%;
     --destructive-foreground: 0 0% 100%;
-    --border: 228 16% 16.5%;
+    --border: 230 22% 18%;
     --input: 228 16% 15%;
     --ring: 248 85% 68%;
-    --primary-rgb: 139, 117, 255;
+    --primary-rgb: 151, 123, 255;
     --sidebar-bg: 228 24% 6%;
     --chat-surface: 228 18% 9%;
-    --glow-primary: rgba(139, 117, 255, 0.2);
+    --glow-primary: rgba(139, 92, 246, 0.24);
+    --glow-cyan: rgba(34, 211, 238, 0.10);
   }
 }
 
@@ -75,9 +73,7 @@
     @apply bg-background text-foreground antialiased overflow-hidden;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     letter-spacing: -0.011em;
-    background-image:
-      radial-gradient(ellipse 80% 50% at 50% -15%, var(--glow-primary), transparent),
-      radial-gradient(ellipse 35% 25% at 80% 85%, rgba(139, 92, 246, 0.08), transparent);
+    background-image: radial-gradient(ellipse 90% 60% at 50% -20%, var(--glow-primary), transparent 65%);
     background-attachment: fixed;
   }
 
@@ -113,6 +109,11 @@
   ::selection {
     background: rgba(var(--primary-rgb), 0.2);
     color: hsl(var(--primary));
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.7);
+    outline-offset: 2px;
   }
 
   /* Font smoothing */
@@ -157,6 +158,258 @@
 }
 
 @layer utilities {
+  .nova-shell {
+    isolation: isolate;
+    background:
+      radial-gradient(circle at 12% 14%, var(--glow-primary), transparent 31%),
+      radial-gradient(circle at 87% 82%, var(--glow-cyan), transparent 29%),
+      hsl(var(--background));
+  }
+
+  .nova-viewport-center {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    min-height: 100%;
+    width: 100%;
+    place-items: center;
+    padding: clamp(1rem, 4vh, 2.5rem) 1rem;
+  }
+
+  .nova-startup-panel {
+    background: linear-gradient(145deg, hsl(var(--card) / 0.94), hsl(var(--background) / 0.86));
+    border: 1px solid hsl(var(--primary) / 0.22);
+    box-shadow:
+      0 36px 90px -42px hsl(var(--primary) / 0.62),
+      0 18px 48px -34px hsl(var(--foreground) / 0.25),
+      inset 0 1px 0 hsl(var(--foreground) / 0.05);
+    backdrop-filter: blur(28px) saturate(150%);
+  }
+
+  .nova-shell::before,
+  .nova-shell::after {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    width: min(42rem, 58vw);
+    height: min(42rem, 58vw);
+    border-radius: 9999px;
+    filter: blur(90px);
+    opacity: 0.18;
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  .nova-shell::before {
+    top: -28%;
+    right: 8%;
+    background: linear-gradient(135deg, #7c3aed, #2563eb);
+    animation: aurora-drift 18s ease-in-out infinite alternate;
+  }
+
+  .nova-shell::after {
+    bottom: -34%;
+    left: 18%;
+    background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+    animation: aurora-drift 22s ease-in-out -7s infinite alternate-reverse;
+  }
+
+  .nova-grid {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.28;
+    mask-image: linear-gradient(to bottom, black, transparent 85%);
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.32) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.32) 1px, transparent 1px);
+    background-size: 54px 54px;
+    animation: grid-glide 24s linear infinite;
+  }
+
+  .nova-panel {
+    background: linear-gradient(145deg, hsl(var(--card) / 0.82), hsl(var(--background) / 0.7));
+    border: 1px solid hsl(var(--border) / 0.58);
+    box-shadow: 0 24px 80px -42px rgba(var(--primary-rgb), 0.45), inset 0 1px 0 hsl(var(--foreground) / 0.035);
+    backdrop-filter: blur(28px) saturate(140%);
+  }
+
+  .nova-upload-shell {
+    background:
+      radial-gradient(circle at 18% 16%, hsl(var(--primary) / 0.22), transparent 30%),
+      radial-gradient(circle at 82% 76%, hsl(199 89% 58% / 0.20), transparent 30%),
+      linear-gradient(135deg, hsl(231 62% 95%), hsl(258 66% 94%) 50%, hsl(205 70% 95%));
+  }
+
+  .nova-upload-shell .nova-grid {
+    opacity: 0.42;
+    background-image:
+      linear-gradient(hsl(var(--primary) / 0.10) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--primary) / 0.10) 1px, transparent 1px);
+  }
+
+  .nova-upload-panel {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(249, 248, 255, 0.94));
+    border: 1px solid hsl(var(--primary) / 0.24);
+    box-shadow:
+      0 42px 100px -38px rgba(var(--primary-rgb), 0.58),
+      0 18px 48px -30px hsl(220 45% 28% / 0.32),
+      0 0 0 1px rgba(255, 255, 255, 0.78) inset,
+      0 1px 0 rgba(255, 255, 255, 0.95) inset;
+    backdrop-filter: blur(32px) saturate(160%);
+  }
+
+  .nova-upload-dropzone {
+    background: linear-gradient(120deg, hsl(var(--primary) / 0.12), hsl(264 86% 65% / 0.07), hsl(199 89% 58% / 0.08));
+    box-shadow:
+      0 16px 40px -30px rgba(var(--primary-rgb), 0.72),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+
+  .nova-upload-dropzone::after {
+    content: '';
+    position: absolute;
+    top: -60%;
+    bottom: -60%;
+    width: 34%;
+    left: -48%;
+    transform: rotate(18deg);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+    animation: upload-sheen 4.8s ease-in-out infinite;
+  }
+
+  .nova-upload-dropzone:hover {
+    border-color: hsl(var(--primary) / 0.75);
+    box-shadow:
+      0 22px 46px -24px rgba(var(--primary-rgb), 0.58),
+      0 0 0 4px hsl(var(--primary) / 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  .dark .nova-upload-shell {
+    background:
+      radial-gradient(circle at 18% 16%, hsl(var(--primary) / 0.22), transparent 32%),
+      radial-gradient(circle at 82% 76%, hsl(199 89% 58% / 0.12), transparent 30%),
+      hsl(var(--background));
+  }
+
+  .dark .nova-upload-panel {
+    background: linear-gradient(145deg, hsl(var(--card) / 0.96), hsl(236 28% 9% / 0.94));
+    border-color: hsl(var(--primary) / 0.28);
+    box-shadow: 0 42px 100px -38px hsl(var(--primary) / 0.48), inset 0 1px 0 hsl(var(--foreground) / 0.06);
+  }
+
+  .nova-logo-orbit {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 1.25rem;
+    color: hsl(var(--primary));
+    background: linear-gradient(145deg, hsl(var(--primary) / 0.2), hsl(196 90% 55% / 0.08));
+    border: 1px solid hsl(var(--primary) / 0.28);
+    box-shadow: 0 0 36px hsl(var(--primary) / 0.18);
+  }
+
+  .nova-logo-orbit::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 1.55rem;
+    border: 1px dashed hsl(var(--primary) / 0.25);
+    animation: orbit-spin 9s linear infinite;
+  }
+
+  .nova-card-hover {
+    transition: transform 260ms cubic-bezier(.2,.8,.2,1), border-color 260ms ease, box-shadow 260ms ease, background-color 260ms ease;
+  }
+
+  .nova-card-hover:hover {
+    transform: translateY(-4px);
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 22px 48px -30px hsl(var(--primary) / 0.55);
+  }
+
+  .nova-shortcut-bar {
+    color: hsl(var(--muted-foreground));
+    background: linear-gradient(135deg, hsl(var(--card) / 0.94), hsl(var(--primary) / 0.06));
+    border: 1px solid hsl(var(--primary) / 0.18);
+    box-shadow:
+      0 16px 38px -28px hsl(var(--primary) / 0.72),
+      inset 0 1px 0 hsl(var(--foreground) / 0.04);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  .nova-keycap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 1.8rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 0.55rem;
+    color: hsl(var(--foreground));
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    background: linear-gradient(to bottom, hsl(var(--card)), hsl(var(--secondary)));
+    border: 1px solid hsl(var(--primary) / 0.24);
+    box-shadow:
+      0 2px 0 hsl(var(--border)),
+      0 7px 16px -12px hsl(var(--primary) / 0.75),
+      inset 0 1px 0 hsl(var(--foreground) / 0.04);
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  }
+
+  .nova-keycap:hover {
+    transform: translateY(-1px);
+    border-color: hsl(var(--primary) / 0.48);
+    box-shadow:
+      0 3px 0 hsl(var(--primary) / 0.22),
+      0 10px 20px -13px hsl(var(--primary) / 0.9);
+  }
+
+  .nova-composer-dock::before {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    inset: -5.5rem 0 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      hsl(var(--background) / 0.2) 24%,
+      hsl(var(--background) / 0.72) 50%,
+      hsl(var(--background) / 0.94) 76%,
+      hsl(var(--background)) 100%
+    );
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 36%, black 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 36%, black 100%);
+  }
+
+  @keyframes aurora-drift {
+    0% { transform: translate3d(-5%, -3%, 0) scale(0.92); }
+    50% { transform: translate3d(8%, 7%, 0) scale(1.08); }
+    100% { transform: translate3d(-2%, 12%, 0) scale(0.98); }
+  }
+
+  @keyframes grid-glide {
+    to { background-position: 54px 54px; }
+  }
+
+  @keyframes orbit-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes upload-sheen {
+    0%, 36% { left: -48%; opacity: 0; }
+    48% { opacity: 0.85; }
+    66%, 100% { left: 118%; opacity: 0; }
+  }
   /* Glassmorphism utilities */
   .glass {
     @apply bg-background/60 backdrop-blur-xl border border-border/40;
@@ -216,5 +469,14 @@
 
   .pulse-dot {
     animation: pulse-dot 2s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

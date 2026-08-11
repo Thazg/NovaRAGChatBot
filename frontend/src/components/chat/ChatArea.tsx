@@ -53,7 +53,7 @@ export const ChatArea = () => {
     return parts.join('\n\n');
   };
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
       const { scrollHeight, clientHeight } = scrollRef.current;
       scrollRef.current.scrollTo({
@@ -61,11 +61,22 @@ export const ChatArea = () => {
         behavior: 'smooth',
       });
     }
-  };
+  }, []);
 
+  const latestMessageLength = messages.at(-1)?.content.length ?? 0;
   useEffect(() => {
-    scrollToBottom();
-  }, [messages.length, useChatStore.getState().isStreaming]);
+    const frame = requestAnimationFrame(scrollToBottom);
+    return () => cancelAnimationFrame(frame);
+  }, [messages.length, latestMessageLength, scrollToBottom]);
+
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+    setIsLoading(false);
+  }, [setIsLoading, setIsStreaming]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -105,16 +116,7 @@ export const ChatArea = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isStreaming, createConversation, isSearchOpen]);
-
-  const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsStreaming(false);
-    setIsLoading(false);
-  };
+  }, [isStreaming, createConversation, isSearchOpen, handleStop]);
 
   const handleSearchDownload = useCallback(async (query: string) => {
     setSearchOffer({ query, loading: true });
@@ -184,13 +186,12 @@ export const ChatArea = () => {
     setIsLoading(true);
     abortControllerRef.current = new AbortController();
     setSearchOffer(null);
+    const assistantMessageId = addMessage(targetConvId, {
+      role: 'assistant',
+      content: '',
+    });
 
     try {
-      const assistantMessageId = addMessage(targetConvId, {
-        role: 'assistant',
-        content: '',
-      });
-
       setIsStreaming(true);
       setIsLoading(false);
 
@@ -213,6 +214,7 @@ export const ChatArea = () => {
       if (error.name === 'AbortError') {
         toast.info('Generation stopped');
       } else {
+        appendStreamToMessage(targetConvId, assistantMessageId, 'Unable to reach Nova right now. Please try again.');
         toast.error('Failed to send message. Please try again.');
         console.error(error);
       }
@@ -235,13 +237,12 @@ export const ChatArea = () => {
     regenerateLastMessage(currentConversationId);
     setIsLoading(true);
     abortControllerRef.current = new AbortController();
+    const assistantMessageId = addMessage(currentConversationId, {
+      role: 'assistant',
+      content: '',
+    });
 
     try {
-      const assistantMessageId = addMessage(currentConversationId, {
-        role: 'assistant',
-        content: '',
-      });
-
       setIsStreaming(true);
       setIsLoading(false);
 
@@ -254,12 +255,14 @@ export const ChatArea = () => {
         abortControllerRef.current.signal,
         buildInstructions(),
         undefined,
-        language
+        language,
+        true,
       );
     } catch (error: any) {
       if (error.name === 'AbortError') {
         toast.info('Generation stopped');
       } else {
+        appendStreamToMessage(currentConversationId, assistantMessageId, 'Unable to regenerate this response. Please try again.');
         toast.error('Failed to regenerate message. Please try again.');
         console.error(error);
       }
@@ -271,7 +274,7 @@ export const ChatArea = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+    <div className="relative z-10 flex-1 flex flex-col h-full overflow-hidden bg-background/25">
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <div 
         ref={scrollRef}
@@ -283,13 +286,13 @@ export const ChatArea = () => {
           <div className="flex flex-col max-w-[950px] mx-auto w-full px-4 md:px-10 lg:px-16 pb-4">
             {messages.map((message, index) => {
               const isLastMessage = index === messages.length - 1;
-              const isStreaming = isLastMessage && message.role === 'assistant' && useChatStore.getState().isStreaming;
+              const messageIsStreaming = isLastMessage && message.role === 'assistant' && isStreaming;
               const isLastAssistantMessage = message.role === 'assistant' && index === messages.findLastIndex(m => m.role === 'assistant');
               return (
                 <ChatBubble
                   key={message.id}
                   message={message}
-                  isStreaming={isStreaming}
+                  isStreaming={messageIsStreaming}
                   onRegenerate={isLastAssistantMessage ? handleRegenerate : undefined}
                 />
               );
@@ -327,14 +330,9 @@ export const ChatArea = () => {
         )}
       </div>
 
-      {/* Gradient separator */}
-      <div className="relative pointer-events-none">
-        <div className="absolute bottom-full left-0 right-0 h-16 bg-gradient-to-t from-background to-transparent" />
-      </div>
-
-      {/* Input Area (normal flow) */}
-      <div className="px-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0.75rem))] md:pb-6 pt-1 bg-background">
-        <div className="w-full max-w-[850px] mx-auto">
+      {/* Input area with a feathered backdrop instead of a hard color edge */}
+      <div className="nova-composer-dock relative isolate px-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0.75rem))] pt-5 md:pb-6 md:pt-6">
+        <div className="relative z-10 mx-auto w-full max-w-[850px]">
           <ChatInput onSend={handleSend} onStop={handleStop} />
         </div>
       </div>

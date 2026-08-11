@@ -1,7 +1,7 @@
 ﻿import os
 import time
 from pathlib import Path
-from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 from config.settings import settings
@@ -122,27 +122,36 @@ def safe_pdf_filename(url):
 
 
 def download_pdf(url, file_path):
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Only HTTP(S) PDF URLs are supported")
     response = request_with_retry(url, stream=True)
     content_type = response.headers.get("Content-Type", "").lower()
+    content_length = int(response.headers.get("Content-Length", "0") or 0)
+    if content_length > settings.MAX_UPLOAD_BYTES:
+        raise ValueError("PDF is too large")
 
+    temp_path = Path(file_path).with_suffix(Path(file_path).suffix + ".part")
+    total = 0
     first_chunk = b""
-    chunks = []
+    try:
+        with temp_path.open("wb") as output:
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                if not first_chunk:
+                    first_chunk = chunk[:8]
+                total += len(chunk)
+                if total > settings.MAX_UPLOAD_BYTES:
+                    raise ValueError("PDF is too large")
+                output.write(chunk)
 
-    for chunk in response.iter_content(chunk_size=8192):
-        if not chunk:
-            continue
-
-        if not first_chunk:
-            first_chunk = chunk[:8]
-
-        chunks.append(chunk)
-
-    if "pdf" not in content_type and not first_chunk.startswith(b"%PDF"):
-        raise ValueError("URL khong tra ve noi dung PDF")
-
-    with open(file_path, "wb") as file:
-        for chunk in chunks:
-            file.write(chunk)
+        if "pdf" not in content_type and not first_chunk.startswith(b"%PDF"):
+            raise ValueError("URL did not return a PDF")
+        temp_path.replace(file_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
 
 if __name__ == "__main__":

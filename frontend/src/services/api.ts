@@ -1,4 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const ALLOWED_UPLOAD_EXTENSIONS = ['.pdf', '.md', '.markdown', '.rst', '.txt', '.py', '.docx', '.ipynb'];
 
 function getToken(): string | null {
   try {
@@ -52,6 +54,15 @@ export const auth = {
     }
     return res.json();
   },
+
+  async me(token?: string): Promise<{ user_id: string }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const activeToken = token || getToken();
+    if (activeToken) headers.Authorization = `Bearer ${activeToken}`;
+    const res = await fetch(`${API_BASE_URL}/auth/me`, { headers });
+    if (!res.ok) throw new Error('Session expired');
+    return res.json();
+  },
 };
 
 export interface ChatRequest {
@@ -79,6 +90,28 @@ export interface Conversation {
   messages: any[];
 }
 
+export interface HealthStatus {
+  status: string;
+  version?: string;
+  environment?: string;
+  uptime_seconds?: number;
+  llm_provider?: string;
+  groq_model?: string;
+  model?: string;
+  retrieval?: string;
+  embedding_model?: string | null;
+}
+
+export interface ReadinessStatus {
+  status: 'ready' | 'degraded';
+  ready: boolean;
+  provider_status: string;
+  model?: string;
+  model_available?: boolean;
+  message: string;
+  checked_at?: number;
+}
+
 export const api = {
   async sendMessage(sessionId: string, question: string, abortSignal?: AbortSignal): Promise<ChatResponse> {
     const response = await fetch(`${API_BASE_URL}/chat`, {
@@ -102,11 +135,13 @@ export const api = {
     abortSignal?: AbortSignal,
     instructions?: string,
     onAction?: (action: { type: string; query: string }) => void,
-    language?: string
+    language?: string,
+    regenerate = false,
   ): Promise<void> {
     const body: Record<string, any> = { session_id: sessionId, question, stream: true };
     if (instructions) body.instructions = instructions;
     if (language && language !== 'auto') body.language = language;
+    if (regenerate) body.regenerate = true;
     const response = await fetch(`${API_BASE_URL}/chat/stream`, {
       method: 'POST',
       headers: authHeaders(),
@@ -155,7 +190,7 @@ export const api = {
           } else if (parsed.action === 'search_offer') {
             onAction?.({ type: 'search_offer', query: parsed.query || '' });
           }
-          } catch (e) {
+          } catch {
             // Incomplete JSON or other format, ignore for now
           }
         }
@@ -179,6 +214,13 @@ export const api = {
   },
 
   async uploadDocument(file: File): Promise<{ status: string; filename: string; indexed?: boolean; chunks?: number; message?: string }> {
+    const extension = file.name.includes('.') ? `.${file.name.split('.').pop()?.toLowerCase()}` : '';
+    if (!ALLOWED_UPLOAD_EXTENSIONS.includes(extension)) {
+      throw new Error('Unsupported file type. Use PDF, DOCX, Markdown, text, Python, or notebook files.');
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      throw new Error('File is too large. The maximum size is 25 MB.');
+    }
     const formData = new FormData();
     formData.append('file', file);
     const token = getToken();
@@ -191,7 +233,8 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `Upload failed (${response.status})`);
     }
 
     return response.json();
@@ -272,10 +315,19 @@ export const api = {
     return response.json();
   },
 
-  async createConversation(): Promise<Conversation> {
+  async createConversation(
+    id?: string,
+    conversation?: Partial<Conversation> & { pinned?: boolean },
+  ): Promise<Conversation> {
     const response = await fetch(`${API_BASE_URL}/conversation/new`, {
       method: 'POST',
       headers: authHeaders(),
+      body: JSON.stringify({
+        id,
+        title: conversation?.title || 'New Chat',
+        messages: conversation?.messages || [],
+        pinned: conversation?.pinned || false,
+      }),
     });
 
     if (!response.ok) {
@@ -298,11 +350,11 @@ export const api = {
     return response.json();
   },
 
-  async updateConversation(id: string, title: string): Promise<Conversation> {
+  async updateConversation(id: string, update: { title?: string; pinned?: boolean }): Promise<Conversation> {
     const response = await fetch(`${API_BASE_URL}/conversation/${id}`, {
       method: 'PUT',
       headers: authHeaders(),
-      body: JSON.stringify({ title }),
+      body: JSON.stringify(update),
     });
 
     if (!response.ok) {
@@ -312,13 +364,31 @@ export const api = {
     return response.json();
   },
 
+  async clearConversations(): Promise<{ status: string; deleted: number }> {
+    const response = await fetch(`${API_BASE_URL}/conversation`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+    return response.json();
+  },
+
   // Health check
-  async healthCheck(): Promise<{ status: string }> {
+  async healthCheck(): Promise<HealthStatus> {
     const response = await fetch(`${API_BASE_URL}/health`, { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
     return response.json();
+  },
+
+  async readinessCheck(): Promise<ReadinessStatus> {
+    const response = await fetch(`${API_BASE_URL}/health/ready`, { headers: authHeaders() });
+    const data = await response.json().catch(() => null);
+    if (!data) {
+      throw new Error(`API error: ${response.statusText}`);
+    }
+    return data;
   },
 
   // Account

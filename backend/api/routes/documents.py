@@ -1,25 +1,37 @@
+import asyncio
 import json
 import logging
-import os
 import re
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config.settings import settings
 from rag.chunking import split_documents
-from rag.load import BACKEND_DIR, load_file
+from rag.load import load_file
 from rag.llm_client import stream_tokens
-from rag.rag_chain import get_retriever, reload_vector_store
-from rag.vector_store import build_vector_store, load_vector_store
+from rag.rag_chain import get_retriever, reload_vector_store, unload_vector_store
+from rag.vector_store import build_vector_store, delete_vector_store, load_vector_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 BASE_UPLOADS_DIR = Path(settings.UPLOAD_FOLDER).resolve()
-LEGACY_UPLOADS_DIR = (BACKEND_DIR / "uploads").resolve()
+SUPPORTED_EXTENSIONS = {".pdf", ".md", ".markdown", ".rst", ".txt", ".docx", ".py", ".ipynb"}
+
+
+def _safe_filename(filename: str) -> str:
+    name = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name)
+    if not name or name in {".", "..", "source_urls.json"}:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if len(name) > 180:
+        stem = Path(name).stem[:140]
+        name = f"{stem}{Path(name).suffix}"
+    if Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=415, detail="Unsupported file type")
+    return name
 
 
 def _user_uploads_dir(user_id: str) -> Path:
@@ -34,6 +46,12 @@ def _source_urls_file(user_id: str) -> Path:
 
 def _load_source_urls(user_id: str) -> dict[str, str]:
     sf = _source_urls_file(user_id)
+    if not sf.exists():
+        try:
+            from services.remote_storage import download_file
+            download_file(f"uploads/{user_id}/source_urls.json", sf)
+        except Exception:
+            pass
     if sf.exists():
         try:
             with sf.open("r", encoding="utf-8") as f:
@@ -54,12 +72,12 @@ def _save_source_urls(mapping: dict[str, str], user_id: str) -> None:
         pass
 
 
-def _delete_remote_file(filename: str, user_id: str) -> None:
+def _delete_remote_file(filename: str, user_id: str) -> bool:
     try:
         from services.remote_storage import delete_file
-        delete_file(f"uploads/{user_id}/{filename}")
+        return delete_file(f"uploads/{user_id}/{filename}")
     except Exception:
-        pass
+        return False
 
 
 @router.post("/summarize")
@@ -113,6 +131,11 @@ async def summarize_document(request: Request, body: dict):
 def _load_chunk_counts(user_id: str) -> dict[str, int]:
     from rag.vector_store import _metadata_file
     mf = _metadata_file(user_id)
+    if not mf.exists():
+        try:
+            load_vector_store(user_id)
+        except FileNotFoundError:
+            pass
     chunk_counts: dict[str, int] = {}
     if not mf.exists():
         return chunk_counts
@@ -135,8 +158,12 @@ def _list_upload_files(user_id: str) -> list[dict]:
     source_urls = _load_source_urls(user_id)
     upload_dir = _user_uploads_dir(user_id)
     files = []
+    local_files = [
+        path for path in upload_dir.iterdir()
+        if path.is_file() and path.name != "source_urls.json"
+    ] if upload_dir.exists() else []
 
-    if not upload_dir.exists() or not any(upload_dir.iterdir()):
+    if not local_files:
         try:
             from services.remote_storage import list_files
             remote_files = list_files(f"uploads/{user_id}/")
@@ -156,7 +183,7 @@ def _list_upload_files(user_id: str) -> list[dict]:
 
     seen_names: set[str] = set()
     if upload_dir.exists():
-        for file_path in sorted(upload_dir.iterdir()):
+        for file_path in sorted(local_files):
             if not file_path.is_file() or file_path.name in seen_names or file_path.name == "source_urls.json":
                 continue
             seen_names.add(file_path.name)
@@ -167,6 +194,23 @@ def _list_upload_files(user_id: str) -> list[dict]:
                 "source_url": source_urls.get(file_path.name),
             })
     return files
+
+
+def _restore_remote_uploads(user_id: str) -> None:
+    """Hydrate missing upload files before a full reindex on ephemeral hosts."""
+    try:
+        from services.remote_storage import download_file, list_files
+        prefix = f"uploads/{user_id}/"
+        upload_dir = _user_uploads_dir(user_id)
+        for remote_path in list_files(prefix):
+            name = remote_path[len(prefix):].replace("\\", "/").rsplit("/", 1)[-1]
+            if not name or name == "source_urls.json" or Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
+                continue
+            local_path = upload_dir / name
+            if not local_path.exists():
+                download_file(remote_path, local_path)
+    except Exception as exc:
+        logger.warning("Could not restore remote uploads for %s: %s", user_id, exc)
 
 
 def _index_uploaded_file(file_path: Path, user_id: str) -> tuple[bool, int, str]:
@@ -195,16 +239,20 @@ def _index_uploaded_file(file_path: Path, user_id: str) -> tuple[bool, int, str]
 
 
 def _rebuild_full_index(user_id: str) -> tuple[int, int]:
+    _restore_remote_uploads(user_id)
     upload_dir = _user_uploads_dir(user_id)
     documents = []
     if upload_dir.exists():
         for fp in upload_dir.iterdir():
-            if fp.is_file() and fp.suffix.lower() in {".pdf", ".md", ".txt", ".docx", ".py", ".ipynb"}:
+            if fp.is_file() and fp.suffix.lower() in SUPPORTED_EXTENSIONS:
                 documents.extend(load_file(fp))
     nodes = split_documents(documents)
     if nodes:
         build_vector_store(nodes, user_id)
         reload_vector_store(user_id)
+    else:
+        delete_vector_store(user_id)
+        unload_vector_store(user_id)
     return len(documents), len(nodes)
 
 
@@ -218,29 +266,50 @@ def list_documents(request: Request):
 async def upload_document(request: Request, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
+    safe_name = _safe_filename(file.filename)
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
     upload_dir = _user_uploads_dir(user_id)
-    file_location = upload_dir / file.filename
-    with file_location.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_location = upload_dir / safe_name
+    total_bytes = 0
+    try:
+        with file_location.open("wb") as buffer:
+            while chunk := await file.read(1024 * 1024):
+                total_bytes += len(chunk)
+                if total_bytes > settings.MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File is too large")
+                buffer.write(chunk)
+    except Exception:
+        file_location.unlink(missing_ok=True)
+        raise
 
     uploaded_to_b2 = False
     try:
         from services.remote_storage import upload_file, delete_file
-        uploaded_to_b2 = upload_file(f"uploads/{user_id}/{file.filename}", file_location)
+        uploaded_to_b2 = await asyncio.to_thread(
+            upload_file, f"uploads/{user_id}/{safe_name}", file_location
+        )
     except ImportError:
         pass
 
     try:
-        indexed, chunk_count, message = _index_uploaded_file(file_location, user_id)
+        indexed, chunk_count, message = await asyncio.to_thread(
+            _index_uploaded_file, file_location, user_id
+        )
+        if not indexed:
+            if uploaded_to_b2:
+                delete_file(f"uploads/{user_id}/{safe_name}")
+            file_location.unlink(missing_ok=True)
+            raise HTTPException(status_code=422, detail=message)
         return {
-            "status": "success", "filename": file.filename,
+            "status": "success", "filename": safe_name,
             "indexed": indexed, "chunks": chunk_count, "message": message,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         if uploaded_to_b2:
             try:
-                delete_file(f"uploads/{user_id}/{file.filename}")
+                delete_file(f"uploads/{user_id}/{safe_name}")
             except ImportError:
                 pass
         if file_location.exists():
@@ -255,7 +324,7 @@ def clear_all_documents(request: Request):
     deleted_count = 0
     if upload_dir.exists():
         for file_path in upload_dir.iterdir():
-            if file_path.is_file():
+            if file_path.is_file() and file_path.name != "source_urls.json":
                 file_path.unlink()
                 deleted_count += 1
     try:
@@ -274,21 +343,24 @@ def clear_all_documents(request: Request):
 @router.delete("/{id}")
 def delete_document(request: Request, id: str):
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
+    safe_id = _safe_filename(id)
     upload_dir = _user_uploads_dir(user_id)
-    file_location = upload_dir / id
+    file_location = upload_dir / safe_id
     deleted = False
     if file_location.exists():
         file_location.unlink()
         deleted = True
-    if not deleted:
+    remote_deleted = _delete_remote_file(safe_id, user_id)
+    if not deleted and not remote_deleted:
         raise HTTPException(status_code=404, detail="Document not found")
-    _delete_remote_file(id, user_id)
     source_urls = _load_source_urls(user_id)
-    source_urls.pop(id, None)
+    source_urls.pop(safe_id, None)
     _save_source_urls(source_urls, user_id)
     try:
         store = get_retriever(user_id)
-        store.remove_by_file_name(id)
+        if store is None:
+            raise FileNotFoundError
+        store.remove_by_file_name(safe_id)
         store.persist()
         reload_vector_store(user_id)
     except FileNotFoundError:
@@ -309,8 +381,8 @@ def reindex_documents(request: Request):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    max_results: int = 3
+    query: str = Field(min_length=2, max_length=300)
+    max_results: int = Field(default=3, ge=1, le=5)
 
 
 @router.post("/search-download")
@@ -341,6 +413,11 @@ def search_and_download(request: Request, req: SearchRequest):
                 continue
             try:
                 download_pdf(url, file_path)
+                try:
+                    from services.remote_storage import upload_file
+                    upload_file(f"uploads/{user_id}/{file_name}", file_path)
+                except Exception:
+                    pass
                 downloaded.append({"file_name": file_name, "new": True})
                 source_urls[file_name] = url
             except Exception as exc:

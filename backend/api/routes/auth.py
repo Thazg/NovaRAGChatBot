@@ -1,18 +1,23 @@
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from services.auth import register, login, verify_token
+from services.auth import register, login
 
 router = APIRouter()
 
 
-class AuthRequest(BaseModel):
-    username: str
-    password: str
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=2, max_length=40)
+    password: str = Field(min_length=8, max_length=256)
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=2, max_length=40)
+    password: str = Field(min_length=1, max_length=256)
 
 
 @router.post("/register")
-def register_user(req: AuthRequest):
+def register_user(req: RegisterRequest):
     result = register(req.username, req.password)
     if not result:
         raise HTTPException(status_code=400, detail="Username already exists or invalid credentials")
@@ -20,7 +25,7 @@ def register_user(req: AuthRequest):
 
 
 @router.post("/login")
-def login_user(req: AuthRequest):
+def login_user(req: LoginRequest):
     result = login(req.username, req.password)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid username or password")

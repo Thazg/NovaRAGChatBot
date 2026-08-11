@@ -165,7 +165,6 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
     setSidebarOpen,
     avatar,
     displayName,
-    theme,
     setTheme,
     sidebarActiveTab,
     setSidebarActiveTab,
@@ -185,7 +184,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
     if (!sidebarOpen && activeTab === 'documents') {
       setActiveTab('conversations');
     }
-  }, [sidebarOpen, activeTab]);
+  }, [sidebarOpen, activeTab, setActiveTab]);
 
   const filteredConversations = conversations.filter((c: Conversation) =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -261,7 +260,12 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${conv.title}.txt`;
+    const reserved = '<>:"/\\|?*';
+    const safeTitle = Array.from(conv.title)
+      .map((char) => reserved.includes(char) || char.charCodeAt(0) < 32 ? '_' : char)
+      .join('')
+      .slice(0, 80) || 'conversation';
+    a.download = `${safeTitle}.txt`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Conversation exported');
@@ -519,7 +523,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
                 )}
                 <div className="flex-1 overflow-hidden min-w-0">
                   <p className="text-[13px] font-semibold truncate text-left">{displayName || 'User'}</p>
-                  <p className="text-[11px] text-muted-foreground/65 truncate text-left">Local Mode</p>
+                  <p className="text-[11px] text-muted-foreground/65 truncate text-left">Private workspace</p>
                 </div>
               </div>
             </DropdownMenuTrigger>
@@ -528,9 +532,12 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
                 <Settings className="h-4 w-4" />
                 <span>Profile Settings</span>
               </DropdownMenuItem>
-              <DropdownMenuItem className="rounded-lg gap-3 py-2.5 cursor-pointer" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+              <DropdownMenuItem className="rounded-lg gap-3 py-2.5 cursor-pointer" onClick={() => {
+                const isDark = document.documentElement.classList.contains('dark');
+                setTheme(isDark ? 'light' : 'dark');
+              }}>
+                {document.documentElement.classList.contains('dark') ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <span>{document.documentElement.classList.contains('dark') ? 'Light Mode' : 'Dark Mode'}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="rounded-lg gap-3 py-2.5 cursor-pointer" onClick={() => setAboutOpen(true)}>
@@ -576,6 +583,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
             value={editTitle}
             className="rounded-xl border-border/50 h-11"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditTitle(e.target.value)}
+            maxLength={120}
             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && submitRename()}
             autoFocus
           />
@@ -613,7 +621,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Premium Enterprise RAG Platform — Private, secure, and fully local AI assistant.
+              A private document intelligence workspace powered by Groq or your local Ollama model.
             </p>
             <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
               <span className="px-2 py-0.5 rounded-md bg-muted font-mono">v2.0.0</span>

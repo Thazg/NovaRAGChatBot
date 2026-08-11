@@ -95,6 +95,7 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleUpload(file);
+    e.target.value = '';
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -118,7 +119,8 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
   const handleReindex = async () => {
     try {
       toast.info('Re-indexing documents...');
-      await api.reindexDocuments();
+      const result = await api.reindexDocuments();
+      if (result.status !== 'success') throw new Error(result.message || 'Re-indexing failed');
       toast.success('Documents re-indexed');
       await loadDocuments();
     } catch (error) {

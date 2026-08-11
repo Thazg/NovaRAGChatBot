@@ -1,5 +1,6 @@
+import re
+
 from rag.vector_store import load_vector_store, expand_query
-from rag.prompts import build_context
 from config.settings import settings
 from rag.cache import SimpleCache
 
@@ -30,6 +31,12 @@ def reload_vector_store(user_id: str = "") -> None:
     retrieval_cache.clear()
 
 
+def unload_vector_store(user_id: str = "") -> None:
+    uid = _ensure_user_id(user_id)
+    _vector_store_instances.pop(uid, None)
+    retrieval_cache.clear()
+
+
 _STOP_WORDS = frozenset({
     "what", "how", "why", "when", "where", "which", "who", "whom",
     "this", "that", "these", "those", "the", "a", "an", "is", "are",
@@ -42,7 +49,6 @@ _STOP_WORDS = frozenset({
 
 
 def _extract_key_terms(query: str) -> set:
-    import re
     words = re.findall(r"[a-zA-Z]\w+", query.lower())
     return {w for w in words if len(w) > 3 and w not in _STOP_WORDS}
 
@@ -112,7 +118,10 @@ def rewrite_question(question, history):
         "nó", "cái này", "cái đó", "những cái này", "những cái đó", "chúng", "chúng nó",
         "cụ thể", "chi tiết", "cụ thể hơn", "rõ hơn", "kể tiếp", "tiếp theo", "nói rõ",
     ]
-    if any(word in question_lower for word in trigger_words):
+    if any(
+        (word in question_lower if " " in word else re.search(rf"\b{re.escape(word)}\b", question_lower))
+        for word in trigger_words
+    ):
         return f"{question} (Context: {history_text})"
     if len(question.split()) <= 3:
         return f"{question} (Context: {history_text})"

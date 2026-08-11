@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, MessageSquare, FileText, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
 import { useChatStore } from '../../store/useChatStore';
+import { api, type Document } from '../../services/api';
 
 interface SearchResult {
   id: string;
@@ -21,8 +22,9 @@ interface GlobalSearchProps {
 export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const { conversations, setCurrentConversation } = useChatStore();
+  const { conversations, setCurrentConversation, setSidebarActiveTab, setSidebarOpen } = useChatStore();
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -30,6 +32,11 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
       setResults([]);
       setSelectedIndex(0);
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    api.getDocuments().then(setDocuments).catch(() => setDocuments([]));
   }, [isOpen]);
 
   useEffect(() => {
@@ -64,9 +71,30 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
       });
     });
 
+    documents.forEach((doc) => {
+      if (doc.name.toLowerCase().includes(lowerQuery)) {
+        searchResults.push({
+          id: `document-${doc.id}`,
+          type: 'document',
+          title: doc.name,
+          content: `${doc.chunks || 0} indexed chunks`,
+        });
+      }
+    });
+
     setResults(searchResults.slice(0, 10));
     setSelectedIndex(0);
-  }, [query, conversations]);
+  }, [query, conversations, documents]);
+
+  const handleSelectResult = useCallback((result: SearchResult) => {
+    if (result.conversationId) {
+      setCurrentConversation(result.conversationId);
+    } else if (result.type === 'document') {
+      setSidebarActiveTab('documents');
+      setSidebarOpen(true);
+    }
+    onClose();
+  }, [onClose, setCurrentConversation, setSidebarActiveTab, setSidebarOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -89,14 +117,7 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, results, selectedIndex, onClose]);
-
-  const handleSelectResult = (result: SearchResult) => {
-    if (result.conversationId) {
-      setCurrentConversation(result.conversationId);
-    }
-    onClose();
-  };
+  }, [isOpen, results, selectedIndex, onClose, handleSelectResult]);
 
   const getResultIcon = (type: SearchResult['type']) => {
     switch (type) {
@@ -126,9 +147,9 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -20 }}
             transition={{ duration: 0.2, type: "spring", stiffness: 300, damping: 25 }}
-            className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-2xl z-50"
+            className="fixed top-[12%] sm:top-[18%] left-1/2 -translate-x-1/2 w-[calc(100%_-_1.5rem)] max-w-2xl z-50"
           >
-            <div className="bg-background/95 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="nova-panel rounded-2xl shadow-2xl overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-4 border-b border-border/50">
                 <Search className="h-5 w-5 text-muted-foreground" />
                 <Input

@@ -20,6 +20,7 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
   const isStreaming = useChatStore((state) => state.isStreaming);
   const isLoading = useChatStore((state) => state.isLoading);
   const setSidebarActiveTab = useChatStore((state) => state.setSidebarActiveTab);
+  const language = useChatStore((state) => state.language);
   const isBusy = isStreaming || isLoading;
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<{
@@ -46,6 +47,8 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
     prevStreamingRef.current = isStreaming;
   }, [isStreaming]);
 
+  useEffect(() => () => recognitionRef.current?.stop(), []);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -57,8 +60,8 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
       } else {
         toast.error(result.message || 'Failed to index file');
       }
-    } catch {
-      toast.error('Upload failed');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Upload failed');
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -77,7 +80,11 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
     }
 
     const recognition: any = new SpeechRecognitionAPI();
-    recognition.lang = 'vi-VN';
+    recognition.lang = language === 'english'
+      ? 'en-US'
+      : language === 'vietnamese'
+        ? 'vi-VN'
+        : (navigator.language || 'en-US');
     recognition.continuous = false;
     recognition.interimResults = false;
 
@@ -118,9 +125,14 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
   return (
     <div className="relative w-full max-w-3xl mx-auto flex flex-col gap-1.5 md:gap-2">
       <motion.div
+        layout
         initial={{ y: 16, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 320, damping: 28 }}
+        transition={{
+          layout: { type: "spring", stiffness: 260, damping: 28, mass: 0.7 },
+          y: { type: "spring", stiffness: 320, damping: 28 },
+          opacity: { duration: 0.28 },
+        }}
         className={cn(
           "relative flex flex-col w-full rounded-xl md:rounded-2xl border bg-card/80 backdrop-blur-2xl transition-all duration-300",
           isBusy
@@ -148,7 +160,7 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
             ref={fileInputRef}
             onChange={handleFileUpload}
             className="hidden"
-            accept=".pdf,.md,.markdown,.rst,.txt,.py,.docx"
+            accept=".pdf,.md,.markdown,.rst,.txt,.py,.docx,.ipynb"
           />
           <Button
             type="button"
@@ -172,20 +184,23 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
             className="min-h-[40px] md:min-h-[36px] max-h-[200px] w-full resize-none border-0 bg-transparent py-2 md:py-1.5 px-0 focus-visible:ring-0 shadow-none text-[15px] md:text-[14.5px] placeholder:text-muted-foreground/60 font-normal leading-relaxed"
             disabled={isBusy}
             rows={1}
+            maxLength={4000}
             aria-label="Message input"
           />
 
           {/* Right controls */}
-          <div className="flex items-center gap-1 shrink-0 mb-0.5">
-            {/* Mic button (when idle & empty) */}
-            <AnimatePresence>
-              {!input.trim() && !isBusy && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.15 }}
-                >
+          <div className="mb-0.5 flex shrink-0 items-center gap-1">
+            {/* A fixed mic slot prevents the send button from jumping sideways. */}
+            <div className="relative h-9 w-9 md:h-8 md:w-8">
+              <AnimatePresence initial={false}>
+                {!input.trim() && !isBusy && (
+                  <motion.div
+                    className="absolute inset-0"
+                    initial={{ opacity: 0, scale: 0.78, x: 5, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, scale: 1, x: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, scale: 0.82, x: 5, filter: 'blur(4px)' }}
+                    transition={{ type: "spring", stiffness: 360, damping: 28, mass: 0.65 }}
+                  >
                   <Button
                     type="button"
                     variant="ghost"
@@ -201,20 +216,23 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
                   >
                     {isRecording ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
                   </Button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
-            {/* Send / Stop button */}
-            <AnimatePresence mode="wait">
-              {isBusy ? (
-                <motion.div
-                  key="stop"
-                  initial={{ scale: 0.75, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.75, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                >
+            {/* Send and stop morph in place without changing control width. */}
+            <div className="relative h-9 w-9 md:h-8 md:w-8">
+              <AnimatePresence initial={false} mode="sync">
+                {isBusy ? (
+                  <motion.div
+                    key="stop"
+                    className="absolute inset-0"
+                    initial={{ scale: 0.72, opacity: 0, rotate: -35, filter: 'blur(3px)' }}
+                    animate={{ scale: 1, opacity: 1, rotate: 0, filter: 'blur(0px)' }}
+                    exit={{ scale: 0.72, opacity: 0, rotate: 35, filter: 'blur(3px)' }}
+                    transition={{ type: "spring", stiffness: 340, damping: 25, mass: 0.7 }}
+                  >
                   <Button
                     type="button"
                     onClick={onStop}
@@ -224,15 +242,16 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
                   >
                     <Square className="h-4 w-4 md:h-3.5 md:w-3.5 fill-current" />
                   </Button>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="send"
-                  initial={{ scale: 0.75, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.75, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                >
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="send"
+                    className="absolute inset-0"
+                    initial={{ scale: 0.72, opacity: 0, rotate: -35, filter: 'blur(3px)' }}
+                    animate={{ scale: 1, opacity: 1, rotate: 0, filter: 'blur(0px)' }}
+                    exit={{ scale: 0.72, opacity: 0, rotate: 35, filter: 'blur(3px)' }}
+                    transition={{ type: "spring", stiffness: 340, damping: 25, mass: 0.7 }}
+                  >
                   <Button
                     type="button"
                     onClick={handleSubmit}
@@ -248,9 +267,10 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
                   >
                     <Send className="h-4 w-4 md:h-3.5 md:w-3.5" />
                   </Button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 

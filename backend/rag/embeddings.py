@@ -5,8 +5,6 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-
 _embedding_client = None
 
 
@@ -18,20 +16,20 @@ def _get_client():
 
 
 def get_embedding(text: str, prefix: str = "search_document:") -> list[float] | None:
-    if not settings.GROQ_API_KEY:
-        logger.warning("GROQ_API_KEY not set, cannot compute embeddings")
+    if not settings.EMBEDDING_BASE_URL:
         return None
     headers = {
-        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
+    if settings.EMBEDDING_API_KEY:
+        headers["Authorization"] = f"Bearer {settings.EMBEDDING_API_KEY}"
     payload = {
-        "model": settings.GROQ_EMBEDDING_MODEL,
+        "model": settings.EMBEDDING_MODEL,
         "input": [prefix + text],
     }
     try:
         client = _get_client()
-        resp = client.post(f"{GROQ_BASE_URL}/embeddings", headers=headers, json=payload)
+        resp = client.post(f"{settings.EMBEDDING_BASE_URL}/embeddings", headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
         return data["data"][0]["embedding"]
@@ -43,21 +41,21 @@ def get_embedding(text: str, prefix: str = "search_document:") -> list[float] | 
 def get_embeddings_batch(texts: list[str], prefix: str = "search_document:") -> np.ndarray | None:
     if not texts:
         return None
-    if not settings.GROQ_API_KEY:
-        logger.warning("GROQ_API_KEY not set, cannot compute embeddings")
+    if not settings.EMBEDDING_BASE_URL:
         return None
     headers = {
-        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
+    if settings.EMBEDDING_API_KEY:
+        headers["Authorization"] = f"Bearer {settings.EMBEDDING_API_KEY}"
     prefixed = [prefix + t for t in texts]
     payload = {
-        "model": settings.GROQ_EMBEDDING_MODEL,
+        "model": settings.EMBEDDING_MODEL,
         "input": prefixed,
     }
     try:
         client = _get_client()
-        resp = client.post(f"{GROQ_BASE_URL}/embeddings", headers=headers, json=payload)
+        resp = client.post(f"{settings.EMBEDDING_BASE_URL}/embeddings", headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
         sorted_data = sorted(data["data"], key=lambda x: x["index"])

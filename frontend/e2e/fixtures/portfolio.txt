@@ -1,0 +1,2 @@
+Nova combines BM25 lexical retrieval with FAISS semantic vectors.
+Reciprocal rank fusion merges both result rankings into grounded evidence.
