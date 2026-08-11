@@ -10,12 +10,12 @@ import uuid
 from pathlib import Path
 
 from config.settings import settings
+from services.database import DATABASE_ENABLED
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 USERS_FILE = BACKEND_DIR / "storage" / "users.json"
 USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
 JWT_SECRET = settings.JWT_SECRET or "nova-ai-default-secret"
-JWT_EXPIRY = 86400 * 30
 PASSWORD_ITERATIONS = 310_000
 USERNAME_PATTERN = re.compile(r"^[a-z0-9_.-]{2,40}$")
 _USERS_LOCK = threading.RLock()
@@ -62,12 +62,15 @@ def _verify_password(password: str, stored_hash: str) -> tuple[bool, bool]:
     return valid, valid
 
 
-def create_token(user_id: str) -> str:
+def _create_token(user_id: str, token_type: str, expires_in: int) -> str:
     import json
     header = _base64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
     payload = _base64url_encode(json.dumps({
         "user_id": user_id,
-        "exp": int(time.time()) + JWT_EXPIRY,
+        "type": token_type,
+        "iat": int(time.time()),
+        "exp": int(time.time()) + expires_in,
+        "jti": uuid.uuid4().hex,
     }).encode())
     signing_input = f"{header}.{payload}"
     sig = _base64url_encode(hmac.new(
@@ -76,7 +79,20 @@ def create_token(user_id: str) -> str:
     return f"{header}.{payload}.{sig}"
 
 
-def verify_token(token: str) -> dict | None:
+def create_access_token(user_id: str) -> str:
+    return _create_token(user_id, "access", settings.ACCESS_TOKEN_TTL_SECONDS)
+
+
+def create_refresh_token(user_id: str) -> str:
+    return _create_token(user_id, "refresh", settings.REFRESH_TOKEN_TTL_SECONDS)
+
+
+def create_token(user_id: str) -> str:
+    """Backward-compatible alias for short-lived access tokens."""
+    return create_access_token(user_id)
+
+
+def verify_token(token: str, expected_type: str = "access") -> dict | None:
     import json
     parts = token.split(".")
     if len(parts) != 3:
@@ -96,6 +112,8 @@ def verify_token(token: str) -> dict | None:
     except Exception:
         return None
     if data.get("exp", 0) < time.time():
+        return None
+    if data.get("type") != expected_type:
         return None
     try:
         uuid.UUID(str(data.get("user_id", "")))
@@ -133,6 +151,9 @@ def _save_users(users: dict) -> None:
 
 
 def user_exists(user_id: str) -> bool:
+    if DATABASE_ENABLED:
+        from services.postgres_store import find_user_by_id
+        return find_user_by_id(user_id) is not None
     with _USERS_LOCK:
         return any(
             isinstance(user, dict) and user.get("user_id") == user_id
@@ -140,18 +161,35 @@ def user_exists(user_id: str) -> bool:
         )
 
 
-def delete_user(user_id: str) -> bool:
+def get_username(user_id: str) -> str | None:
+    if DATABASE_ENABLED:
+        from services.postgres_store import find_user_by_id
+        user = find_user_by_id(user_id)
+        return user.get("username") if user else None
     with _USERS_LOCK:
-        users = _load_users()
-        username_to_delete = None
-        for uname, data in list(users.items()):
-            if data.get("user_id") == user_id:
-                username_to_delete = uname
-                break
-        if not username_to_delete:
+        for username, user in _load_users().items():
+            if isinstance(user, dict) and user.get("user_id") == user_id:
+                return username
+    return None
+
+
+def delete_user(user_id: str) -> bool:
+    if DATABASE_ENABLED:
+        from services.postgres_store import delete_user_record
+        if not delete_user_record(user_id):
             return False
-        del users[username_to_delete]
-        _save_users(users)
+    else:
+        with _USERS_LOCK:
+            users = _load_users()
+            username_to_delete = None
+            for uname, data in list(users.items()):
+                if data.get("user_id") == user_id:
+                    username_to_delete = uname
+                    break
+            if not username_to_delete:
+                return False
+            del users[username_to_delete]
+            _save_users(users)
 
     # Clean up local user data.
     upload_dir = Path(settings.UPLOAD_FOLDER) / user_id
@@ -193,33 +231,51 @@ def register(username: str, password: str) -> dict | None:
         return None
     if len(password) < 8 or len(password) > 256:
         return None
-    with _USERS_LOCK:
-        users = _load_users()
-        if username in users:
+    if DATABASE_ENABLED:
+        from services.postgres_store import create_user
+        user = create_user(username, _hash_password(password))
+        if not user:
             return None
-        user_id = str(uuid.uuid4())
-        users[username] = {
-            "user_id": user_id,
-            "password_hash": _hash_password(password),
-            "created_at": time.time(),
-        }
-        _save_users(users)
-    token = create_token(user_id)
-    return {"token": token, "user_id": user_id, "username": username}
+        user_id = user["user_id"]
+    else:
+        with _USERS_LOCK:
+            users = _load_users()
+            if username in users:
+                return None
+            user_id = str(uuid.uuid4())
+            users[username] = {
+                "user_id": user_id,
+                "password_hash": _hash_password(password),
+                "created_at": time.time(),
+            }
+            _save_users(users)
+    token = create_access_token(user_id)
+    return {"access_token": token, "user_id": user_id, "username": username}
 
 
 def login(username: str, password: str) -> dict | None:
     username = username.strip().lower()
-    with _USERS_LOCK:
-        users = _load_users()
-        user = users.get(username)
+    if DATABASE_ENABLED:
+        from services.postgres_store import find_user_by_username, update_password
+        user = find_user_by_username(username)
         if not user:
             return None
         valid, needs_migration = _verify_password(password, user.get("password_hash", ""))
         if not valid:
             return None
         if needs_migration:
-            user["password_hash"] = _hash_password(password)
-            _save_users(users)
-    token = create_token(user["user_id"])
-    return {"token": token, "user_id": user["user_id"], "username": username}
+            update_password(user["user_id"], _hash_password(password))
+    else:
+        with _USERS_LOCK:
+            users = _load_users()
+            user = users.get(username)
+            if not user:
+                return None
+            valid, needs_migration = _verify_password(password, user.get("password_hash", ""))
+            if not valid:
+                return None
+            if needs_migration:
+                user["password_hash"] = _hash_password(password)
+                _save_users(users)
+    token = create_access_token(user["user_id"])
+    return {"access_token": token, "user_id": user["user_id"], "username": username}

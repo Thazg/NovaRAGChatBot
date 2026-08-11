@@ -19,6 +19,16 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ACCESS_TOKEN_TTL_SECONDS
+        value: 600
+      - key: REFRESH_TOKEN_TTL_SECONDS
+        value: 2592000
+      - key: COOKIE_SECURE
+        value: true
       - key: CORS_ORIGINS
         value: https://novachatbot.vercel.app
       - key: CORS_ORIGIN_REGEX
@@ -45,3 +55,9 @@ services:
         value: nova-ai-storage
       - key: B2_ENDPOINT
         value: https://s3.us-west-004.backblazeb2.com
+      - key: CLAMAV_HOST
+        sync: false
+      - key: CLAMAV_PORT
+        value: 3310
+      - key: MALWARE_SCAN_REQUIRED
+        value: false

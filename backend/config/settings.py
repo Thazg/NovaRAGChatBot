@@ -42,16 +42,32 @@ class Settings:
     MAX_CHUNK_CHARS: int = int(os.getenv("MAX_CHUNK_CHARS", "1000"))
     MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "6000"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
+    REDIS_URL: str = os.getenv("REDIS_URL", "").strip()
     READINESS_CACHE_SECONDS: float = float(os.getenv("READINESS_CACHE_SECONDS", "10"))
     RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
     RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "120"))
     RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
     AUTH_RATE_LIMIT_REQUESTS: int = int(os.getenv("AUTH_RATE_LIMIT_REQUESTS", "10"))
+    ACCESS_TOKEN_TTL_SECONDS: int = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "600"))
+    REFRESH_TOKEN_TTL_SECONDS: int = int(os.getenv("REFRESH_TOKEN_TTL_SECONDS", str(30 * 86400)))
     UPLOAD_FOLDER: str = os.getenv(
         "UPLOAD_FOLDER",
         str(BACKEND_DIR / "uploads"),
     )
     MAX_UPLOAD_BYTES: int = int(os.getenv("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+    MAX_PDF_PAGES: int = int(os.getenv("MAX_PDF_PAGES", "500"))
+    MAX_ARCHIVE_ENTRIES: int = int(os.getenv("MAX_ARCHIVE_ENTRIES", "2000"))
+    MAX_ARCHIVE_UNCOMPRESSED_BYTES: int = int(
+        os.getenv("MAX_ARCHIVE_UNCOMPRESSED_BYTES", str(100 * 1024 * 1024))
+    )
+    MAX_ARCHIVE_COMPRESSION_RATIO: float = float(os.getenv("MAX_ARCHIVE_COMPRESSION_RATIO", "100"))
+    MAX_NOTEBOOK_CELLS: int = int(os.getenv("MAX_NOTEBOOK_CELLS", "2000"))
+    CLAMAV_HOST: str = os.getenv("CLAMAV_HOST", "").strip()
+    CLAMAV_PORT: int = int(os.getenv("CLAMAV_PORT", "3310"))
+    MALWARE_SCAN_REQUIRED: bool = os.getenv("MALWARE_SCAN_REQUIRED", "false").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
     CORS_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(
@@ -68,6 +84,15 @@ class Settings:
         "CORS_ORIGIN_REGEX",
         r"^https://nova-ai-agent(?:-[a-z0-9-]+)?-thazg-s-projects\.vercel\.app$",
     ).strip()
+    COOKIE_SECURE: bool = os.getenv(
+        "COOKIE_SECURE", "true" if ENVIRONMENT == "production" else "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    REFRESH_COOKIE_NAME: str = os.getenv(
+        "REFRESH_COOKIE_NAME", "__Host-nova_refresh" if COOKIE_SECURE else "nova_refresh"
+    ).strip()
+    REFRESH_COOKIE_SAMESITE: str = os.getenv(
+        "REFRESH_COOKIE_SAMESITE", "strict" if COOKIE_SECURE else "lax"
+    ).strip().lower()
 
     # Auth
     JWT_SECRET: str = os.getenv("JWT_SECRET", "nova-ai-default-secret")
@@ -81,5 +106,9 @@ class Settings:
 
 settings = Settings()
 
-if settings.ENVIRONMENT == "production" and settings.JWT_SECRET == "nova-ai-default-secret":
-    raise RuntimeError("JWT_SECRET must be configured in production")
+if settings.ENVIRONMENT == "production" and (
+    not settings.JWT_SECRET
+    or settings.JWT_SECRET == "nova-ai-default-secret"
+    or len(settings.JWT_SECRET.encode("utf-8")) < 32
+):
+    raise RuntimeError("JWT_SECRET must be a production-only secret of at least 32 bytes")

@@ -13,3 +13,8 @@ tqdm==4.66.1
 python-dotenv==1.0.1
 a2wsgi==1.10.0
 boto3==1.34.0
+SQLAlchemy>=2.0.45,<3
+alembic>=1.17,<2
+psycopg[binary]>=3.3,<4
+redis>=7.1,<8
+rq>=2.6,<3

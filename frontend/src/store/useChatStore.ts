@@ -30,7 +30,8 @@ interface ChatState {
   // Actions
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  bootstrapSession: () => Promise<void>;
+  logout: () => Promise<void>;
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
   setSettingsOpen: (open: boolean) => void;
   setAboutOpen: (open: boolean) => void;
@@ -65,13 +66,8 @@ interface ChatState {
 }
 
 type PersistedChatState = Pick<ChatState,
-  | 'token'
-  | 'userId'
-  | 'username'
-  | 'conversations'
   | 'theme'
   | 'sidebarOpen'
-  | 'currentConversationId'
   | 'avatar'
   | 'displayName'
   | 'customInstructions'
@@ -107,13 +103,13 @@ export const useChatStore = create<ChatState>()(
 
       login: async (username: string, password: string) => {
         const res = await auth.login(username, password);
-        set({ token: res.token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
+        set({ token: res.access_token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
         try {
-          const convs = await api.getConversations(res.token);
-          const mapped: Conversation[] = convs.map((c: any) => ({
+          const convs = await api.getConversations();
+          const mapped: Conversation[] = convs.map((c) => ({
             id: c.id,
             title: c.title || 'New Chat',
-            messages: (c.messages || []).map((m: any) => ({
+            messages: (c.messages || []).map((m) => ({
               id: m.id || uuidv4(),
               role: m.role || 'user',
               content: m.content || '',
@@ -130,19 +126,48 @@ export const useChatStore = create<ChatState>()(
       },
       register: async (username: string, password: string) => {
         const res = await auth.register(username, password);
-        set({ token: res.token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
+        set({ token: res.access_token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
       },
-      logout: () => set({
-        token: null,
-        userId: null,
-        username: null,
-        conversations: [],
-        currentConversationId: null,
-        avatar: null,
-        displayName: 'User',
-        nickname: '',
-        customInstructions: '',
-      }),
+      bootstrapSession: async () => {
+        const res = await auth.refresh();
+        const username = res.username || 'User';
+        const convs = await api.getConversations();
+        const mapped: Conversation[] = convs.map((c) => ({
+          id: c.id,
+          title: c.title || 'New Chat',
+          messages: (c.messages || []).map((m) => ({
+            id: m.id || uuidv4(),
+            role: m.role || 'user',
+            content: m.content || '',
+            createdAt: m.createdAt || Date.now(),
+          })),
+          createdAt: c.createdAt || Date.now(),
+          updatedAt: c.updatedAt || Date.now(),
+          pinned: c.pinned || false,
+        }));
+        set({
+          token: res.access_token,
+          userId: res.user_id,
+          username,
+          displayName: username,
+          conversations: mapped,
+          currentConversationId: mapped[0]?.id || null,
+        });
+      },
+      logout: async () => {
+        set({
+          token: null,
+          userId: null,
+          username: null,
+          conversations: [],
+          currentConversationId: null,
+          avatar: null,
+          displayName: 'User',
+          nickname: '',
+          customInstructions: '',
+        });
+        await auth.logout().catch(() => undefined);
+      },
 
       setLanguage: (language: 'auto' | 'english' | 'vietnamese') => set({ language }),
       setSidebarActiveTab: (sidebarActiveTab: 'conversations' | 'documents') => set({ sidebarActiveTab }),
@@ -343,22 +368,25 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'rag-chat-storage',
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as PersistedChatState;
+        const unsafeState = persistedState as PersistedChatState & Record<string, unknown>;
+        const {
+          token: _token,
+          userId: _userId,
+          username: _username,
+          conversations: _conversations,
+          currentConversationId: _currentConversationId,
+          ...state
+        } = unsafeState;
         if (version < 2 && (!state.theme || state.theme === 'system')) {
           return { ...state, theme: 'dark' };
         }
-        return state;
+        return state as PersistedChatState;
       },
       partialize: (state: ChatState) => ({
-        token: state.token,
-        userId: state.userId,
-        username: state.username,
-        conversations: state.conversations,
         theme: state.theme,
         sidebarOpen: state.sidebarOpen,
-        currentConversationId: state.currentConversationId,
         avatar: state.avatar,
         displayName: state.displayName,
         customInstructions: state.customInstructions,

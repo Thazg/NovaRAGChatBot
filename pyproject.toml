@@ -2,6 +2,7 @@
 pythonpath = ["backend"]
 testpaths = ["backend/tests"]
 addopts = "-ra --strict-markers -p no:cacheprovider"
+norecursedirs = [".git", ".pytest-tmp", "pytest_tmp", "node_modules", "test-results"]
 
 [tool.coverage.run]
 source = ["backend"]

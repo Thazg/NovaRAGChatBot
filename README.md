@@ -134,14 +134,18 @@ Every API response includes `X-Request-ID`, `X-Response-Time-Ms`, and `Server-Ti
 ## Security choices
 
 - Passwords use salted PBKDF2-HMAC-SHA256 with 310,000 iterations.
-- Tokens are signed with HMAC-SHA256 and expire after 30 days.
+- Access tokens are signed with HMAC-SHA256, expire after 10 minutes, and exist only in JavaScript memory.
+- Refresh tokens rotate on every use and live in a `Secure; HttpOnly; SameSite=Strict` host-only cookie in production. Only their SHA-256 hashes are persisted server-side.
+- Cookie-backed auth endpoints verify the browser `Origin`; Vercel proxies `/api/*` to Render so production authentication remains same-origin.
+- Logout revokes the refresh session, expires its cookie, and clears browser cache/cookies. Legacy tokens are removed from persisted Zustand state during migration.
+- Production refuses to boot with a missing/default JWT secret or one shorter than 32 bytes.
 - Usernames are normalized and validated before becoming filesystem/storage identifiers.
 - Upload size and accepted file types are restricted.
 - Sliding-window limits protect authentication and API endpoints and expose standard retry/remaining headers.
 - Documents, indexes, and conversations are namespaced by authenticated user ID.
 - Secrets stay in environment variables and are excluded from Git.
 
-For a public production deployment, add rate limiting, managed secret rotation, malware scanning, and an external identity provider.
+See [`docs/SESSION_SECURITY.md`](docs/SESSION_SECURITY.md) for the session flow, threat model, deployment variables, and verification checklist.
 
 ## Repository structure
 
@@ -172,7 +176,7 @@ frontend/
 - Live frontend: [novachatbot.vercel.app](https://novachatbot.vercel.app/)
 - Production API: `https://novaaiagent-4.onrender.com`
 - `render.yaml` provisions the FastAPI service on Render.
-- The Vite production build uses the Render API URL from `frontend/.env.production`; a Vercel environment variable can override it.
+- The Vite production build calls same-origin `/api`; `frontend/vercel.json` securely rewrites that path to Render and adds browser security headers.
 - Render allows the production frontend origin plus preview URLs belonging to this Vercel project.
 - Backblaze B2 variables enable durable uploads, indexes, users, and conversations.
 

@@ -5,8 +5,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from api.routes import auth, chat, health, conversation, documents
 from config.settings import settings
 from services.auth import user_exists, verify_token
-from services.rate_limiter import SlidingWindowRateLimiter
+from services.rate_limiter import create_rate_limiter
 import logging
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logger.info("Initializing Nova AI Agent Backend...")
+    from services.database import initialize_database
+    initialize_database()
     Path(settings.UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
     logger.info("Upload folder ready at %s", settings.UPLOAD_FOLDER)
     from rag.llm_client import warmup_model
@@ -30,7 +33,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request.state.user_id = None
         path = request.url.path
-        if request.method == "OPTIONS" or path.startswith("/health") or path in ("/auth/register", "/auth/login"):
+        if request.method == "OPTIONS" or path.startswith("/health") or path in (
+            "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout"
+        ):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
@@ -45,16 +50,39 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class TrustedOriginMiddleware(BaseHTTPMiddleware):
+    """Protect cookie-backed auth endpoints from cross-site request forgery."""
+
+    _COOKIE_ENDPOINTS = {"/auth/register", "/auth/login", "/auth/refresh", "/auth/logout"}
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "POST" and request.url.path in self._COOKIE_ENDPOINTS:
+            origin = request.headers.get("Origin", "").rstrip("/")
+            exact_match = origin in settings.CORS_ORIGINS
+            regex_match = bool(
+                origin
+                and settings.CORS_ORIGIN_REGEX
+                and re.fullmatch(settings.CORS_ORIGIN_REGEX, origin)
+            )
+            if (origin and not (exact_match or regex_match)) or (
+                settings.ENVIRONMENT == "production" and not origin
+            ):
+                return JSONResponse(status_code=403, content={"detail": "Untrusted request origin"})
+        return await call_next(request)
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
-        self.general = SlidingWindowRateLimiter(
+        self.general = create_rate_limiter(
             settings.RATE_LIMIT_REQUESTS,
             settings.RATE_LIMIT_WINDOW_SECONDS,
+            "api",
         )
-        self.auth = SlidingWindowRateLimiter(
+        self.auth = create_rate_limiter(
             settings.AUTH_RATE_LIMIT_REQUESTS,
             settings.RATE_LIMIT_WINDOW_SECONDS,
+            "auth",
         )
 
     async def dispatch(self, request: Request, call_next):
@@ -98,11 +126,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(AuthMiddleware)
+app.add_middleware(TrustedOriginMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
 

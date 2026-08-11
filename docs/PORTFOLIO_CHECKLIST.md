@@ -31,17 +31,18 @@ The WebM video, screenshots, and trace are written to `frontend/demo-artifacts/`
 ## Render deployment checklist
 
 1. Create a Render Blueprint from `render.yaml`.
-2. Set `GROQ_API_KEY`, a long random `JWT_SECRET`, and optional B2 credentials.
-3. Confirm `ENVIRONMENT=production`, `CORS_ORIGINS=https://novachatbot.vercel.app`, and the project-scoped `CORS_ORIGIN_REGEX` from `render.yaml`.
+2. Set `GROQ_API_KEY`, a unique random `JWT_SECRET` of at least 32 bytes, and optional B2 credentials.
+3. Confirm `ENVIRONMENT=production`, `COOKIE_SECURE=true`, `CORS_ORIGINS=https://novachatbot.vercel.app`, and the project-scoped `CORS_ORIGIN_REGEX` from `render.yaml`.
 4. Verify `/health`, then `/health/ready?refresh=true`.
 5. Send a real chat request and inspect `X-Request-ID`, `X-Response-Time-Ms`, and rate-limit headers.
 
 ## Vercel deployment checklist
 
 1. Set the project root to `frontend`.
-2. Confirm `VITE_API_BASE_URL=https://novaaiagent-4.onrender.com` (already committed in `frontend/.env.production`, and optionally overridden in Vercel).
-3. Deploy using `frontend/vercel.json` and verify SPA refresh routes.
-4. Test sign-up, upload, streaming, citation rendering, logout, and a mobile viewport.
+2. Keep `VITE_API_BASE_URL=/api` (already committed); do not point browser auth directly at Render.
+3. Deploy using `frontend/vercel.json`, then verify the `/api/*` rewrite, CSP, and SPA refresh routes.
+4. Verify login, hard refresh/session restoration, automatic access-token refresh, logout, and that localStorage contains no token.
+5. Continue with upload, streaming, citation rendering, and mobile checks after the upload-hardening step is complete.
 
 ## PostgreSQL migration plan
 

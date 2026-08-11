@@ -74,6 +74,16 @@ def test_unrelated_vercel_origin_is_rejected_by_cors() -> None:
     assert "Access-Control-Allow-Origin" not in response.headers
 
 
+def test_untrusted_origin_cannot_use_cookie_auth_endpoints() -> None:
+    response = client.post(
+        "/auth/refresh",
+        headers={"Origin": "https://attacker.example"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Untrusted request origin"}
+
+
 def test_readiness_reports_provider_state(monkeypatch) -> None:
     async def fake_probe():
         return ({

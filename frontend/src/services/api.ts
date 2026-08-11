@@ -1,23 +1,21 @@
+import { z } from 'zod';
+
 export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL
-  || (import.meta.env.PROD ? 'https://novaaiagent-4.onrender.com' : 'http://localhost:8000')
+  || (import.meta.env.PROD ? '/api' : 'http://localhost:8000')
 ).replace(/\/+$/, '');
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const ALLOWED_UPLOAD_EXTENSIONS = ['.pdf', '.md', '.markdown', '.rst', '.txt', '.py', '.docx', '.ipynb'];
 
-function getToken(): string | null {
-  try {
-    const raw = localStorage.getItem('rag-chat-storage');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return parsed?.state?.token || null;
-    }
-  } catch {}
-  return null;
+let accessToken: string | null = null;
+let refreshPromise: Promise<AuthResponse> | null = null;
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
 }
 
 function authHeaders(): Record<string, string> {
-  const token = getToken();
+  const token = accessToken;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -25,10 +23,109 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
-export interface AuthResponse {
-  token: string;
-  user_id: string;
-  username: string;
+const AuthResponseSchema = z.object({
+  access_token: z.string().min(20),
+  user_id: z.string().uuid(),
+  username: z.string().optional(),
+});
+export type AuthResponse = z.infer<typeof AuthResponseSchema>;
+
+const MessageSchema = z.object({
+  id: z.string().optional(),
+  role: z.enum(['user', 'assistant', 'system']),
+  content: z.string(),
+  createdAt: z.number().optional(),
+});
+
+const ConversationSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  messages: z.array(MessageSchema).default([]),
+  createdAt: z.number().optional(),
+  updatedAt: z.number().optional(),
+  pinned: z.boolean().optional(),
+});
+
+const DocumentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  size: z.number().nonnegative(),
+  indexed: z.boolean().optional(),
+  chunks: z.number().int().nonnegative().optional(),
+  source_url: z.string().url().optional(),
+});
+
+const IndexJobSchema = z.object({
+  id: z.string(),
+  status: z.enum(['queued', 'started', 'deferred', 'scheduled', 'finished', 'failed']),
+  progress: z.number().min(0).max(100),
+  result: z.object({
+    indexed: z.boolean().optional(),
+    chunks: z.number().optional(),
+    documents: z.number().optional(),
+    message: z.string().optional(),
+  }).optional().nullable(),
+  error: z.string().optional().nullable(),
+});
+
+const UploadResponseSchema = z.object({
+  status: z.string(),
+  // Legacy synchronous backends did not return an id. Keeping this optional
+  // lets the session-security commit remain backward compatible; hardened
+  // UUID uploads will always provide it in the next step.
+  id: z.string().optional(),
+  filename: z.string(),
+  indexed: z.boolean().optional(),
+  chunks: z.number().optional(),
+  job_id: z.string().optional(),
+  progress: z.number().optional(),
+  message: z.string().optional(),
+});
+
+const StreamEventSchema = z.union([
+  z.object({ token: z.string() }),
+  z.object({ action: z.literal('search_offer'), query: z.string().optional() }),
+]);
+
+async function performRefresh(): Promise<AuthResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    setAccessToken(null);
+    throw new Error('Session expired');
+  }
+  const data = AuthResponseSchema.parse(await response.json());
+  setAccessToken(data.access_token);
+  return data;
+}
+
+function refreshAccessToken(): Promise<AuthResponse> {
+  // A single-use refresh token must only be rotated once. Sharing this promise
+  // prevents concurrent 401 responses (or React StrictMode) from replaying the
+  // same cookie and accidentally invalidating a freshly rotated session.
+  if (!refreshPromise) {
+    refreshPromise = performRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function authorizedFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: 'include',
+  });
+  if (response.status === 401 && retry) {
+    await refreshAccessToken();
+    return authorizedFetch(path, init, false);
+  }
+  return response;
 }
 
 export const auth = {
@@ -37,12 +134,15 @@ export const auth = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+      credentials: 'include',
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || 'Registration failed');
     }
-    return res.json();
+    const data = AuthResponseSchema.parse(await res.json());
+    setAccessToken(data.access_token);
+    return data;
   },
 
   async login(username: string, password: string): Promise<AuthResponse> {
@@ -50,19 +150,31 @@ export const auth = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+      credentials: 'include',
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || 'Login failed');
     }
-    return res.json();
+    const data = AuthResponseSchema.parse(await res.json());
+    setAccessToken(data.access_token);
+    return data;
   },
 
-  async me(token?: string): Promise<{ user_id: string }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const activeToken = token || getToken();
-    if (activeToken) headers.Authorization = `Bearer ${activeToken}`;
-    const res = await fetch(`${API_BASE_URL}/auth/me`, { headers });
+  async refresh(): Promise<AuthResponse> {
+    return refreshAccessToken();
+  },
+
+  async logout(): Promise<void> {
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+    } finally {
+      setAccessToken(null);
+    }
+  },
+
+  async me(): Promise<{ user_id: string }> {
+    const res = await authorizedFetch('/auth/me', { headers: authHeaders() });
     if (!res.ok) throw new Error('Session expired');
     return res.json();
   },
@@ -87,10 +199,32 @@ export interface Document {
   source_url?: string;
 }
 
+export interface IndexJob {
+  id: string;
+  status: 'queued' | 'started' | 'deferred' | 'scheduled' | 'finished' | 'failed';
+  progress: number;
+  result?: { indexed?: boolean; chunks?: number; documents?: number; message?: string } | null;
+  error?: string | null;
+}
+
+export interface DownloadedDocument {
+  id: string;
+  file_name: string;
+  new: boolean;
+}
+
 export interface Conversation {
   id: string;
   title: string;
-  messages: any[];
+  messages: Array<{
+    id?: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    createdAt?: number;
+  }>;
+  createdAt?: number;
+  updatedAt?: number;
+  pinned?: boolean;
 }
 
 export interface HealthStatus {
@@ -117,7 +251,7 @@ export interface ReadinessStatus {
 
 export const api = {
   async sendMessage(sessionId: string, question: string, abortSignal?: AbortSignal): Promise<ChatResponse> {
-    const response = await fetch(`${API_BASE_URL}/chat`, {
+    const response = await authorizedFetch('/chat', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ session_id: sessionId, question }),
@@ -140,17 +274,30 @@ export const api = {
     onAction?: (action: { type: string; query: string }) => void,
     language?: string,
     regenerate = false,
+    reconnectAttempt = 0,
   ): Promise<void> {
-    const body: Record<string, any> = { session_id: sessionId, question, stream: true };
+    const body: Record<string, string | boolean> = { session_id: sessionId, question, stream: true };
     if (instructions) body.instructions = instructions;
     if (language && language !== 'auto') body.language = language;
     if (regenerate) body.regenerate = true;
-    const response = await fetch(`${API_BASE_URL}/chat/stream`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body),
-      signal: abortSignal,
-    });
+    let response: Response;
+    try {
+      response = await authorizedFetch('/chat/stream', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+        signal: abortSignal,
+      });
+    } catch (error) {
+      if (reconnectAttempt < 1 && !abortSignal?.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return api.streamMessage(
+          sessionId, question, onToken, abortSignal, instructions,
+          onAction, language, regenerate, reconnectAttempt + 1,
+        );
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
@@ -163,6 +310,7 @@ export const api = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+    let receivedToken = false;
 
     try {
       while (true) {
@@ -187,21 +335,32 @@ export const api = {
         }
 
         try {
-          const parsed = JSON.parse(jsonStr);
-          if (parsed.token) {
-            onToken(parsed.token);
-          } else if (parsed.action === 'search_offer') {
-            onAction?.({ type: 'search_offer', query: parsed.query || '' });
+          const parsed = StreamEventSchema.safeParse(JSON.parse(jsonStr));
+          if (!parsed.success) continue;
+          if ('token' in parsed.data) {
+            receivedToken = true;
+            onToken(parsed.data.token);
+          } else if (parsed.data.action === 'search_offer') {
+            onAction?.({ type: 'search_offer', query: parsed.data.query || '' });
           }
           } catch {
             // Incomplete JSON or other format, ignore for now
           }
         }
       }
-    } catch (streamError: any) {
+    } catch (streamError: unknown) {
       // StreamClosed / AbortError — expected when user cancels or connection drops
-      if (streamError.name === 'AbortError' || streamError.message?.includes('StreamClosed')) {
+      const errorName = streamError instanceof DOMException ? streamError.name : '';
+      const errorMessage = streamError instanceof Error ? streamError.message : '';
+      if (errorName === 'AbortError' || errorMessage.includes('StreamClosed')) {
         return;
+      }
+      if (!receivedToken && reconnectAttempt < 1 && !abortSignal?.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return api.streamMessage(
+          sessionId, question, onToken, abortSignal, instructions,
+          onAction, language, regenerate, reconnectAttempt + 1,
+        );
       }
       throw streamError;
     }
@@ -209,14 +368,14 @@ export const api = {
 
   // Documents API
   async getDocuments(): Promise<Document[]> {
-    const response = await fetch(`${API_BASE_URL}/documents`, { headers: authHeaders() });
+    const response = await authorizedFetch('/documents', { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return response.json();
+    return z.array(DocumentSchema).parse(await response.json());
   },
 
-  async uploadDocument(file: File): Promise<{ status: string; filename: string; indexed?: boolean; chunks?: number; message?: string }> {
+  async uploadDocument(file: File): Promise<{ status: string; id?: string; filename: string; indexed?: boolean; chunks?: number; job_id?: string; progress?: number; message?: string }> {
     const extension = file.name.includes('.') ? `.${file.name.split('.').pop()?.toLowerCase()}` : '';
     if (!ALLOWED_UPLOAD_EXTENSIONS.includes(extension)) {
       throw new Error('Unsupported file type. Use PDF, DOCX, Markdown, text, Python, or notebook files.');
@@ -226,10 +385,10 @@ export const api = {
     }
     const formData = new FormData();
     formData.append('file', file);
-    const token = getToken();
+    const token = accessToken;
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(`${API_BASE_URL}/documents/upload`, {
+    const response = await authorizedFetch('/documents/upload', {
       method: 'POST',
       headers,
       body: formData,
@@ -240,11 +399,30 @@ export const api = {
       throw new Error(error.detail || `Upload failed (${response.status})`);
     }
 
-    return response.json();
+    return UploadResponseSchema.parse(await response.json());
+  },
+
+  async getIndexJob(jobId: string): Promise<IndexJob> {
+    const response = await authorizedFetch(`/documents/jobs/${encodeURIComponent(jobId)}`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) throw new Error(`Unable to read indexing progress (${response.status})`);
+    return IndexJobSchema.parse(await response.json()) as IndexJob;
+  },
+
+  async waitForIndexJob(jobId: string, timeoutMs = 180_000): Promise<IndexJob> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const job = await api.getIndexJob(jobId);
+      if (job.status === 'finished') return job;
+      if (job.status === 'failed') throw new Error(job.error || 'Document indexing failed');
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    }
+    throw new Error('Document indexing is still running. Check back shortly.');
   },
 
   async deleteDocument(id: string): Promise<{ status: string }> {
-    const response = await fetch(`${API_BASE_URL}/documents/${id}`, {
+    const response = await authorizedFetch(`/documents/${id}`, {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -257,7 +435,7 @@ export const api = {
   },
 
   async clearAllDocuments(): Promise<{ status: string; deleted: number }> {
-    const response = await fetch(`${API_BASE_URL}/documents/clear-all`, {
+    const response = await authorizedFetch('/documents/clear-all', {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -270,7 +448,7 @@ export const api = {
   },
 
   async summarizeDocument(filename: string): Promise<{ summary: string; chunks: number; filename: string }> {
-    const response = await fetch(`${API_BASE_URL}/documents/summarize`, {
+    const response = await authorizedFetch('/documents/summarize', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ filename }),
@@ -281,8 +459,8 @@ export const api = {
     return response.json();
   },
 
-  async searchDownload(query: string, maxResults: number = 3): Promise<{ status: string; downloaded: any[]; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/documents/search-download`, {
+  async searchDownload(query: string, maxResults: number = 3): Promise<{ status: string; downloaded: DownloadedDocument[]; message: string; job_id?: string }> {
+    const response = await authorizedFetch('/documents/search-download', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ query, max_results: maxResults }),
@@ -293,8 +471,8 @@ export const api = {
     return response.json();
   },
 
-  async reindexDocuments(): Promise<{ status: string; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/documents/reindex`, {
+  async reindexDocuments(): Promise<{ status: string; message: string; job_id?: string; progress?: number }> {
+    const response = await authorizedFetch('/documents/reindex', {
       method: 'POST',
       headers: authHeaders(),
     });
@@ -307,22 +485,19 @@ export const api = {
   },
 
   // Conversations API
-  async getConversations(token?: string): Promise<Conversation[]> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const t = token || getToken();
-    if (t) headers['Authorization'] = `Bearer ${t}`;
-    const response = await fetch(`${API_BASE_URL}/conversation`, { headers });
+  async getConversations(): Promise<Conversation[]> {
+    const response = await authorizedFetch('/conversation', { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return response.json();
+    return z.array(ConversationSchema).parse(await response.json());
   },
 
   async createConversation(
     id?: string,
     conversation?: Partial<Conversation> & { pinned?: boolean },
   ): Promise<Conversation> {
-    const response = await fetch(`${API_BASE_URL}/conversation/new`, {
+    const response = await authorizedFetch('/conversation/new', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
@@ -341,7 +516,7 @@ export const api = {
   },
 
   async deleteConversation(id: string): Promise<{ status: string }> {
-    const response = await fetch(`${API_BASE_URL}/conversation/${id}`, {
+    const response = await authorizedFetch(`/conversation/${id}`, {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -354,7 +529,7 @@ export const api = {
   },
 
   async updateConversation(id: string, update: { title?: string; pinned?: boolean }): Promise<Conversation> {
-    const response = await fetch(`${API_BASE_URL}/conversation/${id}`, {
+    const response = await authorizedFetch(`/conversation/${id}`, {
       method: 'PUT',
       headers: authHeaders(),
       body: JSON.stringify(update),
@@ -368,7 +543,7 @@ export const api = {
   },
 
   async clearConversations(): Promise<{ status: string; deleted: number }> {
-    const response = await fetch(`${API_BASE_URL}/conversation`, {
+    const response = await authorizedFetch('/conversation', {
       method: 'DELETE',
       headers: authHeaders(),
     });
@@ -378,7 +553,7 @@ export const api = {
 
   // Health check
   async healthCheck(): Promise<HealthStatus> {
-    const response = await fetch(`${API_BASE_URL}/health`, { headers: authHeaders() });
+    const response = await authorizedFetch('/health', { headers: authHeaders() });
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
@@ -386,7 +561,7 @@ export const api = {
   },
 
   async readinessCheck(): Promise<ReadinessStatus> {
-    const response = await fetch(`${API_BASE_URL}/health/ready`, { headers: authHeaders() });
+    const response = await authorizedFetch('/health/ready', { headers: authHeaders() });
     const data = await response.json().catch(() => null);
     if (!data) {
       throw new Error(`API error: ${response.statusText}`);
@@ -396,7 +571,7 @@ export const api = {
 
   // Account
   async deleteAccount(): Promise<{ status: string; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/account`, {
+    const response = await authorizedFetch('/auth/account', {
       method: 'DELETE',
       headers: authHeaders(),
     });
