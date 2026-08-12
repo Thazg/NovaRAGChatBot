@@ -45,12 +45,28 @@ _STOP_WORDS = frozenset({
     "might", "can", "shall", "not", "no", "nor", "but", "or", "and",
     "for", "to", "of", "in", "on", "at", "by", "with", "from", "into",
     "about", "like", "than", "then", "also", "very", "just", "its",
+    "nova", "project",
 })
+
+
+def _stem_token(token: str) -> str:
+    irregular = {
+        "recovery": "recover", "cancellation": "cancel", "lived": "live",
+        "stored": "store", "stores": "store", "reported": "report",
+    }
+    if token in irregular:
+        return irregular[token]
+    if token.endswith("ies") and len(token) > 4:
+        return token[:-3] + "y"
+    for suffix in ("ingly", "edly", "ments", "ment", "ation", "tion", "ing", "ed", "es", "ly", "s"):
+        if token.endswith(suffix) and len(token) - len(suffix) >= 4:
+            return token[:-len(suffix)]
+    return token
 
 
 def _extract_key_terms(query: str) -> set:
     words = re.findall(r"[a-zA-Z]\w+", query.lower())
-    return {w for w in words if len(w) > 3 and w not in _STOP_WORDS}
+    return {_stem_token(w) for w in words if len(w) > 3 and w not in _STOP_WORDS}
 
 
 def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, allow_broad: bool = True):
@@ -76,13 +92,28 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
 
     expanded_query = expand_query(normalized_query)
     query_terms = _extract_key_terms(expanded_query)
+    if query_terms and getattr(retriever, "documents", None):
+        document_token_sets = [
+            {_stem_token(token) for token in re.findall(r"[a-zA-Z]\w+", document.get("content", "").lower())}
+            for document in retriever.documents
+        ]
+        max_document_frequency = max(1, int(len(document_token_sets) * 0.4))
+        informative_terms = {
+            term for term in query_terms
+            if sum(term in tokens for tokens in document_token_sets) <= max_document_frequency
+        }
+        if informative_terms:
+            query_terms = informative_terms
 
     if allow_broad and nodes and query_terms:
         found_terms = set()
         for node in nodes:
-            content = node.get("content", "").lower()
+            content_terms = {
+                _stem_token(token)
+                for token in re.findall(r"[a-zA-Z]\w+", node.get("content", "").lower())
+            }
             for t in query_terms:
-                if t in content:
+                if t in content_terms:
                     found_terms.add(t)
         avg_score = sum(n.get("_score", 0) for n in nodes) / len(nodes) if nodes else 0
         if len(found_terms) < max(1, len(query_terms) // 2) and avg_score < 0.3:
@@ -96,10 +127,14 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
 
     if nodes and query_terms:
         def term_score(n):
-            head = n.get("content", "").lower()[:600]
-            return sum(1 for t in query_terms if t in head)
+            head_terms = {
+                _stem_token(token)
+                for token in re.findall(r"[a-zA-Z]\w+", n.get("content", "").lower()[:600])
+            }
+            return sum(1 for t in query_terms if t in head_terms)
         nodes.sort(key=lambda n: (term_score(n), n.get("_score", 0)), reverse=True)
-        nodes = [n for n in nodes if term_score(n) > 0]
+        required_overlap = 2 if len(query_terms) >= 3 else 1
+        nodes = [n for n in nodes if term_score(n) >= required_overlap]
 
     retrieval_cache.set(cache_key, nodes)
     return nodes

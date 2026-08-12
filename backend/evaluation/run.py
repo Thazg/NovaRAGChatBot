@@ -16,6 +16,9 @@ def main() -> int:
     parser.add_argument("--min-recall", type=float, default=0.90)
     parser.add_argument("--min-mrr", type=float, default=0.80)
     parser.add_argument("--min-citation-precision", type=float, default=0.90)
+    parser.add_argument("--min-citation-recall", type=float, default=0.90)
+    parser.add_argument("--min-faithfulness", type=float, default=0.60)
+    parser.add_argument("--min-unanswerable-accuracy", type=float, default=1.0)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -31,6 +34,9 @@ def main() -> int:
         results["recall_at_k"] >= args.min_recall
         and results["mrr"] >= args.min_mrr
         and results["citation_precision"] >= args.min_citation_precision
+        and results["citation_recall"] >= args.min_citation_recall
+        and results["faithfulness"] >= args.min_faithfulness
+        and results["unanswerable_accuracy"] >= args.min_unanswerable_accuracy
     )
     if not passed:
         print("Evaluation thresholds were not met.")

@@ -1,73 +1,636 @@
 {
   "k": 5,
-  "query_count": 6,
-  "recall_at_k": 1.0,
-  "mrr": 0.9166666666666666,
+  "corpus_count": 14,
+  "query_count": 60,
+  "recall_at_k": 0.9821428571428571,
+  "mrr": 0.9553571428571429,
   "citation_precision": 1.0,
+  "citation_recall": 1.0,
+  "faithfulness": 0.66921768707483,
+  "faithfulness_method": "lexical_evidence_support_proxy",
+  "unanswerable_accuracy": 1,
+  "ablations": {
+    "bm25": {
+      "recall_at_k": 0.9821428571428571,
+      "mrr": 0.9553571428571429,
+      "unanswerable_accuracy": 1,
+      "latency_ms_p50": 0.6824500001130218,
+      "latency_ms_p95": 0.7975099998020595
+    },
+    "tfidf_faiss_proxy": {
+      "recall_at_k": 0.9464285714285714,
+      "mrr": 0.9196428571428571,
+      "unanswerable_accuracy": 1,
+      "latency_ms_p50": 1.076549999652343,
+      "latency_ms_p95": 1.1656049998236995
+    },
+    "hybrid_rrf": {
+      "recall_at_k": 0.9821428571428571,
+      "mrr": 0.9553571428571429,
+      "unanswerable_accuracy": 1,
+      "latency_ms_p50": 1.7704499996398226,
+      "latency_ms_p95": 1.9512699997449088
+    }
+  },
   "queries": [
     {
-      "query": "How are BM25 and FAISS rankings combined?",
+      "query": "What stages make up the retrieval augmented generation pipeline?",
+      "answerable": true,
       "retrieved_ids": [
-        "retrieval-1",
-        "security-1",
-        "interface-1",
-        "storage-1",
-        "streaming-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0
-    },
-    {
-      "query": "How does Nova hash user passwords?",
-      "retrieved_ids": [
-        "security-1",
         "architecture-1"
       ],
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How are documents turned into grounded prompts?",
+      "answerable": true,
+      "retrieved_ids": [
+        "architecture-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Where are overlapping chunks created?",
+      "answerable": true,
+      "retrieved_ids": [
+        "architecture-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What happens before Nova streams an answer?",
+      "answerable": true,
+      "retrieved_ids": [
+        "architecture-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How are user passwords hashed?",
+      "answerable": true,
+      "retrieved_ids": [
+        "password-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How many PBKDF2 iterations protect a password?",
+      "answerable": true,
+      "retrieved_ids": [
+        "password-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Does password comparison run in constant time?",
+      "answerable": true,
+      "retrieved_ids": [
+        "password-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which SHA algorithm is used with PBKDF2 HMAC?",
+      "answerable": true,
+      "retrieved_ids": [
+        "password-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How long does an access token live?",
+      "answerable": true,
+      "retrieved_ids": [
+        "session-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Where does the browser keep the access token?",
+      "answerable": true,
+      "retrieved_ids": [
+        "session-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which cookie flags protect refresh tokens?",
+      "answerable": true,
+      "retrieved_ids": [
+        "session-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Are refresh credentials rotated and hashed server side?",
+      "answerable": true,
+      "retrieved_ids": [
+        "session-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
     },
     {
       "query": "How are generated tokens streamed to React?",
+      "answerable": true,
       "retrieved_ids": [
-        "security-1",
-        "streaming-1",
-        "deployment-1"
+        "streaming-1"
       ],
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
     },
     {
-      "query": "How does startup verify the Groq model is reachable?",
+      "query": "Which protocol delivers incremental LLM output?",
+      "answerable": true,
       "retrieved_ids": [
-        "health-1",
-        "streaming-1",
-        "deployment-1",
+        "streaming-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Can users cancel an active generation?",
+      "answerable": true,
+      "retrieved_ids": [
+        "streaming-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What happens when the initial stream connection drops?",
+      "answerable": true,
+      "retrieved_ids": [
+        "streaming-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How are BM25 and FAISS rankings combined?",
+      "answerable": true,
+      "retrieved_ids": [
         "retrieval-1",
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which lexical ranker does hybrid retrieval use?",
+      "answerable": true,
+      "retrieved_ids": [
+        "retrieval-1",
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which vector index supports dense retrieval?",
+      "answerable": true,
+      "retrieved_ids": [
+        "storage-1",
+        "retrieval-1",
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What does reciprocal rank fusion merge?",
+      "answerable": true,
+      "retrieved_ids": [
+        "retrieval-1",
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What artifacts are stored in Backblaze B2?",
+      "answerable": true,
+      "retrieved_ids": [
+        "storage-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Should conversations remain in object storage?",
+      "answerable": true,
+      "retrieved_ids": [
+        "storage-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Where do vector index artifacts persist?",
+      "answerable": true,
+      "retrieved_ids": [
+        "storage-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which records belong in PostgreSQL instead of B2?",
+      "answerable": true,
+      "retrieved_ids": [
+        "storage-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which themes are available in the interface?",
+      "answerable": true,
+      "retrieved_ids": [
         "interface-1"
       ],
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
     },
     {
-      "query": "Where are uploaded files persisted in cloud object storage?",
+      "query": "Does the UI support reduced motion?",
+      "answerable": true,
       "retrieved_ids": [
-        "storage-1",
-        "security-1"
+        "interface-1"
       ],
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How does the frontend recover from application errors?",
+      "answerable": true,
+      "retrieved_ids": [
+        "interface-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Are accessibility checks part of frontend quality?",
+      "answerable": true,
+      "retrieved_ids": [
+        "interface-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How does startup verify the Groq model is reachable?",
+      "answerable": true,
+      "retrieved_ids": [
+        "health-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What does the readiness endpoint contact?",
+      "answerable": true,
+      "retrieved_ids": [
+        "health-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Can readiness verify an Ollama model?",
+      "answerable": true,
+      "retrieved_ids": [
+        "health-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "When does startup know the provider model is available?",
+      "answerable": true,
+      "retrieved_ids": [
+        "health-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
     },
     {
       "query": "Which platforms host the backend and frontend?",
+      "answerable": true,
       "retrieved_ids": [
-        "deployment-1",
-        "health-1",
-        "interface-1",
-        "streaming-1",
-        "architecture-1"
+        "deployment-1"
       ],
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How does Vercel reach the Render API?",
+      "answerable": true,
+      "retrieved_ids": [
+        "deployment-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What supports local container development?",
+      "answerable": true,
+      "retrieved_ids": [
+        "deployment-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Why is the API path same origin in production?",
+      "answerable": true,
+      "retrieved_ids": [
+        "deployment-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which checks harden document uploads?",
+      "answerable": true,
+      "retrieved_ids": [
+        "storage-1",
+        "upload-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How are stored upload filenames generated?",
+      "answerable": true,
+      "retrieved_ids": [
+        "upload-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What prevents a DOCX zip bomb?",
+      "answerable": true,
+      "retrieved_ids": [
+        "upload-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which malware scanner can reject uploads?",
+      "answerable": true,
+      "retrieved_ids": [
+        "upload-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which IP ranges does the PDF downloader block?",
+      "answerable": true,
+      "retrieved_ids": [
+        "ssrf-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Are HTTP redirects followed automatically?",
+      "answerable": true,
+      "retrieved_ids": [
+        "ssrf-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How is DNS rebinding risk reduced?",
+      "answerable": true,
+      "retrieved_ids": [
+        "ssrf-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Does every redirect destination get validated?",
+      "answerable": true,
+      "retrieved_ids": [
+        "ssrf-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which ORM persists users and conversations?",
+      "answerable": true,
+      "retrieved_ids": [
+        "storage-1",
+        "database-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What manages PostgreSQL schema migrations?",
+      "answerable": true,
+      "retrieved_ids": [
+        "database-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How are lost updates prevented across replicas?",
+      "answerable": true,
+      "retrieved_ids": [
+        "database-1",
+        "jobs-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which session records are stored relationally?",
+      "answerable": true,
+      "retrieved_ids": [],
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What work moves to background jobs?",
+      "answerable": true,
+      "retrieved_ids": [
+        "jobs-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What identifier does the upload API return?",
+      "answerable": true,
+      "retrieved_ids": [
+        "jobs-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "How can the frontend track indexing progress?",
+      "answerable": true,
+      "retrieved_ids": [
+        "jobs-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which queue shares indexing across replicas?",
+      "answerable": true,
+      "retrieved_ids": [
+        "jobs-1",
+        "database-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which retrieval metrics are reported?",
+      "answerable": true,
+      "retrieved_ids": [
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Does the benchmark measure questions with no answer?",
+      "answerable": true,
+      "retrieved_ids": [
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Which three retrieval modes appear in the ablation?",
+      "answerable": true,
+      "retrieved_ids": [
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "Does evaluation report latency and citation recall?",
+      "answerable": true,
+      "retrieved_ids": [
+        "evaluation-1"
+      ],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "query": "What is Nova's office mailing address?",
+      "answerable": false,
+      "retrieved_ids": [],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": true
+    },
+    {
+      "query": "Which cryptocurrency wallet does the project own?",
+      "answerable": false,
+      "retrieved_ids": [],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": true
+    },
+    {
+      "query": "What was yesterday's football score?",
+      "answerable": false,
+      "retrieved_ids": [],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": true
+    },
+    {
+      "query": "Who is the chief financial officer of Nova?",
+      "answerable": false,
+      "retrieved_ids": [],
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": true
     }
   ]
 }

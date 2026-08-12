@@ -2,9 +2,10 @@
 
 ## Automated evidence already in the repository
 
-- Backend unit/API tests with a 40% coverage floor.
-- Offline retrieval evaluation with Recall@K, MRR, and citation precision thresholds.
-- Chromium E2E for registration, document upload, chat streaming, and a grounded citation.
+- 77 backend tests with 74.26% measured coverage and a 70% CI floor.
+- Offline evaluation over 60 labeled queries with retrieval ablations, Recall@K, MRR, citation precision/recall, evidence support, no-answer accuracy, and latency.
+- Real-stack FastAPI test with a deterministic LLM, real upload/parsing/index/retrieval, SSE, and final citation.
+- Eight Chromium E2E scenarios covering upload/chat/citation, cookie recovery, accessibility, visual regression, and pre/mid-stream reconnect.
 - Frontend lint, TypeScript build, npm audit, Playwright trace/video support, and GitHub Actions.
 - Liveness, provider readiness, request IDs, response timings, and rate-limit headers.
 
@@ -16,7 +17,7 @@
 | 8–22s | Register and upload `portfolio.txt` | “Each account owns an isolated document index and conversation store.” |
 | 22–42s | Ask a retrieval question and show streamed citation | “BM25 or hybrid retrieval ranks evidence, then the answer streams over SSE with source citations.” |
 | 42–56s | Developer Settings readiness panel | “Readiness verifies the provider/model; every API response carries request ID and latency headers.” |
-| 56–70s | Terminal evaluation output | “Offline gates enforce Recall@5, MRR, citation precision, backend coverage, and browser E2E.” |
+| 56–70s | Terminal evaluation output | “Sixty labeled questions enforce retrieval, citation, no-answer, coverage, and browser quality gates.” |
 | 70–85s | GitHub Actions and closing screen | “The same quality gates run on every pull request.” |
 
 Generate a clean 1280×720 product-flow capture with:
@@ -33,8 +34,9 @@ The WebM video, screenshots, and trace are written to `frontend/demo-artifacts/`
 1. Create a Render Blueprint from `render.yaml`.
 2. Set `GROQ_API_KEY`, a unique random `JWT_SECRET` of at least 32 bytes, and optional B2 credentials.
 3. Confirm `ENVIRONMENT=production`, `COOKIE_SECURE=true`, `CORS_ORIGINS=https://novachatbot.vercel.app`, and the project-scoped `CORS_ORIGIN_REGEX` from `render.yaml`.
-4. Verify `/health`, then `/health/ready?refresh=true`.
-5. Send a real chat request and inspect `X-Request-ID`, `X-Response-Time-Ms`, and rate-limit headers.
+4. Provision ClamAV, set `CLAMAV_HOST`, then set `MALWARE_SCAN_REQUIRED=true` before opening uploads publicly. Verify the EICAR test file is rejected.
+5. Verify `/health`, then `/health/ready?refresh=true`.
+6. Send a real chat request and inspect `X-Request-ID`, `X-Response-Time-Ms`, and rate-limit headers.
 
 ## Vercel deployment checklist
 
@@ -42,15 +44,8 @@ The WebM video, screenshots, and trace are written to `frontend/demo-artifacts/`
 2. Keep `VITE_API_BASE_URL=/api` (already committed); do not point browser auth directly at Render.
 3. Deploy using `frontend/vercel.json`, then verify the `/api/*` rewrite, CSP, and SPA refresh routes.
 4. Verify login, hard refresh/session restoration, automatic access-token refresh, logout, and that localStorage contains no token.
-5. Continue with upload, streaming, citation rendering, and mobile checks after the upload-hardening step is complete.
+5. Test a valid upload plus spoofed PDF, oversized file, and unsafe remote-PDF cases; then verify streaming, citations, and a mobile viewport.
 
-## PostgreSQL migration plan
+## PostgreSQL/Redis rollout
 
-Treat this as a separate migration instead of coupling it to UI work:
-
-1. Introduce a `ConversationRepository` protocol with JSON and PostgreSQL implementations.
-2. Add `conversations` and `messages` tables keyed by `user_id`; index `(user_id, updated_at)` and enforce foreign keys.
-3. Add Alembic migrations and a one-time JSON-to-PostgreSQL importer.
-4. Run dual-read validation in staging, comparing counts and message checksums.
-5. Switch writes to PostgreSQL, retain JSON export as a backup format, then remove dual reads.
-6. Replace the single-process rate-limit store with Redis when deploying multiple API replicas.
+The repository now contains SQLAlchemy repositories, Alembic migrations, an idempotent JSON importer, Redis rate limiting, RQ indexing, job progress, and infrastructure readiness checks. Follow `docs/PRODUCTION_PERSISTENCE.md`; managed services and any paid Render worker must still be provisioned explicitly.

@@ -30,6 +30,18 @@ const AuthResponseSchema = z.object({
 });
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 
+const StatusSchema = z.object({ status: z.string() });
+const DeleteCountSchema = StatusSchema.extend({ deleted: z.number().int().nonnegative() });
+const AccountDeleteSchema = StatusSchema.extend({ message: z.string() });
+const MeSchema = z.object({ user_id: z.string().uuid() });
+const ChatResponseSchema = z.object({ answer: z.string() });
+const ErrorResponseSchema = z.object({ detail: z.string() });
+
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  const parsed = ErrorResponseSchema.safeParse(await response.json().catch(() => null));
+  return new Error(parsed.success ? parsed.data.detail : fallback);
+}
+
 const MessageSchema = z.object({
   id: z.string().optional(),
   role: z.enum(['user', 'assistant', 'system']),
@@ -57,7 +69,7 @@ const DocumentSchema = z.object({
 
 const IndexJobSchema = z.object({
   id: z.string(),
-  status: z.enum(['queued', 'started', 'deferred', 'scheduled', 'finished', 'failed']),
+  status: z.enum(['queued', 'started', 'deferred', 'scheduled', 'stopped', 'canceled', 'finished', 'failed']),
   progress: z.number().min(0).max(100),
   result: z.object({
     indexed: z.boolean().optional(),
@@ -82,6 +94,55 @@ const UploadResponseSchema = z.object({
   message: z.string().optional(),
 });
 
+const SummarySchema = z.object({
+  summary: z.string(),
+  chunks: z.number().int().nonnegative(),
+  filename: z.string(),
+});
+
+const DownloadedDocumentSchema = z.object({
+  id: z.string(),
+  file_name: z.string(),
+  new: z.boolean(),
+});
+
+const SearchDownloadSchema = StatusSchema.extend({
+  downloaded: z.array(DownloadedDocumentSchema),
+  message: z.string(),
+  job_id: z.string().optional().nullable(),
+});
+
+const ReindexSchema = StatusSchema.extend({
+  message: z.string(),
+  job_id: z.string().optional(),
+  progress: z.number().min(0).max(100).optional(),
+});
+
+const HealthStatusSchema = z.object({
+  status: z.string(),
+  version: z.string().optional(),
+  environment: z.string().optional(),
+  uptime_seconds: z.number().optional(),
+  llm_provider: z.string().optional(),
+  groq_model: z.string().optional(),
+  model: z.string().optional(),
+  retrieval: z.string().optional(),
+  embedding_model: z.string().nullable().optional(),
+  infrastructure: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+}).passthrough();
+
+const ReadinessStatusSchema = z.object({
+  status: z.enum(['ready', 'degraded']),
+  ready: z.boolean(),
+  provider_status: z.string(),
+  model: z.string().optional(),
+  model_available: z.boolean().optional(),
+  message: z.string(),
+  checked_at: z.number().optional(),
+  llm_provider: z.string().optional(),
+  infrastructure: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+}).passthrough();
+
 const StreamEventSchema = z.union([
   z.object({ token: z.string() }),
   z.object({ action: z.literal('search_offer'), query: z.string().optional() }),
@@ -93,8 +154,11 @@ async function performRefresh(): Promise<AuthResponse> {
     credentials: 'include',
   });
   if (!response.ok) {
-    setAccessToken(null);
-    throw new Error('Session expired');
+    if (response.status === 401 || response.status === 403) {
+      setAccessToken(null);
+      throw new Error('Session expired');
+    }
+    throw await responseError(response, 'Session service unavailable');
   }
   const data = AuthResponseSchema.parse(await response.json());
   setAccessToken(data.access_token);
@@ -137,8 +201,7 @@ export const auth = {
       credentials: 'include',
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || 'Registration failed');
+      throw await responseError(res, res.statusText || 'Registration failed');
     }
     const data = AuthResponseSchema.parse(await res.json());
     setAccessToken(data.access_token);
@@ -153,8 +216,7 @@ export const auth = {
       credentials: 'include',
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || 'Login failed');
+      throw await responseError(res, res.statusText || 'Login failed');
     }
     const data = AuthResponseSchema.parse(await res.json());
     setAccessToken(data.access_token);
@@ -176,7 +238,7 @@ export const auth = {
   async me(): Promise<{ user_id: string }> {
     const res = await authorizedFetch('/auth/me', { headers: authHeaders() });
     if (!res.ok) throw new Error('Session expired');
-    return res.json();
+    return MeSchema.parse(await res.json());
   },
 };
 
@@ -201,7 +263,7 @@ export interface Document {
 
 export interface IndexJob {
   id: string;
-  status: 'queued' | 'started' | 'deferred' | 'scheduled' | 'finished' | 'failed';
+  status: 'queued' | 'started' | 'deferred' | 'scheduled' | 'stopped' | 'canceled' | 'finished' | 'failed';
   progress: number;
   result?: { indexed?: boolean; chunks?: number; documents?: number; message?: string } | null;
   error?: string | null;
@@ -247,6 +309,7 @@ export interface ReadinessStatus {
   model_available?: boolean;
   message: string;
   checked_at?: number;
+  llm_provider?: string;
 }
 
 export const api = {
@@ -262,7 +325,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return response.json();
+    return ChatResponseSchema.parse(await response.json());
   },
 
   async streamMessage(
@@ -275,6 +338,7 @@ export const api = {
     language?: string,
     regenerate = false,
     reconnectAttempt = 0,
+    replayPrefix = '',
   ): Promise<void> {
     const body: Record<string, string | boolean> = { session_id: sessionId, question, stream: true };
     if (instructions) body.instructions = instructions;
@@ -293,7 +357,7 @@ export const api = {
         await new Promise((resolve) => setTimeout(resolve, 500));
         return api.streamMessage(
           sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, reconnectAttempt + 1,
+          onAction, language, regenerate, reconnectAttempt + 1, replayPrefix,
         );
       }
       throw error;
@@ -310,7 +374,8 @@ export const api = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
-    let receivedToken = false;
+    let attemptText = '';
+    let emittedText = replayPrefix;
 
     try {
       while (true) {
@@ -338,8 +403,22 @@ export const api = {
           const parsed = StreamEventSchema.safeParse(JSON.parse(jsonStr));
           if (!parsed.success) continue;
           if ('token' in parsed.data) {
-            receivedToken = true;
-            onToken(parsed.data.token);
+            const previousAttemptLength = attemptText.length;
+            attemptText += parsed.data.token;
+            if (!replayPrefix) {
+              onToken(parsed.data.token);
+              emittedText += parsed.data.token;
+            } else if (replayPrefix.startsWith(attemptText)) {
+              // Suppress the deterministic replay that was already rendered.
+            } else if (attemptText.startsWith(replayPrefix)) {
+              const delta = attemptText.slice(Math.max(previousAttemptLength, replayPrefix.length));
+              if (delta) {
+                onToken(delta);
+                emittedText += delta;
+              }
+            } else {
+              throw new Error('The regenerated stream changed after reconnecting. Please regenerate the answer.');
+            }
           } else if (parsed.data.action === 'search_offer') {
             onAction?.({ type: 'search_offer', query: parsed.data.query || '' });
           }
@@ -355,11 +434,11 @@ export const api = {
       if (errorName === 'AbortError' || errorMessage.includes('StreamClosed')) {
         return;
       }
-      if (!receivedToken && reconnectAttempt < 1 && !abortSignal?.aborted) {
+      if (reconnectAttempt < 1 && !abortSignal?.aborted) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         return api.streamMessage(
           sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, reconnectAttempt + 1,
+          onAction, language, regenerate, reconnectAttempt + 1, emittedText,
         );
       }
       throw streamError;
@@ -395,8 +474,7 @@ export const api = {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || `Upload failed (${response.status})`);
+      throw await responseError(response, `Upload failed (${response.status})`);
     }
 
     return UploadResponseSchema.parse(await response.json());
@@ -415,7 +493,9 @@ export const api = {
     while (Date.now() - startedAt < timeoutMs) {
       const job = await api.getIndexJob(jobId);
       if (job.status === 'finished') return job;
-      if (job.status === 'failed') throw new Error(job.error || 'Document indexing failed');
+      if (job.status === 'failed' || job.status === 'stopped' || job.status === 'canceled') {
+        throw new Error(job.error || 'Document indexing did not complete');
+      }
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
     throw new Error('Document indexing is still running. Check back shortly.');
@@ -431,7 +511,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return response.json();
+    return StatusSchema.parse(await response.json());
   },
 
   async clearAllDocuments(): Promise<{ status: string; deleted: number }> {
@@ -444,7 +524,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return response.json();
+    return DeleteCountSchema.parse(await response.json());
   },
 
   async summarizeDocument(filename: string): Promise<{ summary: string; chunks: number; filename: string }> {
@@ -456,10 +536,10 @@ export const api = {
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return response.json();
+    return SummarySchema.parse(await response.json());
   },
 
-  async searchDownload(query: string, maxResults: number = 3): Promise<{ status: string; downloaded: DownloadedDocument[]; message: string; job_id?: string }> {
+  async searchDownload(query: string, maxResults: number = 3): Promise<{ status: string; downloaded: DownloadedDocument[]; message: string; job_id?: string | null }> {
     const response = await authorizedFetch('/documents/search-download', {
       method: 'POST',
       headers: authHeaders(),
@@ -468,7 +548,7 @@ export const api = {
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return response.json();
+    return SearchDownloadSchema.parse(await response.json());
   },
 
   async reindexDocuments(): Promise<{ status: string; message: string; job_id?: string; progress?: number }> {
@@ -481,7 +561,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return response.json();
+    return ReindexSchema.parse(await response.json());
   },
 
   // Conversations API
@@ -512,7 +592,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return response.json();
+    return ConversationSchema.parse(await response.json());
   },
 
   async deleteConversation(id: string): Promise<{ status: string }> {
@@ -525,7 +605,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return response.json();
+    return StatusSchema.parse(await response.json());
   },
 
   async updateConversation(id: string, update: { title?: string; pinned?: boolean }): Promise<Conversation> {
@@ -539,7 +619,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return response.json();
+    return ConversationSchema.parse(await response.json());
   },
 
   async clearConversations(): Promise<{ status: string; deleted: number }> {
@@ -548,7 +628,7 @@ export const api = {
       headers: authHeaders(),
     });
     if (!response.ok) throw new Error(`API error: ${response.statusText}`);
-    return response.json();
+    return DeleteCountSchema.parse(await response.json());
   },
 
   // Health check
@@ -557,7 +637,7 @@ export const api = {
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return response.json();
+    return HealthStatusSchema.parse(await response.json());
   },
 
   async readinessCheck(): Promise<ReadinessStatus> {
@@ -566,7 +646,7 @@ export const api = {
     if (!data) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return data;
+    return ReadinessStatusSchema.parse(data);
   },
 
   // Account
@@ -576,9 +656,8 @@ export const api = {
       headers: authHeaders(),
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(err.detail || 'Failed to delete account');
+      throw await responseError(response, response.statusText || 'Failed to delete account');
     }
-    return response.json();
+    return AccountDeleteSchema.parse(await response.json());
   },
 };

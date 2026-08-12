@@ -23,6 +23,11 @@ export const SettingsDrawer = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [systemInfo, setSystemInfo] = useState<HealthStatus | null>(null);
   const [readiness, setReadiness] = useState<ReadinessStatus | null>(null);
+  const languages: Array<{ id: 'auto' | 'english' | 'vietnamese'; label: string }> = [
+    { id: 'auto', label: 'Auto' },
+    { id: 'english', label: 'English' },
+    { id: 'vietnamese', label: 'Vietnamese' },
+  ];
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
@@ -168,14 +173,10 @@ export const SettingsDrawer = () => {
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted-foreground">Response Language</label>
                       <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { id: 'auto', label: 'Auto' },
-                          { id: 'english', label: 'English' },
-                          { id: 'vietnamese', label: 'Vietnamese' },
-                        ].map((l) => (
+                        {languages.map((l) => (
                           <button
                             key={l.id}
-                            onClick={() => setLanguage(l.id as any)}
+                            onClick={() => setLanguage(l.id)}
                             className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                               language === l.id
                                 ? 'bg-primary text-primary-foreground shadow-sm'
@@ -401,8 +402,8 @@ export const SettingsDrawer = () => {
                                     await api.deleteAccount();
                                     toast.success('Account deleted');
                                     useChatStore.getState().logout();
-                                  } catch (err: any) {
-                                    toast.error(err.message || 'Failed to delete account');
+                                  } catch (err: unknown) {
+                                    toast.error(err instanceof Error ? err.message : 'Failed to delete account');
                                   } finally {
                                     setDeletingAccount(false);
                                     setConfirmDelete(false);
@@ -537,9 +538,9 @@ export const SettingsDrawer = () => {
                                     Summarize
                                   </button>
                                 )}
-                                {(doc as any).source_url && (
+                                {doc.source_url && (
                                   <a
-                                    href={(doc as any).source_url}
+                                    href={doc.source_url}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="shrink-0 ml-1 text-[10px] text-blue-400/60 hover:text-blue-400 transition-colors"

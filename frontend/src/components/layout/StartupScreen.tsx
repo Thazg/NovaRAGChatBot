@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NovaMark } from '../brand/NovaMark';
-import { API_BASE_URL } from '../../services/api';
+import { api } from '../../services/api';
 
 interface StartupScreenProps {
   onReady: () => void;
@@ -27,13 +27,10 @@ export const StartupScreen = ({ onReady }: StartupScreenProps) => {
       try {
         setStepIndex(1);
 
-        const res = await fetch(`${API_BASE_URL}/health/ready`, {
-          signal: AbortSignal.timeout(10000),
-        });
-        const data = await res.json();
+        const data = await api.readinessCheck();
 
         if (!isMounted) return;
-        const llmReady = res.ok && data.ready === true;
+        const llmReady = data.ready === true;
         if (llmReady) {
           setError(null);
           setStepIndex(2);
@@ -55,9 +52,10 @@ export const StartupScreen = ({ onReady }: StartupScreenProps) => {
             : 'Ollama is offline. Start it and Nova will reconnect automatically.'));
           setTimeout(checkHealth, 5000);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!isMounted) return;
-        if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+        const errorName = err instanceof DOMException || err instanceof Error ? err.name : '';
+        if (errorName === 'TimeoutError' || errorName === 'AbortError') {
           setError('The workspace is waking up. Reconnecting…');
           setTimeout(checkHealth, 3000);
         } else {

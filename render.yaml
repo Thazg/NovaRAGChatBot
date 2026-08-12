@@ -14,7 +14,7 @@ services:
       - key: APP_VERSION
         value: 2.1.0
       - key: GROQ_MODEL
-        value: llama-3.1-8b-instant
+        value: openai/gpt-oss-20b
       - key: GROQ_API_KEY
         sync: false
       - key: JWT_SECRET
@@ -35,6 +35,10 @@ services:
         value: '^https://nova-ai-agent(?:-[a-z0-9-]+)?-thazg-s-projects\.vercel\.app$'
       - key: LOG_LEVEL
         value: INFO
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.05
       - key: RATE_LIMIT_ENABLED
         value: true
       - key: RATE_LIMIT_REQUESTS
@@ -59,5 +63,11 @@ services:
         sync: false
       - key: CLAMAV_PORT
         value: 3310
+      - key: MAX_PDF_OBJECTS
+        value: 100000
+      - key: MAX_PDF_DECOMPRESSED_STREAM_BYTES
+        value: 10485760
+      - key: MAX_PDF_EXTRACTED_CHARS
+        value: 5000000
       - key: MALWARE_SCAN_REQUIRED
         value: false

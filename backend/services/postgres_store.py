@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from services.database import ConversationRecord, RefreshSessionRecord, UserRecord, database_session
 
@@ -31,13 +32,20 @@ def _user_dict(user: UserRecord) -> dict:
 
 
 def create_user(username: str, password_hash: str) -> dict | None:
-    with database_session() as session:
-        if session.scalar(select(UserRecord.id).where(UserRecord.username == username)):
-            return None
-        user = UserRecord(id=str(uuid.uuid4()), username=username, password_hash=password_hash, created_at=time.time())
-        session.add(user)
-        session.flush()
-        return _user_dict(user)
+    try:
+        with database_session() as session:
+            if session.scalar(select(UserRecord.id).where(UserRecord.username == username)):
+                return None
+            user = UserRecord(
+                id=str(uuid.uuid4()), username=username,
+                password_hash=password_hash, created_at=time.time(),
+            )
+            session.add(user)
+            session.flush()
+            return _user_dict(user)
+    except IntegrityError:
+        # The unique constraint is the final guard when registrations race.
+        return None
 
 
 def update_password(user_id: str, password_hash: str) -> None:
@@ -58,6 +66,9 @@ def delete_user_record(user_id: str) -> bool:
 
 def issue_refresh_session(token_hash: str, user_id: str, expires_at: float) -> None:
     with database_session() as session:
+        session.execute(delete(RefreshSessionRecord).where(
+            RefreshSessionRecord.expires_at <= time.time()
+        ))
         session.add(RefreshSessionRecord(
             token_hash=token_hash,
             user_id=user_id,

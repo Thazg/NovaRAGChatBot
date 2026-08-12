@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, String, create_engine
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, String, create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from config.settings import settings
@@ -63,8 +63,19 @@ if DATABASE_ENABLED:
 
 
 def initialize_database() -> None:
-    if engine is not None and settings.ENVIRONMENT != "production":
+    if engine is None:
+        return
+    if settings.ENVIRONMENT != "production":
         Base.metadata.create_all(engine)
+        return
+    required_tables = {"users", "refresh_sessions", "conversations"}
+    existing_tables = set(inspect(engine).get_table_names())
+    missing_tables = required_tables - existing_tables
+    if missing_tables:
+        raise RuntimeError(
+            "Database schema is missing migrations for: "
+            f"{', '.join(sorted(missing_tables))}. Run 'alembic upgrade head'."
+        )
 
 
 @contextmanager

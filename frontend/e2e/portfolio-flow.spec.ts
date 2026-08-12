@@ -22,7 +22,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 
 async function mockPortfolioApi(
   page: Page,
-  options: { disconnectFirstStream?: boolean; activeSession?: boolean } = {},
+  options: { disconnectFirstStream?: boolean; activeSession?: boolean; unavailableSession?: boolean } = {},
 ) {
   let documents: Array<Record<string, unknown>> = [];
   let streamAttempts = 0;
@@ -49,6 +49,10 @@ async function mockPortfolioApi(
     }
     if (method === 'POST' && endpoint === '/auth/refresh') {
       refreshAttempts += 1;
+      if (options.unavailableSession) {
+        await route.abort('connectionfailed');
+        return;
+      }
       if (options.activeSession) {
         await fulfillJson(route, {
           access_token: 'restored-e2e-access-token-that-is-memory-only',
@@ -73,7 +77,7 @@ async function mockPortfolioApi(
         status: 'ready',
         ready: true,
         provider_status: 'reachable',
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-20b',
         model_available: true,
         message: 'AI provider is ready.',
       });
@@ -227,6 +231,16 @@ test('restores a cookie session while removing legacy localStorage credentials',
   expect(persisted).not.toContain('legacy-conversation');
 });
 
+test('offers session recovery when the API is temporarily unavailable', async ({ page }) => {
+  await mockPortfolioApi(page, { unavailableSession: true });
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: 'Your session is still recoverable' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry session' })).toBeVisible();
+  await page.getByRole('button', { name: 'Go to sign in' }).click();
+  await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+});
+
 test('login screen has no serious accessibility violations', async ({ page }) => {
   await mockPortfolioApi(page);
   await page.goto('/');
@@ -267,4 +281,55 @@ test('reconnects when SSE disconnects before the first token', async ({ page }) 
   await messageInput.fill('How is retrieval combined?');
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText(/Source: portfolio\.txt/)).toBeVisible();
+});
+
+test('reconnects mid-stream without duplicating rendered tokens', async ({ page }) => {
+  await mockPortfolioApi(page);
+  await page.goto('/');
+  await page.getByPlaceholder('Enter username').fill('portfolio.user');
+  await page.getByPlaceholder('Enter password').fill('strong-password');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /Upload a document/ }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles(path.join(process.cwd(), 'e2e', 'fixtures', 'portfolio.txt'));
+
+  await page.evaluate(() => {
+    const nativeFetch = window.fetch.bind(window);
+    let streamCalls = 0;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!url.endsWith('/chat/stream')) return nativeFetch(input, init);
+      streamCalls += 1;
+      const first = 'Nova combines BM25 lexical retrieval with FAISS vectors. ';
+      if (streamCalls === 1) {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ token: first })}\n\n`));
+            setTimeout(() => controller.error(new Error('simulated mid-stream disconnect')), 30);
+          },
+        });
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      }
+      const events = [
+        { token: first },
+        { token: 'Reciprocal rank fusion merges both rankings. ' },
+        { token: '(Source: portfolio.txt)' },
+      ];
+      return new Response(
+        `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}data: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    };
+  });
+
+  const messageInput = page.getByLabel('Message input');
+  await messageInput.fill('How is retrieval combined?');
+  await page.getByRole('button', { name: 'Send message' }).click();
+
+  const answer = page.getByText(/Nova combines BM25 lexical retrieval/).last();
+  await expect(answer).toContainText('Reciprocal rank fusion merges both rankings.');
+  await expect(answer).toContainText('(Source: portfolio.txt)');
+  await expect(answer).not.toContainText('vectors. Nova combines');
 });

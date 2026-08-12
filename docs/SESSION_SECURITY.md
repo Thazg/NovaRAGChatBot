@@ -60,4 +60,4 @@ Automated evidence lives in `backend/tests/test_auth.py`, `backend/tests/test_ap
 
 ## Remaining scope
 
-This step does not claim protection against every XSS. The Vercel CSP and memory-only access token reduce impact, while dependency review, output sanitization, and ongoing security testing remain necessary. Upload/SSRF hardening is tracked as the next step.
+This step does not claim protection against every XSS. The Vercel CSP and memory-only access token reduce impact, while dependency review, output sanitization, and ongoing security testing remain necessary. Upload/SSRF controls are documented separately in `UPLOAD_SECURITY.md`.

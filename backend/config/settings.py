@@ -20,7 +20,7 @@ class Settings:
 
     # Groq (free, no VPS needed)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
     # Optional OpenAI-compatible embedding endpoint. Leave empty for BM25-only
     # retrieval; Groq's chat endpoint is not an embedding service.
@@ -36,12 +36,15 @@ class Settings:
     TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.1"))
     LLM_TOP_K: int = int(os.getenv("LLM_TOP_K", "40"))
     LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.9"))
+    LLM_SEED: int = int(os.getenv("LLM_SEED", "42"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "2048"))
     NUM_CTX: int = int(os.getenv("NUM_CTX", "4096"))
     MAX_HISTORY_MESSAGES: int = int(os.getenv("MAX_HISTORY_MESSAGES", "4"))
     MAX_CHUNK_CHARS: int = int(os.getenv("MAX_CHUNK_CHARS", "1000"))
     MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "6000"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "").strip()
+    SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05"))
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
     REDIS_URL: str = os.getenv("REDIS_URL", "").strip()
     READINESS_CACHE_SECONDS: float = float(os.getenv("READINESS_CACHE_SECONDS", "10"))
@@ -57,6 +60,11 @@ class Settings:
     )
     MAX_UPLOAD_BYTES: int = int(os.getenv("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
     MAX_PDF_PAGES: int = int(os.getenv("MAX_PDF_PAGES", "500"))
+    MAX_PDF_OBJECTS: int = int(os.getenv("MAX_PDF_OBJECTS", "100000"))
+    MAX_PDF_DECOMPRESSED_STREAM_BYTES: int = int(
+        os.getenv("MAX_PDF_DECOMPRESSED_STREAM_BYTES", str(10 * 1024 * 1024))
+    )
+    MAX_PDF_EXTRACTED_CHARS: int = int(os.getenv("MAX_PDF_EXTRACTED_CHARS", "5000000"))
     MAX_ARCHIVE_ENTRIES: int = int(os.getenv("MAX_ARCHIVE_ENTRIES", "2000"))
     MAX_ARCHIVE_UNCOMPRESSED_BYTES: int = int(
         os.getenv("MAX_ARCHIVE_UNCOMPRESSED_BYTES", str(100 * 1024 * 1024))

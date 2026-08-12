@@ -1,66 +1,96 @@
 {
   "corpus": [
-    {
-      "id": "architecture-1",
-      "content": "Nova uses a retrieval augmented generation pipeline that parses documents, creates overlapping chunks, retrieves evidence, builds a grounded prompt, and streams the answer.",
-      "metadata": {"file_name": "architecture.md", "chunk_index": 1}
-    },
-    {
-      "id": "security-1",
-      "content": "User passwords are protected with salted PBKDF2 HMAC SHA256 using 310000 iterations. Authentication tokens are signed with HMAC SHA256.",
-      "metadata": {"file_name": "security.md", "chunk_index": 1}
-    },
-    {
-      "id": "streaming-1",
-      "content": "Server Sent Events deliver language model tokens incrementally from FastAPI to the React client and allow generation cancellation.",
-      "metadata": {"file_name": "streaming.md", "chunk_index": 1}
-    },
-    {
-      "id": "retrieval-1",
-      "content": "Hybrid retrieval combines BM25 lexical ranking with FAISS semantic vectors. Reciprocal rank fusion merges the two ranked lists.",
-      "metadata": {"file_name": "retrieval.md", "chunk_index": 1}
-    },
-    {
-      "id": "storage-1",
-      "content": "Backblaze B2 provides optional durable object storage for uploaded documents, vector indexes, users, and conversation history.",
-      "metadata": {"file_name": "storage.md", "chunk_index": 1}
-    },
-    {
-      "id": "interface-1",
-      "content": "The responsive interface supports light, dark, and system themes, keyboard shortcuts, reduced motion, voice input, and animated transitions.",
-      "metadata": {"file_name": "interface.md", "chunk_index": 1}
-    },
-    {
-      "id": "health-1",
-      "content": "The readiness endpoint contacts the configured AI provider and verifies that the selected Groq or Ollama model is available before startup completes.",
-      "metadata": {"file_name": "operations.md", "chunk_index": 1}
-    },
-    {
-      "id": "deployment-1",
-      "content": "The FastAPI backend can deploy to Render while the Vite React frontend deploys to Vercel. Docker Compose supports local development.",
-      "metadata": {"file_name": "deployment.md", "chunk_index": 1}
-    }
+    {"id":"architecture-1","content":"Nova uses a retrieval augmented generation pipeline that parses documents, creates overlapping chunks, retrieves evidence, builds a grounded prompt, and streams the answer.","metadata":{"file_name":"architecture.md","chunk_index":1}},
+    {"id":"password-1","content":"User passwords are protected with salted PBKDF2 HMAC SHA256 using 310000 iterations and constant time comparison.","metadata":{"file_name":"security.md","chunk_index":1}},
+    {"id":"session-1","content":"Short lived access tokens expire after ten minutes and remain only in browser memory. Rotating refresh tokens are stored in HttpOnly Secure SameSite cookies and hashed server side.","metadata":{"file_name":"sessions.md","chunk_index":1}},
+    {"id":"streaming-1","content":"Server Sent Events deliver language model tokens incrementally from FastAPI to the React client and allow generation cancellation and initial connection retry.","metadata":{"file_name":"streaming.md","chunk_index":1}},
+    {"id":"retrieval-1","content":"Hybrid retrieval combines BM25 lexical ranking with FAISS dense vectors. Reciprocal rank fusion merges the two ranked lists.","metadata":{"file_name":"retrieval.md","chunk_index":1}},
+    {"id":"storage-1","content":"Backblaze B2 stores uploaded document and vector index artifacts. Conversations should not remain in object storage: relational users, refresh sessions, and conversations belong in PostgreSQL.","metadata":{"file_name":"storage.md","chunk_index":1}},
+    {"id":"interface-1","content":"The responsive interface supports light dark and system themes, keyboard shortcuts, reduced motion, voice input, animated transitions, error recovery, and accessibility checks.","metadata":{"file_name":"interface.md","chunk_index":1}},
+    {"id":"health-1","content":"The readiness endpoint contacts the configured AI provider and verifies that the selected Groq or Ollama model is available before startup completes.","metadata":{"file_name":"operations.md","chunk_index":1}},
+    {"id":"deployment-1","content":"The FastAPI backend deploys to Render while the Vite React frontend deploys to Vercel. Vercel proxies same origin API paths to Render and Docker Compose supports local development.","metadata":{"file_name":"deployment.md","chunk_index":1}},
+    {"id":"upload-1","content":"Secure upload validation checks extension, MIME allowlist, magic byte signature, PDF page complexity, size limits, and optional ClamAV malware scanning. Stored upload filenames are generated as UUIDs, while DOCX archive expansion limits prevent zip bombs.","metadata":{"file_name":"uploads.md","chunk_index":1}},
+    {"id":"ssrf-1","content":"The external PDF downloader blocks localhost private link local reserved and multicast IP addresses. HTTP redirects are not followed automatically: it resolves DNS, validates each redirect and connected peer address, reducing DNS rebinding risk.","metadata":{"file_name":"ssrf.md","chunk_index":1}},
+    {"id":"database-1","content":"SQLAlchemy stores users refresh sessions and conversations in PostgreSQL. Alembic manages schema migrations and row locking prevents lost conversation updates across replicas.","metadata":{"file_name":"database.md","chunk_index":1}},
+    {"id":"jobs-1","content":"Document parsing embeddings and reindexing run as background jobs. The API returns a job identifier, and the frontend tracks indexing progress by polling it while Redis RQ shares work across replicas.","metadata":{"file_name":"jobs.md","chunk_index":1}},
+    {"id":"evaluation-1","content":"The quality benchmark reports retrieval metrics including Recall at K, mean reciprocal rank, citation precision, citation recall, faithfulness, unanswerable accuracy, and latency. It measures questions with no answer and compares three retrieval modes in an ablation: BM25, dense FAISS, and hybrid RRF.","metadata":{"file_name":"evaluation.md","chunk_index":1}}
   ],
   "queries": [
-    {"query": "How are BM25 and FAISS rankings combined?", "relevant_ids": ["retrieval-1"]},
-    {"query": "How does Nova hash user passwords?", "relevant_ids": ["security-1"]},
-    {"query": "How are generated tokens streamed to React?", "relevant_ids": ["streaming-1"]},
-    {"query": "How does startup verify the Groq model is reachable?", "relevant_ids": ["health-1"]},
-    {"query": "Where are uploaded files persisted in cloud object storage?", "relevant_ids": ["storage-1"]},
-    {"query": "Which platforms host the backend and frontend?", "relevant_ids": ["deployment-1"]}
+    {"query":"What stages make up the retrieval augmented generation pipeline?","relevant_ids":["architecture-1"]},
+    {"query":"How are documents turned into grounded prompts?","relevant_ids":["architecture-1"]},
+    {"query":"Where are overlapping chunks created?","relevant_ids":["architecture-1"]},
+    {"query":"What happens before Nova streams an answer?","relevant_ids":["architecture-1"]},
+    {"query":"How are user passwords hashed?","relevant_ids":["password-1"]},
+    {"query":"How many PBKDF2 iterations protect a password?","relevant_ids":["password-1"]},
+    {"query":"Does password comparison run in constant time?","relevant_ids":["password-1"]},
+    {"query":"Which SHA algorithm is used with PBKDF2 HMAC?","relevant_ids":["password-1"]},
+    {"query":"How long does an access token live?","relevant_ids":["session-1"]},
+    {"query":"Where does the browser keep the access token?","relevant_ids":["session-1"]},
+    {"query":"Which cookie flags protect refresh tokens?","relevant_ids":["session-1"]},
+    {"query":"Are refresh credentials rotated and hashed server side?","relevant_ids":["session-1"]},
+    {"query":"How are generated tokens streamed to React?","relevant_ids":["streaming-1"]},
+    {"query":"Which protocol delivers incremental LLM output?","relevant_ids":["streaming-1"]},
+    {"query":"Can users cancel an active generation?","relevant_ids":["streaming-1"]},
+    {"query":"What happens when the initial stream connection drops?","relevant_ids":["streaming-1"]},
+    {"query":"How are BM25 and FAISS rankings combined?","relevant_ids":["retrieval-1"]},
+    {"query":"Which lexical ranker does hybrid retrieval use?","relevant_ids":["retrieval-1"]},
+    {"query":"Which vector index supports dense retrieval?","relevant_ids":["retrieval-1"]},
+    {"query":"What does reciprocal rank fusion merge?","relevant_ids":["retrieval-1"]},
+    {"query":"What artifacts are stored in Backblaze B2?","relevant_ids":["storage-1"]},
+    {"query":"Should conversations remain in object storage?","relevant_ids":["storage-1"]},
+    {"query":"Where do vector index artifacts persist?","relevant_ids":["storage-1"]},
+    {"query":"Which records belong in PostgreSQL instead of B2?","relevant_ids":["storage-1"]},
+    {"query":"Which themes are available in the interface?","relevant_ids":["interface-1"]},
+    {"query":"Does the UI support reduced motion?","relevant_ids":["interface-1"]},
+    {"query":"How does the frontend recover from application errors?","relevant_ids":["interface-1"]},
+    {"query":"Are accessibility checks part of frontend quality?","relevant_ids":["interface-1"]},
+    {"query":"How does startup verify the Groq model is reachable?","relevant_ids":["health-1"]},
+    {"query":"What does the readiness endpoint contact?","relevant_ids":["health-1"]},
+    {"query":"Can readiness verify an Ollama model?","relevant_ids":["health-1"]},
+    {"query":"When does startup know the provider model is available?","relevant_ids":["health-1"]},
+    {"query":"Which platforms host the backend and frontend?","relevant_ids":["deployment-1"]},
+    {"query":"How does Vercel reach the Render API?","relevant_ids":["deployment-1"]},
+    {"query":"What supports local container development?","relevant_ids":["deployment-1"]},
+    {"query":"Why is the API path same origin in production?","relevant_ids":["deployment-1"]},
+    {"query":"Which checks harden document uploads?","relevant_ids":["upload-1"]},
+    {"query":"How are stored upload filenames generated?","relevant_ids":["upload-1"]},
+    {"query":"What prevents a DOCX zip bomb?","relevant_ids":["upload-1"]},
+    {"query":"Which malware scanner can reject uploads?","relevant_ids":["upload-1"]},
+    {"query":"Which IP ranges does the PDF downloader block?","relevant_ids":["ssrf-1"]},
+    {"query":"Are HTTP redirects followed automatically?","relevant_ids":["ssrf-1"]},
+    {"query":"How is DNS rebinding risk reduced?","relevant_ids":["ssrf-1"]},
+    {"query":"Does every redirect destination get validated?","relevant_ids":["ssrf-1"]},
+    {"query":"Which ORM persists users and conversations?","relevant_ids":["database-1"]},
+    {"query":"What manages PostgreSQL schema migrations?","relevant_ids":["database-1"]},
+    {"query":"How are lost updates prevented across replicas?","relevant_ids":["database-1"]},
+    {"query":"Which session records are stored relationally?","relevant_ids":["database-1"]},
+    {"query":"What work moves to background jobs?","relevant_ids":["jobs-1"]},
+    {"query":"What identifier does the upload API return?","relevant_ids":["jobs-1"]},
+    {"query":"How can the frontend track indexing progress?","relevant_ids":["jobs-1"]},
+    {"query":"Which queue shares indexing across replicas?","relevant_ids":["jobs-1"]},
+    {"query":"Which retrieval metrics are reported?","relevant_ids":["evaluation-1"]},
+    {"query":"Does the benchmark measure questions with no answer?","relevant_ids":["evaluation-1"]},
+    {"query":"Which three retrieval modes appear in the ablation?","relevant_ids":["evaluation-1"]},
+    {"query":"Does evaluation report latency and citation recall?","relevant_ids":["evaluation-1"]},
+    {"query":"What is Nova's office mailing address?","relevant_ids":[]},
+    {"query":"Which cryptocurrency wallet does the project own?","relevant_ids":[]},
+    {"query":"What was yesterday's football score?","relevant_ids":[]},
+    {"query":"Who is the chief financial officer of Nova?","relevant_ids":[]}
   ],
   "citation_samples": [
-    {
-      "answer": "Nova merges BM25 and FAISS rankings with reciprocal rank fusion. (Source: retrieval.md)",
-      "relevant_sources": ["retrieval.md"]
-    },
-    {
-      "answer": "Passwords use salted PBKDF2-HMAC-SHA256. (Source: security.md)",
-      "relevant_sources": ["security.md"]
-    },
-    {
-      "answer": "Render hosts the API and Vercel hosts the client. (Source: deployment.md)",
-      "relevant_sources": ["deployment.md"]
-    }
+    {"answer":"Nova builds overlapping chunks and grounded prompts. (Source: architecture.md)","relevant_sources":["architecture.md"]},
+    {"answer":"Passwords use salted PBKDF2 HMAC SHA256. (Source: security.md)","relevant_sources":["security.md"]},
+    {"answer":"Refresh tokens use protected cookies. (Source: sessions.md)","relevant_sources":["sessions.md"]},
+    {"answer":"SSE streams incremental model tokens. (Source: streaming.md)","relevant_sources":["streaming.md"]},
+    {"answer":"RRF combines BM25 and FAISS. (Source: retrieval.md)","relevant_sources":["retrieval.md"]},
+    {"answer":"B2 stores file and index artifacts. (Source: storage.md)","relevant_sources":["storage.md"]},
+    {"answer":"The interface includes accessibility recovery. (Source: interface.md)","relevant_sources":["interface.md"]},
+    {"answer":"Readiness probes Groq or Ollama. (Source: operations.md)","relevant_sources":["operations.md"]},
+    {"answer":"Vercel proxies the API to Render. (Source: deployment.md)","relevant_sources":["deployment.md"]},
+    {"answer":"Uploads use MIME, signatures, UUID names, and ClamAV. (Source: uploads.md)","relevant_sources":["uploads.md"]},
+    {"answer":"Private addresses and unsafe redirects are blocked. (Source: ssrf.md)","relevant_sources":["ssrf.md"]},
+    {"answer":"SQLAlchemy and Alembic manage relational persistence. (Source: database.md)","relevant_sources":["database.md"]},
+    {"answer":"Redis RQ runs indexing jobs. (Source: jobs.md)","relevant_sources":["jobs.md"]},
+    {"answer":"The benchmark includes retrieval ablations and latency. (Source: evaluation.md)","relevant_sources":["evaluation.md"]}
   ]
 }

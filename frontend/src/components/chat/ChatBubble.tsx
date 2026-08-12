@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, type CSSProperties, type ComponentProps } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -116,7 +116,7 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  code({ node: _node, inline, className, children, ...props }: any) {
+                  code({ inline, className, children, style: _inlineStyle, ...props }: ComponentProps<'code'> & { inline?: boolean }) {
                     const match = /language-(\w+)/.exec(className || '');
                     const language = match ? match[1] : '';
                     const codeString = String(children).replace(/\n$/, '');
@@ -144,7 +144,7 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                             </button>
                           </div>
                           <SyntaxHighlighter
-                            style={oneDark as any}
+                            style={oneDark as { [key: string]: CSSProperties }}
                             language={language}
                             PreTag="div"
                             customStyle={{
@@ -154,7 +154,6 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                               fontSize: '0.8375rem',
                               lineHeight: '1.65',
                             }}
-                            {...props}
                           >
                             {codeString}
                           </SyntaxHighlighter>

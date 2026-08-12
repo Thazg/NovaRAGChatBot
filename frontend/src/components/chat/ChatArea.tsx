@@ -10,6 +10,9 @@ import { motion } from 'framer-motion';
 import { Search, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 
+const errorMessage = (error: unknown): string => error instanceof Error ? error.message : 'Unknown error';
+const errorName = (error: unknown): string => error instanceof DOMException ? error.name : '';
+
 export const ChatArea = () => {
   const {
     conversations,
@@ -123,7 +126,7 @@ export const ChatArea = () => {
     try {
       const result = await api.searchDownload(query);
       if (result.status === 'success' && result.downloaded.length > 0) {
-        const newCount = result.downloaded.filter((d: any) => d.new).length;
+        const newCount = result.downloaded.filter((document) => document.new).length;
         toast.success(`Downloaded ${newCount} new documents about "${query}"`);
         // Add a system message
         const targetConvId = currentConversationId || createConversation();
@@ -134,8 +137,8 @@ export const ChatArea = () => {
       } else {
         toast.info(result.message || 'No documents found for that query.');
       }
-    } catch (err: any) {
-      toast.error('Search failed: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      toast.error('Search failed: ' + errorMessage(err));
     } finally {
       setSearchOffer(null);
     }
@@ -149,13 +152,13 @@ export const ChatArea = () => {
       const result = await api.searchDownload(topic, 3);
       append(`📥 ${result.message || 'Download complete.'}\n\n`);
       if (result.downloaded?.length > 0) {
-        const files = result.downloaded.map((d: any) => `- ${d.file_name}`).join('\n');
+        const files = result.downloaded.map((document) => `- ${document.file_name}`).join('\n');
         append(`**Files added:**\n${files}\n\nYou can now ask questions about these documents.`);
       } else {
         append('No PDFs found for this topic. Try a different search term.');
       }
-    } catch (err: any) {
-      append(`❌ Search failed: ${err.message || 'Unknown error'}`);
+    } catch (err: unknown) {
+      append(`❌ Search failed: ${errorMessage(err)}`);
     }
   }, [addMessage, appendStreamToMessage]);
 
@@ -210,8 +213,8 @@ export const ChatArea = () => {
         },
         language
       );
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (errorName(error) === 'AbortError') {
         toast.info('Generation stopped');
       } else {
         appendStreamToMessage(targetConvId, assistantMessageId, 'Unable to reach Nova right now. Please try again.');
@@ -258,8 +261,8 @@ export const ChatArea = () => {
         language,
         true,
       );
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (errorName(error) === 'AbortError') {
         toast.info('Generation stopped');
       } else {
         appendStreamToMessage(currentConversationId, assistantMessageId, 'Unable to regenerate this response. Please try again.');

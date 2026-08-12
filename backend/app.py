@@ -17,6 +17,22 @@ logging.basicConfig(level=settings.LOG_LEVEL, format="%(asctime)s - %(name)s - %
 logger = logging.getLogger(__name__)
 
 
+def _configure_error_monitoring() -> None:
+    if not settings.SENTRY_DSN:
+        return
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        release=f"nova@{settings.APP_VERSION}",
+        traces_sample_rate=max(0.0, min(settings.SENTRY_TRACES_SAMPLE_RATE, 1.0)),
+        send_default_pii=False,
+    )
+
+
+_configure_error_monitoring()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logger.info("Initializing Nova AI Agent Backend...")
@@ -97,7 +113,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         is_auth = path in ("/auth/register", "/auth/login")
         limiter = self.auth if is_auth else self.general
         client_host = request.client.host if request.client else "unknown"
-        decision = limiter.check(f"{'auth' if is_auth else 'api'}:{client_host}")
+        user_id = getattr(request.state, "user_id", None)
+        identity = f"user:{user_id}" if user_id else f"ip:{client_host}"
+        decision = limiter.check(f"{'auth' if is_auth else 'api'}:{identity}")
         headers = {
             "X-RateLimit-Limit": str(decision.limit),
             "X-RateLimit-Remaining": str(decision.remaining),
@@ -122,6 +140,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(TrustedOriginMiddleware)
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -130,9 +151,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AuthMiddleware)
-app.add_middleware(TrustedOriginMiddleware)
-app.add_middleware(RateLimitMiddleware)
 
 
 @app.middleware("http")

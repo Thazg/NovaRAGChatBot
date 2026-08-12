@@ -34,6 +34,7 @@ async def _stream_ollama(prompt: str) -> AsyncIterator[str]:
             "temperature": settings.TEMPERATURE,
             "top_k": settings.LLM_TOP_K,
             "top_p": settings.LLM_TOP_P,
+            "seed": settings.LLM_SEED,
             "num_ctx": settings.NUM_CTX,
             "num_predict": settings.MAX_TOKENS,
         },
@@ -92,6 +93,7 @@ async def _stream_groq(prompt: str) -> AsyncIterator[str]:
         "temperature": settings.TEMPERATURE,
         "max_tokens": settings.MAX_TOKENS,
         "top_p": settings.LLM_TOP_P,
+        "seed": settings.LLM_SEED,
     }
 
     try:

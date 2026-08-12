@@ -178,7 +178,10 @@ class HybridVectorStore:
         if not file_name or not self.documents:
             return 0
         before = len(self.documents)
-        mask = [d.get("metadata", {}).get("file_name") != file_name for d in self.documents]
+        mask = [
+            d.get("metadata", {}).get("storage_name", d.get("metadata", {}).get("file_name")) != file_name
+            for d in self.documents
+        ]
         self.documents = [d for d, m in zip(self.documents, mask) if m]
         removed = before - len(self.documents)
         if removed and self.embeddings is not None and len(self.embeddings) > 0:
@@ -303,6 +306,20 @@ class HybridVectorStore:
         for rank, idx in enumerate(dense_order):
             if dense_scores[idx] > 0:
                 rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (rrf_k + rank + 1)
+
+        # rank_bm25 can produce a non-positive IDF when the corpus contains a
+        # single document. Preserve useful retrieval for a user's first upload
+        # with a deterministic token-overlap fallback.
+        if not rrf_scores and tokenized_query:
+            query_token_set = set(tokenized_query)
+            overlap_scores = [
+                len(query_token_set.intersection(self._tokenize(document.get("content", ""))))
+                for document in self.documents
+            ]
+            overlap_order = np.argsort(-np.asarray(overlap_scores))
+            for rank, idx in enumerate(overlap_order):
+                if overlap_scores[idx] > 0:
+                    rrf_scores[int(idx)] = 1.0 / (rrf_k + rank + 1)
 
         ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
         max_rrf = ranked[0][1] if ranked else 0.0

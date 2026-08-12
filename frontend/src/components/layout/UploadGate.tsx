@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Loader2, AlertCircle, RefreshCw, LogOut } from 'lucide-react';
-import { api } from '../../services/api';
+import { api, type Document } from '../../services/api';
 import heroImage from '../../assets/hero.png';
 import { useChatStore } from '../../store/useChatStore';
 
 export const UploadGate = ({ onContinue }: { onContinue: () => void }) => {
-  const [, setDocuments] = useState<any[]>([]);
+  const [, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
@@ -37,7 +37,8 @@ export const UploadGate = ({ onContinue }: { onContinue: () => void }) => {
     if (!file) return;
     setUploading(true);
     try {
-      await api.uploadDocument(file);
+      const result = await api.uploadDocument(file);
+      if (result.job_id) await api.waitForIndexJob(result.job_id);
       await loadDocs();
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Upload failed. Please try again.');

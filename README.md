@@ -9,8 +9,8 @@ Nova is a production-minded **Retrieval-Augmented Generation (RAG) workspace** f
 - **True streaming UX** — Server-Sent Events deliver tokens and action events while supporting cancellation and regeneration.
 - **Private multi-user workspaces** — PBKDF2 password hashing, signed tokens, isolated uploads, indexes, and conversations.
 - **Production signals** — liveness/readiness probes, provider/model verification, request correlation IDs, response timing, automated tests, and CI.
-- **Measured quality** — an offline benchmark enforces Recall@5, mean reciprocal rank, and citation precision; Chromium E2E covers the complete portfolio flow.
-- **Resilient persistence** — local storage for development and optional Backblaze B2 synchronization for cloud deployments.
+- **Measured quality** — 60 labeled queries enforce Recall@5, MRR, citation precision/recall, evidence support, and no-answer behavior; Chromium E2E covers the complete portfolio flow.
+- **Resilient persistence** — lightweight local state in development; PostgreSQL, Redis/RQ, and Backblaze B2 for multi-replica production.
 - **Polished interface** — light/dark/system themes, responsive layouts, keyboard workflows, smooth motion, and reduced-motion support.
 
 ## Architecture
@@ -45,7 +45,7 @@ Nova is a production-minded **Retrieval-Augmented Generation (RAG) workspace** f
 | Retrieval | rank-bm25, optional FAISS, query expansion, reciprocal-rank fusion |
 | Documents | PDF, DOCX, Markdown, RST, TXT, Python, Jupyter Notebook |
 | AI providers | Groq cloud API or local Ollama |
-| Persistence | Local JSON/filesystem with optional Backblaze B2 |
+| Persistence | PostgreSQL + Redis/RQ in production; Backblaze B2 for file/index artifacts |
 | Delivery | Docker Compose, Render, Vercel, GitHub Actions |
 
 ## Quick start
@@ -119,14 +119,14 @@ npm run e2e
 
 GitHub Actions runs both quality gates for pushes to `main` and every pull request.
 
-The committed portfolio benchmark currently targets Recall@5 ≥ 0.90, MRR ≥ 0.80, citation precision ≥ 0.90, and backend coverage ≥ 40%. See the [evaluation report](backend/evaluation/README.md) for the recorded scores, per-query results, methodology, and limitations. See `docs/PORTFOLIO_CHECKLIST.md` for the demo-video storyboard, deployment checklist, and PostgreSQL migration plan.
+The committed benchmark currently records Recall@5 **0.9821**, MRR **0.9554**, citation precision/recall **1.0000**, and no-answer accuracy **1.0000**. The 77-test backend suite measures **74.26%** coverage with a **70%** CI floor. See the [evaluation report](backend/evaluation/README.md) for the ablation, provider-backed commands, exact results, and limitations. See `docs/PORTFOLIO_CHECKLIST.md` for the demo and deployment checklists.
 
 ## Operations
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` | Fast liveness check with version, environment, retrieval mode, and uptime |
-| `GET /health/ready` | Cached provider check that verifies the configured Groq/Ollama model is actually reachable |
+| `GET /health/ready` | Provider/model plus PostgreSQL, Redis, and RQ worker readiness |
 | `GET /docs` | OpenAPI / Swagger documentation |
 
 Every API response includes `X-Request-ID`, `X-Response-Time-Ms`, and `Server-Timing` headers for debugging and latency inspection.
@@ -140,12 +140,16 @@ Every API response includes `X-Request-ID`, `X-Response-Time-Ms`, and `Server-Ti
 - Logout revokes the refresh session, expires its cookie, and clears browser cache/cookies. Legacy tokens are removed from persisted Zustand state during migration.
 - Production refuses to boot with a missing/default JWT secret or one shorter than 32 bytes.
 - Usernames are normalized and validated before becoming filesystem/storage identifiers.
-- Upload size and accepted file types are restricted.
+- Uploads are quarantined under a temporary name, bounded by size, checked against an extension/MIME allowlist, parsed by file signature and structure, scanned for malware, and stored under a server-generated UUID.
+- PDF/DOCX complexity limits reject encrypted or active PDFs, embedded content, zip bombs, unsafe relationships, and malformed archives before indexing.
+- Search-download blocks credentials, unsafe schemes/ports, every non-public DNS answer, DNS rebinding to a private connected peer, and unsafe redirects; downloaded bytes must still pass MIME, size, PDF signature, parser, and malware checks.
+- PostgreSQL transactions protect shared users/conversations, Redis provides replica-wide rate limiting, and RQ moves parsing/indexing to monitored jobs.
+- Optional Sentry monitoring runs with PII disabled; readiness fails closed when shared workers lack B2 or required ClamAV scanning.
 - Sliding-window limits protect authentication and API endpoints and expose standard retry/remaining headers.
 - Documents, indexes, and conversations are namespaced by authenticated user ID.
 - Secrets stay in environment variables and are excluded from Git.
 
-See [`docs/SESSION_SECURITY.md`](docs/SESSION_SECURITY.md) for the session flow, threat model, deployment variables, and verification checklist.
+See [`docs/SESSION_SECURITY.md`](docs/SESSION_SECURITY.md) and [`docs/UPLOAD_SECURITY.md`](docs/UPLOAD_SECURITY.md) for threat models, deployment variables, and verification checklists.
 
 ## Repository structure
 
@@ -167,9 +171,12 @@ frontend/
 ## Engineering trade-offs and roadmap
 
 - **BM25-first** keeps local development free and predictable, but semantic retrieval needs a separately configured embedding endpoint.
-- **Filesystem JSON persistence** is easy to inspect and demo; PostgreSQL plus migrations would be the next step for higher concurrency.
+- **Dual runtime modes** keep JSON/thread-local services convenient for development; production switches users, refresh sessions, and conversations to PostgreSQL, rate limiting to Redis, and indexing to RQ workers.
+- **B2 stores artifacts, not relational state** when PostgreSQL is enabled. Separate workers require B2 because platform filesystems are ephemeral and not shared.
 - **SSE** is ideal for one-way token streaming; WebSockets would only be justified for collaborative or bidirectional realtime features.
-- Next portfolio milestones: expand the human-labeled evaluation dataset, add semantic retrieval ablations, move long-running ingestion to a background queue, and use a shared rate-limit store for multi-replica deployments.
+- Next portfolio milestone: configure a real embedding endpoint, explicitly approve the provider-backed answer run, and publish those live cost/latency artifacts beside the reproducible offline report.
+
+See [`docs/PRODUCTION_PERSISTENCE.md`](docs/PRODUCTION_PERSISTENCE.md) for migrations, JSON import, RQ worker startup, readiness, and rollout order.
 
 ## Deployment
 
@@ -178,7 +185,7 @@ frontend/
 - `render.yaml` provisions the FastAPI service on Render.
 - The Vite production build calls same-origin `/api`; `frontend/vercel.json` securely rewrites that path to Render and adds browser security headers.
 - Render allows the production frontend origin plus preview URLs belonging to this Vercel project.
-- Backblaze B2 variables enable durable uploads, indexes, users, and conversations.
+- PostgreSQL stores users, refresh sessions, and conversations; Backblaze B2 stores durable upload/index artifacts used by API and worker replicas.
 
 ## License
 

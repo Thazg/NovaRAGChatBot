@@ -6,6 +6,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
+from services.database import DATABASE_ENABLED
+
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 BASE_DIR = BACKEND_DIR / "storage" / "sessions"
 _STORE_LOCK = threading.RLock()
@@ -69,6 +71,9 @@ def _summary_title(content: str) -> str:
 
 
 def get_conversation(conversation_id: str, user_id: str) -> Dict[str, Any]:
+    if DATABASE_ENABLED:
+        from services.postgres_store import get_conversation as get_database_conversation
+        return get_database_conversation(conversation_id, user_id)
     data = _load_store(user_id)
     conversation = data.get(conversation_id)
     if not isinstance(conversation, dict):
@@ -77,6 +82,9 @@ def get_conversation(conversation_id: str, user_id: str) -> Dict[str, Any]:
 
 
 def list_conversations(user_id: str) -> List[Dict[str, Any]]:
+    if DATABASE_ENABLED:
+        from services.postgres_store import list_conversations as list_database_conversations
+        return list_database_conversations(user_id)
     data = _load_store(user_id)
     conversations = [conv for conv in data.values() if isinstance(conv, dict)]
     conversations.sort(key=lambda item: item.get("updatedAt", 0), reverse=True)
@@ -90,6 +98,9 @@ def create_conversation(
     messages: List[Dict[str, Any]] | None = None,
     pinned: bool = False,
 ) -> Dict[str, Any]:
+    if DATABASE_ENABLED:
+        from services.postgres_store import create_conversation as create_database_conversation
+        return create_database_conversation(user_id, title, conversation_id, messages, pinned)
     conversation_id = conversation_id or str(uuid.uuid4())
     now = int(time.time() * 1000)
     with _STORE_LOCK:
@@ -119,6 +130,19 @@ def get_session_history(session_id: str, user_id: str) -> List[Dict[str, Any]]:
 
 
 def append_session_message(session_id: str, role: str, content: str, user_id: str) -> Dict[str, Any]:
+    if DATABASE_ENABLED:
+        from services.postgres_store import create_conversation as create_database_conversation, mutate_conversation
+        create_database_conversation(user_id, conversation_id=session_id)
+
+        def append_message(record):
+            now = int(time.time() * 1000)
+            messages = list(record.messages or [])
+            messages.append({"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now})
+            record.messages = messages
+            if role == "user" and record.title == "New Chat":
+                record.title = _summary_title(content)
+
+        return mutate_conversation(session_id, user_id, append_message)
     with _STORE_LOCK:
         data = _load_store(user_id)
         conversation = data.get(session_id)
@@ -140,6 +164,22 @@ def append_session_message(session_id: str, role: str, content: str, user_id: st
 
 def prepare_regeneration(session_id: str, user_id: str) -> None:
     """Remove the most recent assistant reply before regenerating it."""
+    if DATABASE_ENABLED:
+        from services.postgres_store import mutate_conversation
+
+        def remove_last_assistant(record):
+            messages = list(record.messages or [])
+            for index in range(len(messages) - 1, -1, -1):
+                if messages[index].get("role") == "assistant":
+                    del messages[index]
+                    break
+            record.messages = messages
+
+        try:
+            mutate_conversation(session_id, user_id, remove_last_assistant)
+        except KeyError:
+            pass
+        return
     with _STORE_LOCK:
         data = _load_store(user_id)
         conversation = data.get(session_id)
@@ -155,6 +195,10 @@ def prepare_regeneration(session_id: str, user_id: str) -> None:
 
 
 def delete_conversation(conversation_id: str, user_id: str) -> None:
+    if DATABASE_ENABLED:
+        from services.postgres_store import delete_conversation as delete_database_conversation
+        delete_database_conversation(conversation_id, user_id)
+        return
     with _STORE_LOCK:
         data = _load_store(user_id)
         if conversation_id not in data:
@@ -169,6 +213,16 @@ def update_conversation(
     title: str | None = None,
     pinned: bool | None = None,
 ) -> Dict[str, Any]:
+    if DATABASE_ENABLED:
+        from services.postgres_store import mutate_conversation
+
+        def apply_update(record):
+            if title is not None:
+                record.title = title.strip()[:120] or "New Chat"
+            if pinned is not None:
+                record.pinned = pinned
+
+        return mutate_conversation(conversation_id, user_id, apply_update)
     with _STORE_LOCK:
         data = _load_store(user_id)
         conversation = data.get(conversation_id)
@@ -184,6 +238,9 @@ def update_conversation(
 
 
 def clear_conversations(user_id: str) -> int:
+    if DATABASE_ENABLED:
+        from services.postgres_store import clear_conversations as clear_database_conversations
+        return clear_database_conversations(user_id)
     with _STORE_LOCK:
         data = _load_store(user_id)
         count = len(data)

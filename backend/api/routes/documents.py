@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -19,18 +20,35 @@ router = APIRouter()
 
 BASE_UPLOADS_DIR = Path(settings.UPLOAD_FOLDER).resolve()
 SUPPORTED_EXTENSIONS = {".pdf", ".md", ".markdown", ".rst", ".txt", ".docx", ".py", ".ipynb"}
+INTERNAL_METADATA_FILES = {"source_urls.json", "document_manifest.json"}
 
 
 def _safe_filename(filename: str) -> str:
     name = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
     name = re.sub(r"[\x00-\x1f\x7f]", "", name)
-    if not name or name in {".", "..", "source_urls.json"}:
+    if not name or name in {".", "..", *INTERNAL_METADATA_FILES}:
         raise HTTPException(status_code=400, detail="Invalid filename")
     if len(name) > 180:
         stem = Path(name).stem[:140]
         name = f"{stem}{Path(name).suffix}"
     if Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
         raise HTTPException(status_code=415, detail="Unsupported file type")
+    return name
+
+
+def _safe_document_id(document_id: str) -> str:
+    """Accept UUID storage ids and legacy flat filenames, never paths."""
+    name = document_id.strip()
+    if (
+        not name
+        or name in {".", "..", *INTERNAL_METADATA_FILES}
+        or "/" in name
+        or "\\" in name
+        or any(ord(char) < 32 or ord(char) == 127 for char in name)
+        or len(name) > 180
+        or Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS
+    ):
+        raise HTTPException(status_code=400, detail="Invalid document ID")
     return name
 
 
@@ -42,6 +60,40 @@ def _user_uploads_dir(user_id: str) -> Path:
 
 def _source_urls_file(user_id: str) -> Path:
     return _user_uploads_dir(user_id) / "source_urls.json"
+
+
+def _manifest_file(user_id: str) -> Path:
+    return _user_uploads_dir(user_id) / "document_manifest.json"
+
+
+def _load_manifest(user_id: str) -> dict[str, dict[str, str]]:
+    path = _manifest_file(user_id)
+    if not path.exists():
+        try:
+            from services.remote_storage import download_file
+            download_file(f"uploads/{user_id}/document_manifest.json", path)
+        except Exception:
+            pass
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_manifest(manifest: dict[str, dict[str, str]], user_id: str) -> None:
+    path = _manifest_file(user_id)
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        from services.remote_storage import upload_file
+        upload_file(f"uploads/{user_id}/document_manifest.json", path)
+    except Exception:
+        pass
+
+
+def _display_name(stored_name: str, manifest: dict[str, dict[str, str]]) -> str:
+    entry = manifest.get(stored_name, {})
+    return entry.get("original_name", stored_name)
 
 
 def _load_source_urls(user_id: str) -> dict[str, str]:
@@ -80,12 +132,19 @@ def _delete_remote_file(filename: str, user_id: str) -> bool:
         return False
 
 
+class SummarizeRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=180)
+
+
 @router.post("/summarize")
-async def summarize_document(request: Request, body: dict):
-    filename = body.get("filename", "")
-    if not filename:
-        raise HTTPException(status_code=400, detail="filename required")
+async def summarize_document(request: Request, body: SummarizeRequest):
+    filename = body.filename.strip()
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
+    manifest = _load_manifest(user_id)
+    stored_name = filename if filename in manifest else next(
+        (key for key, value in manifest.items() if value.get("original_name") == filename),
+        filename,
+    )
 
     try:
         store = load_vector_store(user_id)
@@ -96,7 +155,10 @@ async def summarize_document(request: Request, body: dict):
     chunks = [
         doc.get("content", "")
         for doc in store.documents
-        if doc.get("metadata", {}).get("file_name", "").lower() == filename_lower
+        if (
+            doc.get("metadata", {}).get("storage_name", "").lower() == stored_name.lower()
+            or doc.get("metadata", {}).get("file_name", "").lower() == filename_lower
+        )
     ]
     if not chunks:
         raise HTTPException(status_code=404, detail="No chunks found for this file")
@@ -145,7 +207,8 @@ def _load_chunk_counts(user_id: str) -> dict[str, int]:
                 continue
             try:
                 item = json.loads(line)
-                source = item.get("metadata", {}).get("file_name") or item.get("metadata", {}).get("source")
+                metadata = item.get("metadata", {})
+                source = metadata.get("storage_name") or metadata.get("file_name") or metadata.get("source")
                 if source:
                     chunk_counts[source] = chunk_counts.get(source, 0) + 1
             except json.JSONDecodeError:
@@ -156,11 +219,12 @@ def _load_chunk_counts(user_id: str) -> dict[str, int]:
 def _list_upload_files(user_id: str) -> list[dict]:
     chunk_counts = _load_chunk_counts(user_id)
     source_urls = _load_source_urls(user_id)
+    manifest = _load_manifest(user_id)
     upload_dir = _user_uploads_dir(user_id)
     files = []
     local_files = [
         path for path in upload_dir.iterdir()
-        if path.is_file() and path.name != "source_urls.json"
+        if path.is_file() and path.name not in INTERNAL_METADATA_FILES
     ] if upload_dir.exists() else []
 
     if not local_files:
@@ -169,10 +233,10 @@ def _list_upload_files(user_id: str) -> list[dict]:
             remote_files = list_files(f"uploads/{user_id}/")
             for remote_path in remote_files:
                 name = remote_path[len(f"uploads/{user_id}/"):]
-                if name == "source_urls.json":
+                if name in INTERNAL_METADATA_FILES:
                     continue
                 files.append({
-                    "id": name, "name": name, "size": 0,
+                    "id": name, "name": _display_name(name, manifest), "size": 0,
                     "indexed": bool(chunk_counts.get(name)),
                     "chunks": chunk_counts.get(name, 0),
                     "source_url": source_urls.get(name),
@@ -184,11 +248,11 @@ def _list_upload_files(user_id: str) -> list[dict]:
     seen_names: set[str] = set()
     if upload_dir.exists():
         for file_path in sorted(local_files):
-            if not file_path.is_file() or file_path.name in seen_names or file_path.name == "source_urls.json":
+            if not file_path.is_file() or file_path.name in seen_names or file_path.name in INTERNAL_METADATA_FILES:
                 continue
             seen_names.add(file_path.name)
             files.append({
-                "id": file_path.name, "name": file_path.name, "size": file_path.stat().st_size,
+                "id": file_path.name, "name": _display_name(file_path.name, manifest), "size": file_path.stat().st_size,
                 "indexed": bool(chunk_counts.get(file_path.name)),
                 "chunks": chunk_counts.get(file_path.name, 0),
                 "source_url": source_urls.get(file_path.name),
@@ -204,7 +268,7 @@ def _restore_remote_uploads(user_id: str) -> None:
         upload_dir = _user_uploads_dir(user_id)
         for remote_path in list_files(prefix):
             name = remote_path[len(prefix):].replace("\\", "/").rsplit("/", 1)[-1]
-            if not name or name == "source_urls.json" or Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
+            if not name or name in INTERNAL_METADATA_FILES or Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
             local_path = upload_dir / name
             if not local_path.exists():
@@ -213,8 +277,15 @@ def _restore_remote_uploads(user_id: str) -> None:
         logger.warning("Could not restore remote uploads for %s: %s", user_id, exc)
 
 
-def _index_uploaded_file(file_path: Path, user_id: str) -> tuple[bool, int, str]:
+def _apply_document_identity(documents: list, file_path: Path, display_name: str) -> None:
+    for document in documents:
+        document.metadata["storage_name"] = file_path.name
+        document.metadata["file_name"] = display_name
+
+
+def _index_uploaded_file(file_path: Path, user_id: str, display_name: str | None = None) -> tuple[bool, int, str]:
     documents = load_file(file_path)
+    _apply_document_identity(documents, file_path, display_name or file_path.name)
     if not documents:
         return False, 0, "File type not supported"
     nodes = split_documents(documents)
@@ -242,10 +313,13 @@ def _rebuild_full_index(user_id: str) -> tuple[int, int]:
     _restore_remote_uploads(user_id)
     upload_dir = _user_uploads_dir(user_id)
     documents = []
+    manifest = _load_manifest(user_id)
     if upload_dir.exists():
         for fp in upload_dir.iterdir():
             if fp.is_file() and fp.suffix.lower() in SUPPORTED_EXTENSIONS:
-                documents.extend(load_file(fp))
+                loaded = load_file(fp)
+                _apply_document_identity(loaded, fp, _display_name(fp.name, manifest))
+                documents.extend(loaded)
     nodes = split_documents(documents)
     if nodes:
         build_vector_store(nodes, user_id)
@@ -262,59 +336,104 @@ def list_documents(request: Request):
     return _list_upload_files(user_id)
 
 
-@router.post("/upload")
+@router.post("/upload", status_code=202)
 async def upload_document(request: Request, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
-    safe_name = _safe_filename(file.filename)
+    original_name = _safe_filename(file.filename)
+    stored_name = f"{uuid.uuid4().hex}{Path(original_name).suffix.lower()}"
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
     upload_dir = _user_uploads_dir(user_id)
-    file_location = upload_dir / safe_name
+    file_location = upload_dir / stored_name
+    temp_location = upload_dir / f".{uuid.uuid4().hex}.upload"
     total_bytes = 0
     try:
-        with file_location.open("wb") as buffer:
+        with temp_location.open("wb") as buffer:
             while chunk := await file.read(1024 * 1024):
                 total_bytes += len(chunk)
                 if total_bytes > settings.MAX_UPLOAD_BYTES:
                     raise HTTPException(status_code=413, detail="File is too large")
                 buffer.write(chunk)
     except Exception:
-        file_location.unlink(missing_ok=True)
+        temp_location.unlink(missing_ok=True)
         raise
 
-    uploaded_to_b2 = False
     try:
-        from services.remote_storage import upload_file, delete_file
-        uploaded_to_b2 = await asyncio.to_thread(
-            upload_file, f"uploads/{user_id}/{safe_name}", file_location
-        )
-    except ImportError:
-        pass
+        from services.file_security import UnsafeUpload, validate_uploaded_file
+        await asyncio.to_thread(validate_uploaded_file, temp_location, original_name, file.content_type)
+        temp_location.replace(file_location)
+    except UnsafeUpload as exc:
+        temp_location.unlink(missing_ok=True)
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    except Exception:
+        temp_location.unlink(missing_ok=True)
+        raise
 
     try:
-        indexed, chunk_count, message = await asyncio.to_thread(
-            _index_uploaded_file, file_location, user_id
-        )
-        if not indexed:
-            if uploaded_to_b2:
-                delete_file(f"uploads/{user_id}/{safe_name}")
-            file_location.unlink(missing_ok=True)
-            raise HTTPException(status_code=422, detail=message)
+        manifest = _load_manifest(user_id)
+        manifest[stored_name] = {"original_name": original_name}
+        _save_manifest(manifest, user_id)
+        remote_persisted = False
+        try:
+            from services.remote_storage import upload_file
+            remote_persisted = bool(await asyncio.to_thread(
+                upload_file, f"uploads/{user_id}/{stored_name}", file_location
+            ))
+        except Exception as exc:
+            logger.warning("Could not persist upload %s to remote storage: %s", stored_name, exc)
+        if settings.REDIS_URL and not remote_persisted:
+            raise HTTPException(
+                status_code=503,
+                detail="Durable upload storage is required for background indexing",
+            )
+        from services.index_jobs import IndexQueueUnavailable, enqueue_file_index
+        try:
+            job_id = enqueue_file_index(user_id, str(file_location), original_name)
+        except IndexQueueUnavailable as exc:
+            raise HTTPException(status_code=503, detail="Indexing queue is unavailable") from exc
         return {
-            "status": "success", "filename": safe_name,
-            "indexed": indexed, "chunks": chunk_count, "message": message,
+            "status": "queued", "id": stored_name, "filename": original_name,
+            "indexed": False, "job_id": job_id, "progress": 0,
+            "message": "Upload accepted; indexing is running in the background.",
         }
     except HTTPException:
+        manifest = _load_manifest(user_id)
+        manifest.pop(stored_name, None)
+        _save_manifest(manifest, user_id)
+        file_location.unlink(missing_ok=True)
+        _delete_remote_file(stored_name, user_id)
+        try:
+            _rebuild_full_index(user_id)
+        except Exception:
+            logger.exception("Could not restore index after rejected upload for user %s", user_id)
         raise
     except Exception as exc:
-        if uploaded_to_b2:
-            try:
-                delete_file(f"uploads/{user_id}/{safe_name}")
-            except ImportError:
-                pass
-        if file_location.exists():
-            file_location.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail=f"Failed to upload and index document: {exc}") from exc
+        logger.exception("Failed to store uploaded document for user %s", user_id)
+        manifest = _load_manifest(user_id)
+        manifest.pop(stored_name, None)
+        _save_manifest(manifest, user_id)
+        file_location.unlink(missing_ok=True)
+        _delete_remote_file(stored_name, user_id)
+        try:
+            _rebuild_full_index(user_id)
+        except Exception:
+            logger.exception("Could not restore index after upload failure for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Failed to store and index document") from exc
+
+
+@router.get("/jobs/{job_id}")
+def get_index_job(request: Request, job_id: str):
+    user_id = getattr(request.state, "user_id", "") or "__anonymous__"
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", job_id):
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+    from services.index_jobs import IndexQueueUnavailable, get_job
+    try:
+        job = get_job(job_id, user_id)
+    except IndexQueueUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Indexing queue is unavailable") from exc
+    if not job:
+        raise HTTPException(status_code=404, detail="Indexing job not found")
+    return job
 
 
 @router.delete("/clear-all")
@@ -324,7 +443,7 @@ def clear_all_documents(request: Request):
     deleted_count = 0
     if upload_dir.exists():
         for file_path in upload_dir.iterdir():
-            if file_path.is_file() and file_path.name != "source_urls.json":
+            if file_path.is_file() and file_path.name not in INTERNAL_METADATA_FILES:
                 file_path.unlink()
                 deleted_count += 1
     try:
@@ -336,6 +455,7 @@ def clear_all_documents(request: Request):
     except Exception:
         pass
     _save_source_urls({}, user_id)
+    _save_manifest({}, user_id)
     _rebuild_full_index(user_id)
     return {"status": "success", "deleted": deleted_count}
 
@@ -343,7 +463,7 @@ def clear_all_documents(request: Request):
 @router.delete("/{id}")
 def delete_document(request: Request, id: str):
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
-    safe_id = _safe_filename(id)
+    safe_id = _safe_document_id(id)
     upload_dir = _user_uploads_dir(user_id)
     file_location = upload_dir / safe_id
     deleted = False
@@ -356,6 +476,9 @@ def delete_document(request: Request, id: str):
     source_urls = _load_source_urls(user_id)
     source_urls.pop(safe_id, None)
     _save_source_urls(source_urls, user_id)
+    manifest = _load_manifest(user_id)
+    manifest.pop(safe_id, None)
+    _save_manifest(manifest, user_id)
     try:
         store = get_retriever(user_id)
         if store is None:
@@ -374,10 +497,20 @@ def delete_document(request: Request, id: str):
 def reindex_documents(request: Request):
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
     try:
-        doc_count, chunk_count = _rebuild_full_index(user_id)
-        return {"status": "success", "message": "Reindexing completed", "documents": doc_count, "chunks": chunk_count}
+        from services.index_jobs import IndexQueueUnavailable, enqueue_full_reindex
+        try:
+            job_id = enqueue_full_reindex(user_id)
+        except IndexQueueUnavailable as exc:
+            raise HTTPException(status_code=503, detail="Indexing queue is unavailable") from exc
+        return {
+            "status": "queued", "message": "Reindexing queued",
+            "job_id": job_id, "progress": 0,
+        }
+    except HTTPException:
+        raise
     except Exception as exc:
-        return {"status": "error", "message": str(exc)}
+        logger.exception("Reindexing failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Document reindexing failed") from exc
 
 
 class SearchRequest(BaseModel):
@@ -391,7 +524,12 @@ def search_and_download(request: Request, req: SearchRequest):
     try:
         from rag.downloader import download_pdf, safe_pdf_filename, search_pdf_urls
 
-        clean_query = re.sub(r'^(?:search|tìm)\s+(?:for|kiếm)?\s*', '', req.query, flags=re.IGNORECASE).strip()
+        clean_query = re.sub(
+            r"^(?:search|tìm)\s+(?:for|kiếm)?\s*",
+            "",
+            req.query,
+            flags=re.IGNORECASE,
+        ).strip()
         if not clean_query:
             clean_query = req.query
         search_query = f'{clean_query} filetype:pdf'
@@ -402,33 +540,53 @@ def search_and_download(request: Request, req: SearchRequest):
             return {"status": "success", "downloaded": [], "message": "No PDFs found for query."}
 
         source_urls = _load_source_urls(user_id)
+        manifest = _load_manifest(user_id)
         upload_dir = _user_uploads_dir(user_id)
         downloaded = []
         for url in urls:
-            file_name = safe_pdf_filename(url)
-            file_path = upload_dir / file_name
-            if file_path.exists():
-                downloaded.append({"file_name": file_name, "new": False})
-                source_urls.setdefault(file_name, url)
+            original_name = safe_pdf_filename(url)
+            existing_name = next((name for name, source in source_urls.items() if source == url), None)
+            if existing_name and (upload_dir / existing_name).exists():
+                downloaded.append({"id": existing_name, "file_name": _display_name(existing_name, manifest), "new": False})
                 continue
+            stored_name = f"{uuid.uuid4().hex}.pdf"
+            file_path = upload_dir / stored_name
             try:
                 download_pdf(url, file_path)
+                from services.file_security import validate_uploaded_file
+                validate_uploaded_file(file_path, original_name, "application/pdf")
+                remote_persisted = False
                 try:
                     from services.remote_storage import upload_file
-                    upload_file(f"uploads/{user_id}/{file_name}", file_path)
-                except Exception:
-                    pass
-                downloaded.append({"file_name": file_name, "new": True})
-                source_urls[file_name] = url
+                    remote_persisted = bool(upload_file(f"uploads/{user_id}/{stored_name}", file_path))
+                except Exception as exc:
+                    logger.warning("Could not persist remote PDF %s: %s", stored_name, exc)
+                if settings.REDIS_URL and not remote_persisted:
+                    raise RuntimeError("Durable upload storage is unavailable")
+                downloaded.append({"id": stored_name, "file_name": original_name, "new": True})
+                source_urls[stored_name] = url
+                manifest[stored_name] = {"original_name": original_name}
             except Exception as exc:
+                file_path.unlink(missing_ok=True)
                 logger.warning("Failed to download %s: %s", url, exc)
-        if downloaded:
+        new_downloads = any(item["new"] for item in downloaded)
+        if new_downloads:
             _save_source_urls(source_urls, user_id)
-            _rebuild_full_index(user_id)
+            _save_manifest(manifest, user_id)
+            from services.index_jobs import IndexQueueUnavailable, enqueue_full_reindex
+            try:
+                job_id = enqueue_full_reindex(user_id)
+            except IndexQueueUnavailable as exc:
+                raise HTTPException(status_code=503, detail="Indexing queue is unavailable") from exc
+        else:
+            job_id = None
         return {
             "status": "success", "downloaded": downloaded,
             "message": f"Downloaded {sum(1 for d in downloaded if d['new'])} new files.",
+            "job_id": job_id,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.error("Search-and-download error: %s", exc)
-        return {"status": "error", "message": str(exc)}
+        logger.exception("Search-and-download failed safely for user %s", user_id)
+        raise HTTPException(status_code=502, detail="Search download failed safely") from exc

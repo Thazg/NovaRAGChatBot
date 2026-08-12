@@ -42,7 +42,7 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
     try {
       setLoading(true);
       const docs = await api.getDocuments();
-      const formattedDocs: Document[] = docs.map((doc: any) => ({
+      const formattedDocs: Document[] = docs.map((doc) => ({
         id: doc.id,
         name: doc.name,
         type: doc.name.endsWith('.pdf')
@@ -76,10 +76,13 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
     setUploading(true);
     try {
       const uploadResult = await api.uploadDocument(file);
+      const job = uploadResult.job_id
+        ? await api.waitForIndexJob(uploadResult.job_id)
+        : null;
       await loadDocuments();
 
-      if (uploadResult.indexed) {
-        toast.success(`${uploadResult.filename} indexed (${uploadResult.chunks ?? 0} chunks)`);
+      if (uploadResult.indexed || job?.result?.indexed) {
+        toast.success(`${uploadResult.filename} indexed (${job?.result?.chunks ?? uploadResult.chunks ?? 0} chunks)`);
         onUploadComplete?.();
       } else {
         toast.error(uploadResult.message || 'Upload succeeded but indexing failed');
@@ -120,7 +123,8 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
     try {
       toast.info('Re-indexing documents...');
       const result = await api.reindexDocuments();
-      if (result.status !== 'success') throw new Error(result.message || 'Re-indexing failed');
+      if (result.job_id) await api.waitForIndexJob(result.job_id);
+      if (!['success', 'queued'].includes(result.status)) throw new Error(result.message || 'Re-indexing failed');
       toast.success('Documents re-indexed');
       await loadDocuments();
     } catch (error) {

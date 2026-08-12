@@ -102,3 +102,67 @@ def test_readiness_reports_provider_state(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["ready"] is True
     assert response.headers["X-Readiness-Cache"] == "MISS"
+
+
+def test_readiness_fails_when_required_infrastructure_is_unavailable(monkeypatch) -> None:
+    async def fake_probe():
+        return ({
+            "status": "ready",
+            "ready": True,
+            "backend": "running",
+            "llm_provider": "groq",
+            "provider_status": "reachable",
+        }, 200)
+
+    monkeypatch.setattr(health, "_probe_provider", fake_probe)
+    monkeypatch.setattr(
+        health,
+        "_probe_infrastructure",
+        lambda: ({"database": "unavailable", "redis": "ready", "index_workers": 1}, False),
+    )
+    monkeypatch.setattr(health, "_READINESS_CACHE", None)
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["ready"] is False
+    assert response.json()["infrastructure"]["database"] == "unavailable"
+
+
+def test_object_storage_is_required_for_shared_index_workers(monkeypatch) -> None:
+    from services import remote_storage
+
+    class FakeStorage:
+        def head_bucket(self, **kwargs):
+            assert kwargs["Bucket"]
+
+    monkeypatch.setattr(remote_storage, "_get_client", lambda: FakeStorage())
+    assert health._probe_object_storage(required=True) == ("ready", True)
+    monkeypatch.setattr(remote_storage, "_get_client", lambda: None)
+    assert health._probe_object_storage(required=True) == ("unavailable", False)
+    assert health._probe_object_storage(required=False) == ("optional-local-mode", True)
+
+
+def test_required_malware_scanner_must_answer_ping(monkeypatch) -> None:
+    class FakeScanner:
+        def __init__(self, response: bytes) -> None:
+            self.response = response
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def sendall(self, payload: bytes) -> None:
+            assert payload == b"zPING\0"
+
+        def recv(self, _size: int) -> bytes:
+            return self.response
+
+    monkeypatch.setattr(health.settings, "MALWARE_SCAN_REQUIRED", True)
+    monkeypatch.setattr(health.settings, "CLAMAV_HOST", "scanner.internal")
+    monkeypatch.setattr(health.socket, "create_connection", lambda *_args, **_kwargs: FakeScanner(b"PONG\0"))
+    assert health._probe_malware_scanner() == ("ready", True)
+    monkeypatch.setattr(health.socket, "create_connection", lambda *_args, **_kwargs: FakeScanner(b"ERROR\0"))
+    assert health._probe_malware_scanner() == ("unavailable", False)

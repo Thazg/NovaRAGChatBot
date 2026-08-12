@@ -13,6 +13,28 @@ interface ChatInputProps {
   onStop: () => void;
 }
 
+interface SpeechRecognitionResultEventLike {
+  results: ArrayLike<{ 0: { transcript: string } }>;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+type SpeechWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
 export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
   const [input, setInput] = React.useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -54,8 +76,9 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
     if (!file) return;
     try {
       const result = await api.uploadDocument(file);
-      if (result.indexed) {
-        toast.success(`Indexed "${result.filename}" (${result.chunks} chunks)`);
+      const job = result.job_id ? await api.waitForIndexJob(result.job_id) : null;
+      if (result.indexed || job?.result?.indexed) {
+        toast.success(`Indexed "${result.filename}" (${job?.result?.chunks ?? result.chunks ?? 0} chunks)`);
         setSidebarActiveTab('documents');
       } else {
         toast.error(result.message || 'Failed to index file');
@@ -67,7 +90,8 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
   };
 
   const toggleRecording = () => {
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const speechWindow = window as SpeechWindow;
+    const SpeechRecognitionAPI = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
       toast.error('Speech recognition not supported in this browser');
       return;
@@ -79,7 +103,7 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
       return;
     }
 
-    const recognition: any = new SpeechRecognitionAPI();
+    const recognition = new SpeechRecognitionAPI();
     recognition.lang = language === 'english'
       ? 'en-US'
       : language === 'vietnamese'
@@ -94,7 +118,7 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
       setIsRecording(false);
       toast.error('Microphone access denied or error occurred');
     };
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionResultEventLike) => {
       const transcript = event.results[0][0].transcript;
       setInput((prev) => (prev ? prev + ' ' + transcript : transcript));
     };
