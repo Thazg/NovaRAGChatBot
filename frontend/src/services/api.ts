@@ -1,8 +1,13 @@
 import { z } from 'zod';
 
+// Production authentication must stay same-origin so the host-only refresh
+// cookie is sent through the Vercel/nginx `/api` proxy. Ignore stale hosting
+// environment overrides in production; a direct Render URL is also rejected
+// by the production Content-Security-Policy.
 export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL
-  || (import.meta.env.PROD ? '/api' : 'http://localhost:8000')
+  import.meta.env.PROD
+    ? '/api'
+    : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
 ).replace(/\/+$/, '');
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const ALLOWED_UPLOAD_EXTENSIONS = ['.pdf', '.md', '.markdown', '.rst', '.txt', '.py', '.docx', '.ipynb'];
