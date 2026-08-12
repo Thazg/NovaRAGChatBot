@@ -11,7 +11,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from fastapi import HTTPException, UploadFile
 from pypdf import PdfWriter
-from pypdf.generic import DictionaryObject, NameObject
+from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
 from starlette.datastructures import Headers
 from starlette.requests import Request
 
@@ -183,6 +183,32 @@ def test_pdf_rejects_automatic_actions(payload_path: Path) -> None:
         writer.write(stream)
     with pytest.raises(UnsafeUpload, match="automatic actions"):
         validate_uploaded_file(payload_path, "active.pdf", "application/pdf")
+
+
+def test_pdf_allows_navigation_only_open_destination(payload_path: Path) -> None:
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=72, height=72)
+    writer._root_object[NameObject("/OpenAction")] = ArrayObject(
+        [page.indirect_reference, NameObject("/Fit")]
+    )
+    with payload_path.open("wb") as stream:
+        writer.write(stream)
+
+    validate_uploaded_file(payload_path, "navigation.pdf", "application/pdf")
+
+
+def test_pdf_rejects_javascript_open_action(payload_path: Path) -> None:
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer._root_object[NameObject("/OpenAction")] = DictionaryObject({
+        NameObject("/S"): NameObject("/JavaScript"),
+        NameObject("/JS"): TextStringObject("app.alert('unsafe')"),
+    })
+    with payload_path.open("wb") as stream:
+        writer.write(stream)
+
+    with pytest.raises(UnsafeUpload, match="automatic actions"):
+        validate_uploaded_file(payload_path, "javascript.pdf", "application/pdf")
 
 
 def test_pdf_object_complexity_limit(payload_path: Path, monkeypatch) -> None:

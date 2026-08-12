@@ -119,7 +119,7 @@ npm run e2e
 
 GitHub Actions runs both quality gates for pushes to `main` and every pull request.
 
-The committed benchmark currently records Recall@5 **0.9821**, MRR **0.9554**, citation precision/recall **1.0000**, and no-answer accuracy **1.0000**. The 77-test backend suite measures **64.09% production-code coverage** with a **64%** CI floor; test modules are excluded from the measurement. See the [evaluation report](backend/evaluation/README.md) for the ablation, provider-backed commands, exact results, and limitations. See `docs/PORTFOLIO_CHECKLIST.md` for the demo and deployment checklists.
+The committed benchmark currently records Recall@5 **0.9821**, MRR **0.9554**, citation precision/recall **1.0000**, and no-answer accuracy **1.0000**. The 79-test backend suite measures **64.35% production-code coverage** with a **64%** CI floor; test modules are excluded from the measurement. See the [evaluation report](backend/evaluation/README.md) for the ablation, provider-backed commands, exact results, and limitations. See `docs/PORTFOLIO_CHECKLIST.md` for the demo and deployment checklists.
 
 ## Operations
 

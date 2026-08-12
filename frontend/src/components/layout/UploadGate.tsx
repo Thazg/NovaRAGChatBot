@@ -9,12 +9,13 @@ export const UploadGate = ({ onContinue }: { onContinue: () => void }) => {
   const [, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logout = useChatStore((s) => s.logout);
 
   const loadDocs = useCallback(async () => {
-    setError('');
+    setLoadError('');
     setLoading(true);
     try {
       const docs = await api.getDocuments();
@@ -24,7 +25,7 @@ export const UploadGate = ({ onContinue }: { onContinue: () => void }) => {
       }
     } catch {
       setDocuments([]);
-      setError('Nova could not load your workspace. Check the connection and try again.');
+      setLoadError('Nova could not load your workspace. Check the connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -35,13 +36,14 @@ export const UploadGate = ({ onContinue }: { onContinue: () => void }) => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError('');
     setUploading(true);
     try {
       const result = await api.uploadDocument(file);
       if (result.job_id) await api.waitForIndexJob(result.job_id);
       await loadDocs();
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed. Please try again.');
+      setUploadError(uploadError instanceof Error ? uploadError.message : 'Upload failed. Please try again.');
     }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -146,11 +148,13 @@ export const UploadGate = ({ onContinue }: { onContinue: () => void }) => {
             </div>
           </motion.button>
 
-          {error && (
+          {(uploadError || loadError) && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 flex w-full max-w-sm items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-left text-xs text-destructive">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="flex-1 leading-relaxed">{error}</span>
-              <button onClick={loadDocs} className="rounded-lg p-1 hover:bg-destructive/10" aria-label="Retry"><RefreshCw className="h-3.5 w-3.5" /></button>
+              <span className="flex-1 leading-relaxed">{uploadError || loadError}</span>
+              {loadError && !uploadError && (
+                <button onClick={loadDocs} className="rounded-lg p-1 hover:bg-destructive/10" aria-label="Retry"><RefreshCw className="h-3.5 w-3.5" /></button>
+              )}
             </motion.div>
           )}
 

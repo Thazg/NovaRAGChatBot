@@ -2,7 +2,7 @@
 
 ## Automated evidence already in the repository
 
-- 77 backend tests with 64.09% production-code coverage and a 64% CI floor (test modules excluded).
+- 79 backend tests with 64.35% production-code coverage and a 64% CI floor (test modules excluded).
 - Offline evaluation over 60 labeled queries with retrieval ablations, Recall@K, MRR, citation precision/recall, evidence support, no-answer accuracy, and latency.
 - Real-stack FastAPI test with a deterministic LLM, real upload/parsing/index/retrieval, SSE, and final citation.
 - Eight Chromium E2E scenarios covering upload/chat/citation, cookie recovery, accessibility, visual regression, and pre/mid-stream reconnect.

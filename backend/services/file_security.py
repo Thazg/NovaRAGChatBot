@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 
 from pypdf import PdfReader
 from pypdf import filters as pypdf_filters
+from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
 
 from config.settings import settings
 
@@ -43,6 +44,26 @@ def _validate_mime(extension: str, content_type: str | None) -> None:
         raise UnsafeUpload(f"MIME type {mime!r} does not match {extension}")
 
 
+def _is_safe_pdf_open_destination(value: object) -> bool:
+    """Allow navigation-only PDF open destinations, never executable actions."""
+    try:
+        resolved = value.get_object() if hasattr(value, "get_object") else value
+    except Exception:
+        return False
+    if isinstance(resolved, ArrayObject):
+        # Explicit destinations are arrays such as [page /Fit]. They only
+        # control the initial viewport and do not execute code or access URLs.
+        return len(resolved) >= 2
+    if isinstance(resolved, (NameObject, TextStringObject)):
+        # Named destinations resolve to another location inside this PDF.
+        return bool(str(resolved))
+    if isinstance(resolved, DictionaryObject):
+        # An internal GoTo action is navigation-only. GoToR, URI, Launch,
+        # JavaScript, SubmitForm and unknown action types remain blocked.
+        return str(resolved.get("/S", "")) == "/GoTo" and "/D" in resolved
+    return False
+
+
 def _validate_pdf(path: Path) -> None:
     with path.open("rb") as stream:
         prefix = stream.read(8)
@@ -64,8 +85,11 @@ def _validate_pdf(path: Path) -> None:
             names = names.get_object() if names else {}
             if "/EmbeddedFiles" in names or "/JavaScript" in names:
                 raise UnsafeUpload("PDF contains embedded files or JavaScript")
-            if "/OpenAction" in catalog or "/AA" in catalog:
-                raise UnsafeUpload("PDF contains automatic actions")
+            if "/AA" in catalog:
+                raise UnsafeUpload("PDF contains executable automatic actions")
+            open_action = catalog.get("/OpenAction")
+            if open_action is not None and not _is_safe_pdf_open_destination(open_action):
+                raise UnsafeUpload("PDF contains executable automatic actions")
             acroform = catalog.get("/AcroForm")
             if acroform and acroform.get_object().get("/XFA"):
                 raise UnsafeUpload("PDF contains an XFA form")
