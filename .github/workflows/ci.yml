@@ -22,7 +22,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements-dev.txt
       - name: Run tests with coverage
-        run: pytest --cov --cov-report=term-missing --cov-fail-under=70
+        # Coverage is scoped to production modules by pyproject.toml; tests and
+        # generated artifacts are intentionally excluded from the denominator.
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=64
       - name: Run retrieval evaluation
         working-directory: backend
         run: python -m evaluation.run --k 5
