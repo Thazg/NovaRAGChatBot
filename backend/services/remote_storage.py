@@ -61,25 +61,32 @@ def file_exists(remote_path: str) -> bool:
         return False
 
 
-def list_files(prefix: str = "") -> List[str]:
+def list_file_info(prefix: str = "") -> list[dict[str, str | int]]:
     client = _get_client()
     if not client:
         return []
     try:
-        keys: List[str] = []
+        files: list[dict[str, str | int]] = []
         continuation_token = None
         while True:
             params = {"Bucket": settings.B2_BUCKET, "Prefix": prefix}
             if continuation_token:
                 params["ContinuationToken"] = continuation_token
             response = client.list_objects_v2(**params)
-            keys.extend(obj["Key"] for obj in response.get("Contents", []))
+            for obj in response.get("Contents", []):
+                key = obj.get("Key")
+                if key:
+                    files.append({"key": key, "size": int(obj.get("Size", 0))})
             if not response.get("IsTruncated"):
                 break
             continuation_token = response.get("NextContinuationToken")
-        return keys
+        return files
     except (BotoCoreError, ClientError):
         return []
+
+
+def list_files(prefix: str = "") -> List[str]:
+    return [str(item["key"]) for item in list_file_info(prefix)]
 
 
 def delete_file(remote_path: str) -> bool:

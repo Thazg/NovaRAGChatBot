@@ -3,6 +3,7 @@ import shutil
 
 from botocore.exceptions import ClientError
 
+from api.routes import documents
 from services import remote_storage
 
 TEST_ROOT = Path(__file__).with_name("_remote_storage")
@@ -32,12 +33,12 @@ class FakeS3:
         self.pages += 1
         if self.pages == 1:
             return {
-                "Contents": [{"Key": "uploads/a.txt"}],
+                "Contents": [{"Key": "uploads/a.txt", "Size": 123}],
                 "IsTruncated": True,
                 "NextContinuationToken": "next",
             }
         assert kwargs["ContinuationToken"] == "next"
-        return {"Contents": [{"Key": "uploads/b.txt"}], "IsTruncated": False}
+        return {"Contents": [{"Key": "uploads/b.txt", "Size": 456}], "IsTruncated": False}
 
     def delete_object(self, **kwargs) -> None:
         self.calls.append(("delete", kwargs))
@@ -65,6 +66,7 @@ def test_remote_storage_returns_safe_defaults_without_credentials(monkeypatch) -
     assert remote_storage.upload_file("x", TEST_ROOT / "x") is False
     assert remote_storage.download_file("x", TEST_ROOT / "x") is False
     assert remote_storage.file_exists("x") is False
+    assert remote_storage.list_file_info("x") == []
     assert remote_storage.list_files("x") == []
     assert remote_storage.delete_file("x") is False
     assert remote_storage.upload_bytes("x", b"x") is False
@@ -84,6 +86,11 @@ def test_remote_storage_success_paths_and_pagination(monkeypatch) -> None:
     assert remote_storage.download_file("uploads/source.txt", destination)
     assert destination.read_bytes() == b"file"
     assert remote_storage.file_exists("uploads/source.txt")
+    assert remote_storage.list_file_info("uploads/") == [
+        {"key": "uploads/a.txt", "size": 123},
+        {"key": "uploads/b.txt", "size": 456},
+    ]
+    fake.pages = 0
     assert remote_storage.list_files("uploads/") == ["uploads/a.txt", "uploads/b.txt"]
     assert remote_storage.delete_file("uploads/source.txt")
     assert remote_storage.upload_bytes("state.json", b"{}")
@@ -97,7 +104,37 @@ def test_remote_storage_converts_provider_errors_to_safe_results(monkeypatch) ->
     assert remote_storage.upload_file("x", TEST_ROOT / "x") is False
     assert remote_storage.download_file("x", TEST_ROOT / "x") is False
     assert remote_storage.file_exists("x") is False
+    assert remote_storage.list_file_info("x") == []
     assert remote_storage.list_files("x") == []
     assert remote_storage.delete_file("x") is False
     assert remote_storage.upload_bytes("x", b"x") is False
     assert remote_storage.download_bytes("x") is None
+
+
+def test_remote_document_listing_preserves_object_size(monkeypatch) -> None:
+    listing_root = TEST_ROOT / "listing"
+    shutil.rmtree(listing_root, ignore_errors=True)
+    monkeypatch.setattr(documents, "BASE_UPLOADS_DIR", listing_root / "uploads")
+    monkeypatch.setattr(documents, "_load_chunk_counts", lambda _user_id: {"stored.pdf": 20})
+    monkeypatch.setattr(documents, "_load_source_urls", lambda _user_id: {})
+    monkeypatch.setattr(
+        documents,
+        "_load_manifest",
+        lambda _user_id: {"stored.pdf": {"original_name": "paper.pdf"}},
+    )
+    monkeypatch.setattr(
+        remote_storage,
+        "list_file_info",
+        lambda _prefix: [{"key": "uploads/test-user/stored.pdf", "size": 231_097}],
+    )
+
+    listed = documents._list_upload_files("test-user")
+
+    assert listed == [{
+        "id": "stored.pdf",
+        "name": "paper.pdf",
+        "size": 231_097,
+        "indexed": True,
+        "chunks": 20,
+    }]
+    shutil.rmtree(listing_root, ignore_errors=True)

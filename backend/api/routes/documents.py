@@ -229,14 +229,17 @@ def _list_upload_files(user_id: str) -> list[dict]:
 
     if not local_files:
         try:
-            from services.remote_storage import list_files
-            remote_files = list_files(f"uploads/{user_id}/")
-            for remote_path in remote_files:
+            from services.remote_storage import list_file_info
+            remote_files = list_file_info(f"uploads/{user_id}/")
+            for remote_file in remote_files:
+                remote_path = str(remote_file["key"])
                 name = remote_path[len(f"uploads/{user_id}/"):]
                 if name in INTERNAL_METADATA_FILES:
                     continue
                 item = {
-                    "id": name, "name": _display_name(name, manifest), "size": 0,
+                    "id": name,
+                    "name": _display_name(name, manifest),
+                    "size": int(remote_file.get("size", 0)),
                     "indexed": bool(chunk_counts.get(name)),
                     "chunks": chunk_counts.get(name, 0),
                 }

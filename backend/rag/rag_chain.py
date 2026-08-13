@@ -69,6 +69,33 @@ def _extract_key_terms(query: str) -> set:
     return {_stem_token(w) for w in words if len(w) > 3 and w not in _STOP_WORDS}
 
 
+def _is_document_overview_query(query: str) -> bool:
+    normalized = re.sub(r"\s+", " ", (query or "").strip().lower())
+    overview_phrases = (
+        "summarize", "summary", "main points", "key points", "overview",
+        "document about", "file about", "this document", "this file",
+        "tóm tắt", "tổng quan", "ý chính", "điểm chính", "nội dung chính",
+        "tài liệu này", "file này",
+    )
+    return any(phrase in normalized for phrase in overview_phrases)
+
+
+def _representative_nodes(documents: list[dict], top_k: int) -> list[dict]:
+    if not documents:
+        return []
+    count = min(max(1, top_k), len(documents))
+    if count == 1:
+        indices = [0]
+    else:
+        indices = [round(position * (len(documents) - 1) / (count - 1)) for position in range(count)]
+    nodes = []
+    for index in dict.fromkeys(indices):
+        node = dict(documents[index])
+        node["_score"] = 1.0
+        nodes.append(node)
+    return nodes
+
+
 def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, allow_broad: bool = True):
     normalized_query = (query or "").strip()
     uid = _ensure_user_id(user_id)
@@ -82,6 +109,7 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
         return []
 
     top_k_val = max(3, min(top_k or settings.TOP_K, 15))
+    is_overview_query = allow_broad and _is_document_overview_query(normalized_query)
     nodes = retriever.retrieve(normalized_query, top_k=top_k_val)
 
     if not nodes and normalized_query != query.strip():
@@ -89,6 +117,11 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
 
     if not nodes:
         nodes = retriever.retrieve(normalized_query, top_k=top_k_val, min_score=0.0)
+
+    overview_fallback = False
+    if not nodes and is_overview_query:
+        nodes = _representative_nodes(getattr(retriever, "documents", []), top_k_val)
+        overview_fallback = bool(nodes)
 
     expanded_query = expand_query(normalized_query)
     query_terms = _extract_key_terms(expanded_query)
@@ -125,16 +158,18 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
                 if broad_avg > avg_score:
                     nodes = broad_nodes
 
-    if nodes and query_terms:
+    if nodes and query_terms and not overview_fallback:
         def term_score(n):
-            head_terms = {
+            content_terms = {
                 _stem_token(token)
-                for token in re.findall(r"[a-zA-Z]\w+", n.get("content", "").lower()[:600])
+                for token in re.findall(r"[a-zA-Z]\w+", n.get("content", "").lower())
             }
-            return sum(1 for t in query_terms if t in head_terms)
+            return sum(1 for t in query_terms if t in content_terms)
         nodes.sort(key=lambda n: (term_score(n), n.get("_score", 0)), reverse=True)
-        required_overlap = 2 if len(query_terms) >= 3 else 1
-        nodes = [n for n in nodes if term_score(n) >= required_overlap]
+        nodes = [n for n in nodes if term_score(n) >= 1]
+
+    if not nodes and is_overview_query:
+        nodes = _representative_nodes(getattr(retriever, "documents", []), top_k_val)
 
     retrieval_cache.set(cache_key, nodes)
     return nodes
