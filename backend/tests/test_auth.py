@@ -6,7 +6,7 @@ from types import ModuleType
 import pytest
 from fastapi.testclient import TestClient
 
-from services import auth, refresh_sessions
+from services import auth, refresh_sessions, user_preferences
 from app import app
 
 
@@ -22,6 +22,7 @@ def isolated_users(monkeypatch):
     refresh_temp_file.unlink(missing_ok=True)
     monkeypatch.setattr(auth, "USERS_FILE", users_file)
     monkeypatch.setattr(refresh_sessions, "_STORE", refresh_file)
+    monkeypatch.setattr(user_preferences, "BASE_DIR", Path(__file__).with_name("_preferences_test"))
     remote_storage = ModuleType("services.remote_storage")
     remote_storage.download_file = lambda *_args, **_kwargs: False
     remote_storage.upload_file = lambda *_args, **_kwargs: False
@@ -31,6 +32,8 @@ def isolated_users(monkeypatch):
     temp_file.unlink(missing_ok=True)
     refresh_file.unlink(missing_ok=True)
     refresh_temp_file.unlink(missing_ok=True)
+    import shutil
+    shutil.rmtree(user_preferences.BASE_DIR, ignore_errors=True)
 
 
 def test_register_login_and_verify_token(isolated_users) -> None:
@@ -161,3 +164,60 @@ def test_production_cookie_uses_host_prefix_secure_and_strict(isolated_users, mo
     assert "samesite=strict" in cookie
     assert "path=/" in cookie
     assert "domain=" not in cookie
+
+
+def test_account_preferences_persist_and_export(isolated_users) -> None:
+    client = TestClient(app)
+    registered = client.post(
+        "/auth/register",
+        json={"username": "settings.user", "password": "strong-password"},
+        headers={"Origin": "http://127.0.0.1:5173"},
+    )
+    headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
+    preferences = {
+        "display_name": "Nova Researcher",
+        "theme": "system",
+        "language": "vietnamese",
+        "character_style": "concise",
+        "nickname": "Thazg",
+        "custom_instructions": "Always cite the source document.",
+    }
+
+    saved = client.put("/auth/preferences", headers=headers, json=preferences)
+    loaded = client.get("/auth/preferences", headers=headers)
+    exported = client.get("/auth/export", headers=headers)
+
+    assert saved.status_code == 200
+    assert loaded.json() == preferences
+    assert exported.status_code == 200
+    assert exported.headers["cache-control"] == "no-store"
+    assert exported.json()["account"]["username"] == "settings.user"
+    assert exported.json()["preferences"] == preferences
+    assert exported.json()["conversations"] == []
+
+
+def test_change_password_verifies_current_password_and_rotates_session(isolated_users) -> None:
+    client = TestClient(app)
+    registered = client.post(
+        "/auth/register",
+        json={"username": "password.user", "password": "strong-password"},
+        headers={"Origin": "http://127.0.0.1:5173"},
+    )
+    headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
+
+    rejected = client.post(
+        "/auth/change-password",
+        headers=headers,
+        json={"current_password": "wrong-password", "new_password": "new-strong-password"},
+    )
+    changed = client.post(
+        "/auth/change-password",
+        headers=headers,
+        json={"current_password": "strong-password", "new_password": "new-strong-password"},
+    )
+
+    assert rejected.status_code == 400
+    assert changed.status_code == 200
+    assert "httponly" in changed.headers["set-cookie"].lower()
+    assert auth.login("password.user", "strong-password") is None
+    assert auth.login("password.user", "new-strong-password") is not None

@@ -98,6 +98,16 @@ def revoke_refresh_session(token_hash: str) -> None:
             record.revoked = True
 
 
+def revoke_refresh_sessions_for_user(user_id: str) -> None:
+    with database_session() as session:
+        records = session.scalars(select(RefreshSessionRecord).where(
+            RefreshSessionRecord.user_id == user_id,
+            RefreshSessionRecord.revoked.is_(False),
+        )).all()
+        for record in records:
+            record.revoked = True
+
+
 def _conversation_dict(record: ConversationRecord) -> dict[str, Any]:
     return {
         "id": record.id,

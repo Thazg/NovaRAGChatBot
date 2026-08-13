@@ -1,736 +1,1060 @@
-import { useRef, useState, useEffect, useMemo } from 'react';
-import { Settings as SettingsIcon, Monitor, User, Info, Upload, Keyboard, Globe, Shield, Trash2, Heart, Code, Cpu, Database, FileText, Loader2, ExternalLink, AlertTriangle, Activity } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import {
+  Activity,
+  AlertTriangle,
+  BookOpen,
+  Check,
+  ChevronRight,
+  Copy,
+  Database,
+  Download,
+  ExternalLink,
+  FileText,
+  HardDrive,
+  Info,
+  KeyRound,
+  Keyboard,
+  Languages,
+  Laptop,
+  Loader2,
+  LockKeyhole,
+  MessageSquare,
+  MonitorSmartphone,
+  Moon,
+  RefreshCw,
+  Save,
+  Settings as SettingsIcon,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  Sun,
+  Trash2,
+  Upload,
+  UserRound,
+  WandSparkles,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
-import { useChatStore } from '../../store/useChatStore';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
-import { ScrollArea } from '../ui/scroll-area';
 import { Input } from '../ui/input';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '../ui/sheet';
 import { cn } from '../../lib/utils';
+import { useChatStore } from '../../store/useChatStore';
 import { api, type Document, type HealthStatus, type ReadinessStatus } from '../../services/api';
 
+type SectionId = 'general' | 'profile' | 'personalization' | 'knowledge' | 'privacy' | 'system' | 'about';
+
+const sections: Array<{
+  id: SectionId;
+  label: string;
+  description: string;
+  icon: typeof SlidersHorizontal;
+}> = [
+  { id: 'general', label: 'General', description: 'Language, theme & shortcuts', icon: SlidersHorizontal },
+  { id: 'profile', label: 'Profile', description: 'Identity & account security', icon: UserRound },
+  { id: 'personalization', label: 'Personalization', description: 'Tone and response behavior', icon: Sparkles },
+  { id: 'knowledge', label: 'Knowledge base', description: 'Documents, summaries & index', icon: Database },
+  { id: 'privacy', label: 'Privacy & data', description: 'Export, retention & account', icon: ShieldCheck },
+  { id: 'system', label: 'System', description: 'AI readiness & diagnostics', icon: Activity },
+  { id: 'about', label: 'About Nova', description: 'Product and privacy details', icon: Info },
+];
+
+const toneOptions = [
+  { id: 'professional', label: 'Professional', description: 'Clear, structured and polished' },
+  { id: 'concise', label: 'Concise', description: 'Short answers with minimal filler' },
+  { id: 'friendly', label: 'Friendly', description: 'Natural and approachable' },
+  { id: 'warm', label: 'Warm', description: 'Supportive and considerate' },
+  { id: 'enthusiastic', label: 'Enthusiastic', description: 'Energetic and motivating' },
+  { id: 'custom', label: 'Custom', description: 'Follow your instructions below' },
+] as const;
+
+const languageOptions = [
+  { id: 'auto', label: 'Auto detect', detail: 'Match each question' },
+  { id: 'english', label: 'English', detail: 'Always answer in English' },
+  { id: 'vietnamese', label: 'Tiếng Việt', detail: 'Luôn trả lời tiếng Việt' },
+] as const;
+
+const themeOptions = [
+  { id: 'light', label: 'Light', icon: Sun },
+  { id: 'dark', label: 'Dark', icon: Moon },
+  { id: 'system', label: 'System', icon: Laptop },
+] as const;
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const formatUptime = (seconds?: number) => {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+};
+
+const SettingsCard = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <div className={cn(
+    'rounded-2xl border border-border/55 bg-card/60 shadow-[0_18px_48px_-38px_rgba(var(--primary-rgb),0.45)] backdrop-blur-sm',
+    className,
+  )}>
+    {children}
+  </div>
+);
+
+const SectionHeading = ({
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+}: {
+  icon: typeof SlidersHorizontal;
+  eyebrow: string;
+  title: string;
+  description: string;
+}) => (
+  <div className="flex items-start gap-3.5">
+    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/18 to-violet-500/5 text-primary shadow-sm">
+      <Icon className="h-5 w-5" />
+    </div>
+    <div className="min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary/75">{eyebrow}</p>
+      <h2 className="mt-1 text-xl font-semibold tracking-tight text-foreground">{title}</h2>
+      <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
+    </div>
+  </div>
+);
+
+const CardHeader = ({ title, description, action }: { title: string; description?: string; action?: ReactNode }) => (
+  <div className="flex items-start justify-between gap-4 border-b border-border/40 px-4 py-4 sm:px-5">
+    <div>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {description && <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>}
+    </div>
+    {action}
+  </div>
+);
+
+const Metric = ({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Activity }) => (
+  <div className="rounded-xl border border-border/45 bg-background/55 p-3.5">
+    <div className="flex items-center gap-2 text-muted-foreground">
+      <Icon className="h-3.5 w-3.5" />
+      <span className="text-[10px] font-bold uppercase tracking-[0.12em]">{label}</span>
+    </div>
+    <p className="mt-2 truncate font-mono text-sm font-semibold text-foreground">{value}</p>
+  </div>
+);
+
+const Toggle = ({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    aria-label={label}
+    onClick={() => onChange(!checked)}
+    className={cn(
+      'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
+      checked ? 'border-primary bg-primary' : 'border-border bg-muted',
+    )}
+  >
+    <span className={cn(
+      'absolute top-0.5 grid h-5 w-5 place-items-center rounded-full bg-white shadow-sm transition-transform',
+      checked ? 'translate-x-[19px]' : 'translate-x-0.5',
+    )}>
+      {checked && <Check className="h-3 w-3 text-primary" />}
+    </span>
+  </button>
+);
+
 export const SettingsDrawer = () => {
-  const { theme, setTheme, avatar, setAvatar, displayName, setDisplayName, settingsOpen, setSettingsOpen, customInstructions, setCustomInstructions, characterStyle, setCharacterStyle, nickname, setNickname, developerMode, setDeveloperMode, language, setLanguage } = useChatStore();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeSection, setActiveSection] = useState('general');
+  const {
+    theme,
+    setTheme,
+    avatar,
+    setAvatar,
+    displayName,
+    setDisplayName,
+    settingsOpen,
+    setSettingsOpen,
+    customInstructions,
+    setCustomInstructions,
+    characterStyle,
+    setCharacterStyle,
+    nickname,
+    setNickname,
+    developerMode,
+    setDeveloperMode,
+    language,
+    setLanguage,
+    username,
+    savePreferences,
+    syncPreferences,
+    clearAllConversations,
+    logout,
+  } = useChatStore();
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [activeSection, setActiveSection] = useState<SectionId>('general');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [docsError, setDocsError] = useState('');
+  const [summary, setSummary] = useState<{ filename: string; content: string } | null>(null);
   const [summarizingFile, setSummarizingFile] = useState<string | null>(null);
-  const [summaryResult, setSummaryResult] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingDocument, setDeletingDocument] = useState<string | null>(null);
+  const [confirmClearDocuments, setConfirmClearDocuments] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [preferencesSaved, setPreferencesSaved] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [confirmClearChats, setConfirmClearChats] = useState(false);
+  const [clearingChats, setClearingChats] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [systemInfo, setSystemInfo] = useState<HealthStatus | null>(null);
   const [readiness, setReadiness] = useState<ReadinessStatus | null>(null);
-  const languages: Array<{ id: 'auto' | 'english' | 'vietnamese'; label: string }> = [
-    { id: 'auto', label: 'Auto' },
-    { id: 'english', label: 'English' },
-    { id: 'vietnamese', label: 'Vietnamese' },
-  ];
+  const [loadingSystem, setLoadingSystem] = useState(false);
 
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)');
-    setIsMobile(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+  const totalSize = useMemo(() => documents.reduce((sum, document) => sum + document.size, 0), [documents]);
+  const totalChunks = useMemo(() => documents.reduce((sum, document) => sum + (document.chunks || 0), 0), [documents]);
 
-  const sections = useMemo(() => {
-    const all = [
-      { id: 'general', icon: Globe, label: 'General' },
-      { id: 'appearance', icon: Monitor, label: 'Appearance' },
-      { id: 'profile', icon: User, label: 'Profile' },
-      { id: 'personalization', icon: Heart, label: 'Personalization' },
-      { id: 'privacy', icon: Shield, label: 'Privacy & Data' },
-      { id: 'shortcuts', icon: Keyboard, label: 'Shortcuts' },
-      { id: 'storage', icon: Database, label: 'Storage' },
-      ...(developerMode ? [{ id: 'system', icon: Cpu, label: 'System' }] : []),
-      { id: 'developer', icon: Code, label: 'Developer' },
-      { id: 'about', icon: Info, label: 'About' },
-    ];
-    return isMobile ? all.filter(s => s.id !== 'shortcuts') : all;
-  }, [isMobile, developerMode]);
-
-  useEffect(() => {
-    if (settingsOpen && activeSection === 'storage') {
-      setLoadingDocs(true);
-      api.getDocuments()
-        .then(setDocuments)
-        .catch(() => setDocuments([]))
-        .finally(() => setLoadingDocs(false));
-    }
-  }, [settingsOpen, activeSection]);
-
-  useEffect(() => {
-    if (!developerMode && activeSection === 'system') setActiveSection('general');
-  }, [activeSection, developerMode]);
-
-  useEffect(() => {
-    if (settingsOpen && activeSection === 'system') {
-      api.healthCheck().then(setSystemInfo).catch(() => setSystemInfo(null));
-      api.readinessCheck().then(setReadiness).catch(() => setReadiness(null));
-    }
-  }, [activeSection, settingsOpen]);
-
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Avatar must be smaller than 2 MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatar(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const loadDocuments = async () => {
+    setLoadingDocs(true);
+    setDocsError('');
+    try {
+      setDocuments(await api.getDocuments());
+    } catch (error) {
+      setDocsError(error instanceof Error ? error.message : 'Could not load documents');
+    } finally {
+      setLoadingDocs(false);
     }
   };
+
+  const loadSystem = async (refresh = false) => {
+    setLoadingSystem(true);
+    try {
+      const [health, ready] = await Promise.all([api.healthCheck(), api.readinessCheck(refresh)]);
+      setSystemInfo(health);
+      setReadiness(ready);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not refresh diagnostics');
+    } finally {
+      setLoadingSystem(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    void syncPreferences().catch(() => undefined);
+  }, [settingsOpen, syncPreferences]);
+
+  useEffect(() => {
+    if (settingsOpen && activeSection === 'knowledge') void loadDocuments();
+    if (settingsOpen && (activeSection === 'system' || activeSection === 'about')) void loadSystem();
+  }, [activeSection, settingsOpen]);
+
+  const handleSavePreferences = async () => {
+    setSavingPreferences(true);
+    setPreferencesSaved(false);
+    try {
+      await savePreferences();
+      setPreferencesSaved(true);
+      toast.success('Preferences saved to your account');
+      window.setTimeout(() => setPreferencesSaved(false), 1800);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save preferences');
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
+
+  const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Choose an image file');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Avatar must be smaller than 2 MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => setAvatar(String(reader.result));
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const handlePasswordChange = async () => {
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await api.changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success('Password updated and other sessions revoked');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const handleSummarize = async (document: Document) => {
+    setSummarizingFile(document.id);
+    try {
+      const result = await api.summarizeDocument(document.name);
+      setSummary({ filename: document.name, content: result.summary });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not summarize document');
+    } finally {
+      setSummarizingFile(null);
+    }
+  };
+
+  const handleDeleteDocument = async (document: Document) => {
+    setDeletingDocument(document.id);
+    try {
+      await api.deleteDocument(document.id);
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+      toast.success(`${document.name} deleted`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not delete document');
+    } finally {
+      setDeletingDocument(null);
+    }
+  };
+
+  const handleReindex = async () => {
+    setReindexing(true);
+    try {
+      const result = await api.reindexDocuments();
+      if (result.job_id) await api.waitForIndexJob(result.job_id);
+      await loadDocuments();
+      toast.success('Knowledge index rebuilt');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not rebuild index');
+    } finally {
+      setReindexing(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const payload = await api.exportAccountData();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nova-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success('Account export downloaded');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not export account data');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const diagnostics = JSON.stringify({ health: systemInfo, readiness }, null, 2);
+
+  const renderGeneral = () => (
+    <div className="space-y-5">
+      <SectionHeading
+        icon={SlidersHorizontal}
+        eyebrow="Workspace preferences"
+        title="Make Nova feel like yours"
+        description="Language and theme sync with your Nova account. Keyboard shortcuts work anywhere in the workspace."
+      />
+
+      <SettingsCard>
+        <CardHeader title="Response language" description="Choose how Nova answers, independent of document language." />
+        <div className="grid gap-2 p-4 sm:grid-cols-3 sm:p-5">
+          {languageOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setLanguage(option.id)}
+              className={cn(
+                'relative rounded-xl border p-3.5 text-left transition-all',
+                language === option.id
+                  ? 'border-primary/45 bg-primary/10 shadow-[0_12px_28px_-22px_rgba(var(--primary-rgb),0.8)]'
+                  : 'border-border/50 bg-background/45 hover:border-primary/25 hover:bg-muted/40',
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-foreground">{option.label}</span>
+                {language === option.id && <Check className="h-4 w-4 text-primary" />}
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">{option.detail}</p>
+            </button>
+          ))}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard>
+        <CardHeader title="Appearance" description="The system option follows your operating system preference." />
+        <div className="grid grid-cols-3 gap-2 p-4 sm:p-5">
+          {themeOptions.map((option) => {
+            const Icon = option.icon;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setTheme(option.id)}
+                className={cn(
+                  'flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-xs font-semibold transition-all',
+                  theme === option.id
+                    ? 'border-primary/45 bg-primary/10 text-primary'
+                    : 'border-border/50 bg-background/45 text-muted-foreground hover:border-primary/25 hover:text-foreground',
+                )}
+              >
+                <Icon className="h-5 w-5" />
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard>
+        <CardHeader title="Keyboard shortcuts" description="These shortcuts are active and handled by the workspace." />
+        <div className="divide-y divide-border/35 px-4 sm:px-5">
+          {[
+            ['New chat', 'Ctrl / ⌘ + N'],
+            ['Global search', 'Ctrl / ⌘ + K'],
+            ['Focus message box', 'Ctrl / ⌘ + /'],
+            ['Stop generation or close search', 'Esc'],
+          ].map(([label, shortcut]) => (
+            <div key={label} className="flex items-center justify-between gap-3 py-3.5">
+              <div className="flex items-center gap-2.5 text-sm text-foreground/85">
+                <Keyboard className="h-4 w-4 text-muted-foreground" />
+                {label}
+              </div>
+              <kbd className="rounded-lg border border-border/60 bg-muted/55 px-2.5 py-1 font-mono text-[10px] text-muted-foreground shadow-sm">{shortcut}</kbd>
+            </div>
+          ))}
+        </div>
+      </SettingsCard>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSavePreferences} disabled={savingPreferences} className="h-10 rounded-xl px-4 shadow-lg shadow-primary/15">
+          {savingPreferences ? <Loader2 className="animate-spin" /> : preferencesSaved ? <Check /> : <Save />}
+          {preferencesSaved ? 'Saved' : 'Save preferences'}
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderProfile = () => (
+    <div className="space-y-5">
+      <SectionHeading
+        icon={UserRound}
+        eyebrow="Identity & security"
+        title="Your Nova profile"
+        description="Manage how you appear in the workspace and keep your account protected."
+      />
+
+      <SettingsCard className="overflow-hidden">
+        <div className="relative border-b border-border/40 bg-gradient-to-br from-primary/14 via-violet-500/6 to-transparent p-5 sm:p-6">
+          <div className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-primary/15 blur-3xl" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+            <div className="relative w-fit">
+              <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-3xl border border-primary/25 bg-background/70 shadow-xl shadow-primary/10">
+                {avatar ? <img src={avatar} alt="Profile avatar" className="h-full w-full object-cover" /> : <UserRound className="h-8 w-8 text-primary" />}
+              </div>
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                className="absolute -bottom-2 -right-2 grid h-8 w-8 place-items-center rounded-xl border border-border bg-card text-primary shadow-lg transition-transform hover:scale-105"
+                aria-label="Upload profile avatar"
+              >
+                <Upload className="h-3.5 w-3.5" />
+              </button>
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-lg font-semibold text-foreground">{displayName || username || 'Nova user'}</p>
+              <p className="mt-1 truncate text-sm text-muted-foreground">@{username || 'user'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2.5 py-1 text-[10px] font-semibold text-emerald-500">Private workspace</span>
+                <span className="rounded-full border border-border/50 bg-background/55 px-2.5 py-1 text-[10px] text-muted-foreground">Avatar stays on this device</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="space-y-2">
+            <label htmlFor="display-name" className="text-xs font-semibold text-foreground">Display name</label>
+            <Input
+              id="display-name"
+              value={displayName}
+              maxLength={80}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="How should your name appear?"
+              className="h-11 rounded-xl bg-background/65"
+            />
+            <p className="text-[11px] text-muted-foreground">Synced across devices when you save your preferences.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleSavePreferences} disabled={savingPreferences} className="rounded-xl">
+              {savingPreferences ? <Loader2 className="animate-spin" /> : <Save />}
+              Save profile
+            </Button>
+            {avatar && (
+              <Button variant="outline" onClick={() => setAvatar(null)} className="rounded-xl text-destructive">
+                <Trash2 /> Remove avatar
+              </Button>
+            )}
+          </div>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard>
+        <CardHeader title="Change password" description="Updating your password revokes other refresh sessions while keeping this device signed in." action={<LockKeyhole className="h-4 w-4 text-muted-foreground" />} />
+        <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+          <div className="space-y-2 sm:col-span-2">
+            <label htmlFor="current-password" className="text-xs font-semibold">Current password</label>
+            <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="h-11 rounded-xl bg-background/65" />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="new-password" className="text-xs font-semibold">New password</label>
+            <Input id="new-password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="h-11 rounded-xl bg-background/65" />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="confirm-password" className="text-xs font-semibold">Confirm new password</label>
+            <Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="h-11 rounded-xl bg-background/65" />
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:col-span-2">
+            <p className="text-[11px] text-muted-foreground">Use at least 8 characters.</p>
+            <Button onClick={handlePasswordChange} disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword} className="rounded-xl">
+              {changingPassword ? <Loader2 className="animate-spin" /> : <KeyRound />}
+              Update password
+            </Button>
+          </div>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+
+  const renderPersonalization = () => (
+    <div className="space-y-5">
+      <SectionHeading
+        icon={Sparkles}
+        eyebrow="Response behavior"
+        title="Shape every answer"
+        description="Your tone and instructions are sent with chat requests and stored with your account."
+      />
+
+      <SettingsCard>
+        <CardHeader title="Response style" description="Choose a strong default. Custom instructions can refine it further." action={<WandSparkles className="h-4 w-4 text-primary" />} />
+        <div className="grid gap-2 p-4 sm:grid-cols-2 sm:p-5">
+          {toneOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setCharacterStyle(option.id)}
+              className={cn(
+                'flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all',
+                characterStyle === option.id
+                  ? 'border-primary/45 bg-primary/10'
+                  : 'border-border/50 bg-background/45 hover:border-primary/25 hover:bg-muted/40',
+              )}
+            >
+              <span className={cn(
+                'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border',
+                characterStyle === option.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+              )}>
+                {characterStyle === option.id && <Check className="h-3 w-3" />}
+              </span>
+              <span>
+                <span className="block text-sm font-semibold text-foreground">{option.label}</span>
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard>
+        <CardHeader title="Personal context" description="Keep it useful and avoid adding secrets or sensitive credentials." />
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="space-y-2">
+            <label htmlFor="nickname" className="text-xs font-semibold">What should Nova call you?</label>
+            <Input id="nickname" value={nickname} maxLength={80} onChange={(event) => setNickname(event.target.value)} placeholder="Optional nickname" className="h-11 rounded-xl bg-background/65" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="custom-instructions" className="text-xs font-semibold">Custom instructions</label>
+              <span className="font-mono text-[10px] text-muted-foreground">{customInstructions.length}/4000</span>
+            </div>
+            <textarea
+              id="custom-instructions"
+              value={customInstructions}
+              maxLength={4000}
+              onChange={(event) => {
+                setCustomInstructions(event.target.value);
+                if (event.target.value && characterStyle !== 'custom') setCharacterStyle('custom');
+              }}
+              placeholder="Example: Prefer structured answers, cite document names, and explain technical terms briefly."
+              className="min-h-36 w-full resize-y rounded-xl border border-input bg-background/65 px-3.5 py-3 text-sm leading-6 outline-none transition-shadow placeholder:text-muted-foreground/45 focus:ring-2 focus:ring-ring/60"
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSavePreferences} disabled={savingPreferences} className="rounded-xl">
+              {savingPreferences ? <Loader2 className="animate-spin" /> : <Save />}
+              Save personalization
+            </Button>
+          </div>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+
+  const renderKnowledge = () => (
+    <div className="space-y-5">
+      <SectionHeading
+        icon={Database}
+        eyebrow="Grounded knowledge"
+        title="Manage your indexed documents"
+        description="Review storage, generate a real document summary, remove files, or rebuild the retrieval index."
+      />
+
+      <div className="grid grid-cols-3 gap-2.5">
+        <Metric label="Documents" value={String(documents.length)} icon={FileText} />
+        <Metric label="Chunks" value={String(totalChunks)} icon={BookOpen} />
+        <Metric label="Storage" value={formatBytes(totalSize)} icon={HardDrive} />
+      </div>
+
+      <SettingsCard>
+        <CardHeader
+          title="Knowledge base"
+          description="Summaries use extracted document chunks; re-indexing restores the corpus from object storage first."
+          action={(
+            <div className="flex gap-1.5">
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => void loadDocuments()} disabled={loadingDocs} aria-label="Refresh documents">
+                <RefreshCw className={cn('h-3.5 w-3.5', loadingDocs && 'animate-spin')} />
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={handleReindex} disabled={reindexing || !documents.length}>
+                {reindexing ? <Loader2 className="animate-spin" /> : <Database />}
+                Re-index
+              </Button>
+            </div>
+          )}
+        />
+
+        {loadingDocs ? (
+          <div className="grid min-h-44 place-items-center p-6 text-muted-foreground">
+            <div className="text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /><p className="mt-2 text-xs">Loading your documents…</p></div>
+          </div>
+        ) : docsError ? (
+          <div className="m-4 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive sm:m-5">{docsError}</div>
+        ) : !documents.length ? (
+          <div className="grid min-h-44 place-items-center p-6 text-center">
+            <div><Database className="mx-auto h-7 w-7 text-muted-foreground/35" /><p className="mt-3 text-sm font-semibold">No indexed documents</p><p className="mt-1 text-xs text-muted-foreground">Upload a document from the knowledge base panel to get started.</p></div>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/35 px-4 sm:px-5">
+            {documents.map((document) => (
+              <div key={document.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border/45 bg-muted/45 text-primary">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground" title={document.name}>{document.name}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                    <span>{formatBytes(document.size)}</span><span>•</span><span>{document.chunks || 0} chunks</span><span>•</span>
+                    <span className={document.indexed ? 'text-emerald-500' : 'text-amber-500'}>{document.indexed ? 'Indexed' : 'Processing'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 sm:justify-end">
+                  <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={() => void handleSummarize(document)} disabled={summarizingFile === document.id || !document.indexed}>
+                    {summarizingFile === document.id ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                    Summarize
+                  </Button>
+                  {document.source_url && (
+                    <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+                      <a href={document.source_url} target="_blank" rel="noopener noreferrer" aria-label={`Open source for ${document.name}`}><ExternalLink /></a>
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => void handleDeleteDocument(document)} disabled={deletingDocument === document.id} aria-label={`Delete ${document.name}`}>
+                    {deletingDocument === document.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {documents.length > 0 && (
+          <div className="border-t border-border/40 p-4 sm:p-5">
+            {!confirmClearDocuments ? (
+              <Button variant="outline" onClick={() => setConfirmClearDocuments(true)} className="rounded-xl border-destructive/25 text-destructive hover:bg-destructive/5 hover:text-destructive">
+                <Trash2 /> Delete all documents
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-destructive">Delete all uploaded files and their retrieval index?</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setConfirmClearDocuments(false)} className="rounded-lg">Cancel</Button>
+                  <Button variant="destructive" size="sm" className="rounded-lg" onClick={async () => {
+                    try {
+                      const result = await api.clearAllDocuments();
+                      setDocuments([]);
+                      setConfirmClearDocuments(false);
+                      toast.success(`Deleted ${result.deleted} document${result.deleted === 1 ? '' : 's'}`);
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : 'Could not delete documents');
+                    }
+                  }}>Delete all</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </SettingsCard>
+
+      <AnimatePresence>
+        {summary && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
+            <SettingsCard className="overflow-hidden border-primary/20">
+              <CardHeader
+                title={`Summary · ${summary.filename}`}
+                description="Generated from the indexed chunks stored for this document."
+                action={<Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setSummary(null)} aria-label="Close summary"><X /></Button>}
+              />
+              <div className="prose prose-sm max-h-80 max-w-none overflow-y-auto p-4 text-sm dark:prose-invert sm:p-5">
+                <ReactMarkdown>{summary.content}</ReactMarkdown>
+              </div>
+            </SettingsCard>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+
+  const renderPrivacy = () => (
+    <div className="space-y-5">
+      <SectionHeading
+        icon={ShieldCheck}
+        eyebrow="Privacy controls"
+        title="Your data, under your control"
+        description="Export a portable copy, clear chat history, or permanently remove the account and its stored data."
+      />
+
+      <SettingsCard>
+        <CardHeader title="Download your data" description="Creates a JSON export with account metadata, preferences, conversations and document metadata." action={<Download className="h-4 w-4 text-primary" />} />
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary"><Download className="h-4 w-4" /></div>
+            <div><p className="text-sm font-semibold">Portable account export</p><p className="mt-0.5 text-[11px] text-muted-foreground">Document binaries are not included.</p></div>
+          </div>
+          <Button variant="outline" onClick={handleExport} disabled={exporting} className="rounded-xl">
+            {exporting ? <Loader2 className="animate-spin" /> : <Download />}
+            Export JSON
+          </Button>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard>
+        <CardHeader title="Conversation history" description="This removes all conversations from the server and this device. Documents remain untouched." action={<MessageSquare className="h-4 w-4 text-muted-foreground" />} />
+        <div className="p-4 sm:p-5">
+          {!confirmClearChats ? (
+            <Button variant="outline" onClick={() => setConfirmClearChats(true)} className="rounded-xl"><Trash2 /> Clear all conversations</Button>
+          ) : (
+            <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-amber-600 dark:text-amber-400">This cannot be undone. Clear every conversation?</p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setConfirmClearChats(false)} className="rounded-lg">Cancel</Button>
+                <Button variant="destructive" size="sm" disabled={clearingChats} className="rounded-lg" onClick={async () => {
+                  setClearingChats(true);
+                  try {
+                    await clearAllConversations();
+                    setConfirmClearChats(false);
+                    toast.success('All conversations cleared');
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : 'Could not clear conversations');
+                  } finally {
+                    setClearingChats(false);
+                  }
+                }}>{clearingChats ? <Loader2 className="animate-spin" /> : <Trash2 />}Clear history</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard className="border-destructive/25">
+        <CardHeader title="Danger zone" description="Deleting your account removes conversations, documents, indexes, preferences and active sessions." action={<AlertTriangle className="h-4 w-4 text-destructive" />} />
+        <div className="p-4 sm:p-5">
+          {!confirmDeleteAccount ? (
+            <Button variant="outline" onClick={() => setConfirmDeleteAccount(true)} className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/5 hover:text-destructive"><Trash2 /> Delete account</Button>
+          ) : (
+            <div className="space-y-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+              <div>
+                <p className="text-sm font-semibold text-destructive">Permanently delete this account</p>
+                <p className="mt-1 text-xs text-muted-foreground">Type <span className="font-mono font-semibold text-foreground">{username}</span> to confirm.</p>
+              </div>
+              <Input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder={username || 'username'} className="h-10 rounded-xl bg-background/70" />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" className="rounded-lg" onClick={() => { setConfirmDeleteAccount(false); setDeleteConfirmation(''); }}>Cancel</Button>
+                <Button variant="destructive" size="sm" className="rounded-lg" disabled={deletingAccount || deleteConfirmation !== username} onClick={async () => {
+                  setDeletingAccount(true);
+                  try {
+                    await api.deleteAccount();
+                    await logout();
+                    toast.success('Account deleted');
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : 'Could not delete account');
+                  } finally {
+                    setDeletingAccount(false);
+                  }
+                }}>{deletingAccount ? <Loader2 className="animate-spin" /> : <Trash2 />}Delete permanently</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </SettingsCard>
+    </div>
+  );
+
+  const renderSystem = () => {
+    const model = systemInfo?.llm_provider === 'groq' ? systemInfo.groq_model : systemInfo?.model;
+    const infrastructure = Object.entries(systemInfo?.infrastructure || {});
+    return (
+      <div className="space-y-5">
+        <SectionHeading
+          icon={Activity}
+          eyebrow="Live diagnostics"
+          title="Nova system status"
+          description="Every value below comes from the running backend and AI readiness probe."
+        />
+
+        <SettingsCard className="overflow-hidden">
+          <div className={cn(
+            'flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between',
+            readiness?.ready ? 'border-emerald-500/15 bg-emerald-500/5' : 'border-amber-500/15 bg-amber-500/5',
+          )}>
+            <div className="flex items-center gap-3">
+              <span className={cn('relative grid h-11 w-11 place-items-center rounded-2xl', readiness?.ready ? 'bg-emerald-500/12 text-emerald-500' : 'bg-amber-500/12 text-amber-500')}>
+                <Activity className="h-5 w-5" />
+                <span className={cn('absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-card', readiness?.ready ? 'bg-emerald-500' : 'bg-amber-500')} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">{readiness?.ready ? 'All AI services ready' : loadingSystem ? 'Checking Nova services…' : 'Service attention required'}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{readiness?.message || 'Waiting for live readiness data.'}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void loadSystem(true)} disabled={loadingSystem}>
+              <RefreshCw className={cn(loadingSystem && 'animate-spin')} /> Run live check
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-4 sm:p-5">
+            <Metric label="Provider" value={systemInfo?.llm_provider || '—'} icon={Activity} />
+            <Metric label="Model" value={model || '—'} icon={WandSparkles} />
+            <Metric label="Retrieval" value={systemInfo?.retrieval || '—'} icon={Database} />
+            <Metric label="Uptime" value={formatUptime(systemInfo?.uptime_seconds)} icon={MonitorSmartphone} />
+          </div>
+        </SettingsCard>
+
+        <SettingsCard>
+          <CardHeader title="RAG configuration" description="Read-only production configuration reported by the API." />
+          <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-4 sm:p-5">
+            <Metric label="Top K" value={String(systemInfo?.rag_config?.top_k ?? '—')} icon={BookOpen} />
+            <Metric label="Context" value={systemInfo?.rag_config?.context_window ? `${systemInfo.rag_config.context_window} tokens` : '—'} icon={MessageSquare} />
+            <Metric label="Max output" value={systemInfo?.rag_config?.max_tokens ? `${systemInfo.rag_config.max_tokens} tokens` : '—'} icon={WandSparkles} />
+            <Metric label="Upload limit" value={systemInfo?.rag_config?.max_upload_bytes ? formatBytes(systemInfo.rag_config.max_upload_bytes) : '—'} icon={Upload} />
+          </div>
+        </SettingsCard>
+
+        <SettingsCard>
+          <CardHeader title="Infrastructure" description="Persistence and worker modes reported by the active deployment." />
+          <div className="grid gap-2 p-4 sm:grid-cols-2 sm:p-5">
+            {infrastructure.length ? infrastructure.map(([key, value]) => (
+              <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-border/45 bg-background/55 px-3.5 py-3">
+                <span className="text-xs capitalize text-muted-foreground">{key.replaceAll('_', ' ')}</span>
+                <span className="truncate font-mono text-[11px] font-semibold text-foreground">{String(value)}</span>
+              </div>
+            )) : <p className="text-xs text-muted-foreground">Diagnostics have not loaded yet.</p>}
+          </div>
+        </SettingsCard>
+
+        <SettingsCard>
+          <div className="flex items-center justify-between gap-4 p-4 sm:p-5">
+            <div>
+              <p className="text-sm font-semibold">Developer diagnostics</p>
+              <p className="mt-1 text-xs text-muted-foreground">Expose raw, non-secret health payloads for troubleshooting.</p>
+            </div>
+            <Toggle checked={developerMode} onChange={setDeveloperMode} label="Developer diagnostics" />
+          </div>
+          {developerMode && (
+            <div className="border-t border-border/40 p-4 sm:p-5">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Diagnostic payload</span>
+                <Button variant="ghost" size="sm" className="h-8 rounded-lg text-xs" onClick={async () => {
+                  await navigator.clipboard.writeText(diagnostics);
+                  toast.success('Diagnostics copied');
+                }}><Copy /> Copy</Button>
+              </div>
+              <pre className="max-h-64 overflow-auto rounded-xl border border-border/45 bg-background/75 p-3 text-[10px] leading-5 text-muted-foreground">{diagnostics}</pre>
+            </div>
+          )}
+        </SettingsCard>
+      </div>
+    );
+  };
+
+  const renderAbout = () => (
+    <div className="space-y-5">
+      <SectionHeading
+        icon={Info}
+        eyebrow="Nova knowledge OS"
+        title="Private knowledge, grounded answers"
+        description="Nova turns your uploaded documents into traceable context for private, citation-aware conversations."
+      />
+
+      <SettingsCard className="overflow-hidden">
+        <div className="relative bg-gradient-to-br from-primary/16 via-violet-500/7 to-sky-500/5 p-6 text-center sm:p-8">
+          <div className="pointer-events-none absolute left-1/2 top-0 h-36 w-72 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
+          <div className="relative mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-primary/25 bg-background/65 text-primary shadow-xl shadow-primary/10"><Sparkles className="h-6 w-6" /></div>
+          <h3 className="relative mt-4 text-xl font-bold tracking-tight">Nova AI Agent</h3>
+          <p className="relative mt-1 text-sm text-muted-foreground">Version {systemInfo?.version || '2.1.0'} · {systemInfo?.environment || 'workspace'}</p>
+        </div>
+        <div className="grid gap-2 p-4 sm:grid-cols-3 sm:p-5">
+          {[
+            { icon: LockKeyhole, title: 'Account isolated', description: 'Documents, indexes and conversations are scoped to your account.' },
+            { icon: Database, title: 'Grounded retrieval', description: 'Answers are built from indexed document chunks, not hidden placeholders.' },
+            { icon: ShieldCheck, title: 'Data controls', description: 'Export, clear or permanently delete your account data.' },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.title} className="rounded-xl border border-border/45 bg-background/50 p-3.5">
+                <Icon className="h-4 w-4 text-primary" />
+                <p className="mt-2 text-xs font-semibold">{item.title}</p>
+                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{item.description}</p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex flex-col gap-2 border-t border-border/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <p className="text-xs text-muted-foreground">React · TypeScript · FastAPI · BM25 / Hybrid retrieval</p>
+          <Button asChild variant="outline" size="sm" className="rounded-xl">
+            <a href="https://github.com/Thazg/NovaRAGChatBot" target="_blank" rel="noopener noreferrer">GitHub <ExternalLink /></a>
+          </Button>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+
+  const content = {
+    general: renderGeneral,
+    profile: renderProfile,
+    personalization: renderPersonalization,
+    knowledge: renderKnowledge,
+    privacy: renderPrivacy,
+    system: renderSystem,
+    about: renderAbout,
+  }[activeSection];
+
+  const activeMeta = sections.find((section) => section.id === activeSection) || sections[0];
+  const ActiveSectionIcon = activeMeta.icon;
 
   return (
     <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
       <SheetTrigger asChild>
-        <Button aria-label="Open settings" variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground group">
-          <SettingsIcon className="h-5 w-5 transition-transform group-hover:rotate-45 duration-300" />
+        <Button aria-label="Open settings" variant="ghost" size="icon" className="group text-muted-foreground hover:text-foreground">
+          <SettingsIcon className="h-5 w-5 transition-transform duration-300 group-hover:rotate-45" />
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-2xl p-0 border-l border-border/50 bg-background/95 backdrop-blur-xl">
-        <SheetHeader className="px-4 md:px-6 pt-4 md:pt-6 pb-3 md:pb-4 border-b border-border/50 text-left">
-          <SheetTitle className="text-lg md:text-xl font-medium tracking-tight">Settings</SheetTitle>
+      <SheetContent className="w-full overflow-hidden border-l border-border/50 bg-background/96 p-0 backdrop-blur-2xl sm:max-w-[980px]">
+        <SheetHeader className="relative border-b border-border/45 px-5 py-4 text-left sm:px-6 sm:py-5">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/80 to-transparent" />
+          <div className="flex items-center gap-3 pr-8">
+            <div className="grid h-9 w-9 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary"><SettingsIcon className="h-4 w-4" /></div>
+            <div>
+              <SheetTitle className="text-lg tracking-tight">Settings</SheetTitle>
+              <SheetDescription className="mt-0.5 text-xs">Control your workspace, knowledge and account.</SheetDescription>
+            </div>
+          </div>
         </SheetHeader>
 
-        <div className="flex h-[calc(100dvh-49px)] md:h-[calc(100dvh-64px)] overflow-hidden">
-          {/* Sidebar Navigation */}
-          <div className="w-52 border-r border-border/50 p-4 hidden sm:block shrink-0">
-            <nav className="space-y-1">
+        <div className="flex h-[calc(100dvh-73px)] min-h-0 flex-col sm:flex-row">
+          <aside className="shrink-0 border-b border-border/45 bg-muted/15 sm:w-64 sm:border-b-0 sm:border-r">
+            <div className="flex gap-1.5 overflow-x-auto p-3 sm:block sm:space-y-1 sm:overflow-visible sm:p-4">
               {sections.map((section) => {
                 const Icon = section.icon;
+                const active = section.id === activeSection;
                 return (
                   <button
                     key={section.id}
+                    type="button"
                     onClick={() => setActiveSection(section.id)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
-                      activeSection === section.id
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                      'group flex min-w-fit items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all sm:w-full',
+                      active
+                        ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.16)]'
+                        : 'text-muted-foreground hover:bg-muted/55 hover:text-foreground',
                     )}
                   >
-                    <Icon className="h-4 w-4" />
-                    {section.label}
+                    <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors', active ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background/60 group-hover:bg-background')}>
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="hidden min-w-0 flex-1 sm:block">
+                      <span className="block text-xs font-semibold">{section.label}</span>
+                      <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{section.description}</span>
+                    </span>
+                    <ChevronRight className={cn('hidden h-3.5 w-3.5 sm:block', active ? 'opacity-70' : 'opacity-0 group-hover:opacity-40')} />
                   </button>
                 );
               })}
-            </nav>
-          </div>
-
-          {/* Content Area */}
-          <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            {/* Mobile section tabs */}
-            <div className="sm:hidden px-4 pt-2.5 pb-1 overflow-x-auto scrollbar-none shrink-0">
-              <div className="flex gap-1 min-w-0 border-b border-border/20 pb-2">
-                {sections.map((section) => {
-                  const Icon = section.icon;
-                  const isActive = activeSection === section.id;
-                  return (
-                    <button
-                      key={section.id}
-                      onClick={() => setActiveSection(section.id)}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 relative",
-                        isActive
-                          ? "text-primary"
-                          : "text-muted-foreground/70 hover:text-foreground"
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {section.label}
-                      {isActive && (
-                        <span className="absolute bottom-[-9px] left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
-                      )}
-                    </button>
-                  );
-                })}
+            </div>
+            <div className="hidden border-t border-border/40 p-4 sm:block">
+              <div className="rounded-xl border border-border/40 bg-background/45 p-3">
+                <div className="flex items-center gap-2">
+                  <Languages className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Account sync</span>
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-muted-foreground">Profile and response preferences follow your Nova account.</p>
               </div>
             </div>
-            <ScrollArea className="flex-1 min-w-0 px-4 md:px-6 pt-1 md:pt-2 pb-8 md:pb-12">
-            <div className="space-y-4 md:space-y-6 w-full">
-              
-              {/* General */}
-              {activeSection === 'general' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Globe className="h-4 w-4" />
-                    General
-                  </div>
-                  <div className="space-y-3 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Response Language</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {languages.map((l) => (
-                          <button
-                            key={l.id}
-                            onClick={() => setLanguage(l.id)}
-                            className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                              language === l.id
-                                ? 'bg-primary text-primary-foreground shadow-sm'
-                                : 'bg-background border border-border/40 text-muted-foreground hover:border-border/70'
-                            }`}
-                          >
-                            {l.label}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground/50">Auto detects your question's language. Force English or Vietnamese to override.</p>
-                    </div>
-                  </div>
+          </aside>
+
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl p-4 pb-12 sm:p-6 sm:pb-16 lg:p-8">
+              <div className="mb-4 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:hidden">
+                <ActiveSectionIcon className="h-3.5 w-3.5" /> {activeMeta.label}
+              </div>
+              <AnimatePresence mode="wait">
+                <motion.div key={activeSection} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.2 }}>
+                  {content()}
                 </motion.div>
-              )}
-
-              {/* Appearance (with Animations merged) */}
-              {activeSection === 'appearance' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Monitor className="h-4 w-4" />
-                    Appearance
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['light', 'dark', 'system'] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => setTheme(t)}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                          theme === t 
-                            ? 'bg-primary text-primary-foreground shadow-sm' 
-                            : 'bg-muted/50 hover:bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Profile */}
-              {activeSection === 'profile' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <User className="h-4 w-4" />
-                    Profile
-                  </div>
-                  <div className="space-y-4 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        <div className="h-16 w-16 rounded-full overflow-hidden border-2 border-border/50 bg-muted flex items-center justify-center shrink-0">
-                          {avatar ? <img src={avatar} alt="Avatar" className="h-full w-full object-cover" /> : <User className="h-8 w-8 text-muted-foreground" />}
-                        </div>
-                        <Button 
-                          size="icon" 
-                          className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full shadow-sm"
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          <Upload className="h-3 w-3" />
-                        </Button>
-                        <input 
-                          type="file" 
-                          ref={fileInputRef} 
-                          className="hidden" 
-                          accept="image/*" 
-                          onChange={handleAvatarChange}
-                        />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">Display Name</label>
-                        <Input 
-                          value={displayName} 
-                          onChange={(e) => setDisplayName(e.target.value)}
-                          className="h-9 rounded-lg"
-                        />
-                      </div>
-                    </div>
-                    {avatar && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full rounded-xl text-xs gap-1.5 text-destructive"
-                        onClick={() => { setAvatar(null); toast.success('Avatar removed'); }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Remove Avatar
-                      </Button>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
-
-
-              {/* Personalization */}
-              {activeSection === 'personalization' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Heart className="h-4 w-4" />
-                    Personalization
-                  </div>
-                  <div className="space-y-4 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Character Style</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: 'warm', label: 'Warm', desc: 'Caring, affectionate tone' },
-                          { id: 'enthusiastic', label: 'Enthusiastic', desc: 'Energetic, excited' },
-                          { id: 'professional', label: 'Professional', desc: 'Formal, polished' },
-                          { id: 'concise', label: 'Concise', desc: 'Direct, to the point' },
-                          { id: 'friendly', label: 'Friendly', desc: 'Casual, approachable' },
-                          { id: 'custom', label: 'Custom', desc: 'Use your instructions' },
-                        ].map((c) => (
-                          <button
-                            key={c.id}
-                            onClick={() => setCharacterStyle(c.id)}
-                            className={cn(
-                              'px-3 py-2.5 rounded-xl text-left transition-all',
-                              characterStyle === c.id
-                                ? 'bg-primary/10 border border-primary/30 text-primary'
-                                : 'bg-background border border-border/40 text-muted-foreground hover:border-border/70'
-                            )}
-                          >
-                            <p className="text-[13px] font-medium">{c.label}</p>
-                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">{c.desc}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-border/30 space-y-3">
-                      <label className="text-xs font-medium text-muted-foreground">Nickname</label>
-                      <Input
-                        value={nickname}
-                        onChange={(e) => setNickname(e.target.value)}
-                        placeholder="What should I call you?"
-                        className="h-9 rounded-lg"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Custom Instruction</label>
-                      <textarea
-                        value={customInstructions}
-                        onChange={(e) => {
-                          setCustomInstructions(e.target.value);
-                          if (e.target.value && characterStyle !== 'custom') {
-                            setCharacterStyle('custom');
-                          }
-                        }}
-                        placeholder="Additional behaviour, style, tone preferences"
-                        className="w-full min-h-[100px] rounded-xl bg-background border border-border/50 px-3 py-2.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-primary/40"
-                      />
-                      <p className="text-[10px] text-muted-foreground/50">These instructions will be sent with every message.</p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Privacy & Data */}
-              {activeSection === 'privacy' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Shield className="h-4 w-4" />
-                    Privacy & Data
-                  </div>
-                  <div className="space-y-3 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    <Button variant="outline" className="w-full rounded-xl justify-start text-sm h-9 gap-2" onClick={() => {
-                      useChatStore.getState().clearAllConversations();
-                      toast.success('All conversations cleared');
-                    }}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                      <span>Clear All Conversations</span>
-                    </Button>
-                    <div className="pt-2 border-t border-border/30 space-y-2">
-                      <AnimatePresence>
-                        {!confirmDelete ? (
-                          <motion.div key="btn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                            <Button
-                              variant="outline"
-                              className="w-full rounded-xl justify-start text-sm h-9 gap-2 border-destructive/30 hover:border-destructive/60 text-destructive"
-                              onClick={() => setConfirmDelete(true)}
-                            >
-                              <AlertTriangle className="h-4 w-4" />
-                              <span>Delete Account</span>
-                            </Button>
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key="confirm"
-                            initial={{ opacity: 0, y: -5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            className="space-y-2 p-3 rounded-xl bg-destructive/10 border border-destructive/20"
-                          >
-                            <p className="text-xs font-medium text-destructive">This will permanently delete your account and all data.</p>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                className="flex-1 h-8 text-xs"
-                                disabled={deletingAccount}
-                                onClick={async () => {
-                                  setDeletingAccount(true);
-                                  try {
-                                    await api.deleteAccount();
-                                    toast.success('Account deleted');
-                                    useChatStore.getState().logout();
-                                  } catch (err: unknown) {
-                                    toast.error(err instanceof Error ? err.message : 'Failed to delete account');
-                                  } finally {
-                                    setDeletingAccount(false);
-                                    setConfirmDelete(false);
-                                  }
-                                }}
-                              >
-                                {deletingAccount ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                                {deletingAccount ? 'Deleting...' : 'Confirm Delete'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 h-8 text-xs"
-                                onClick={() => setConfirmDelete(false)}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Shortcuts */}
-              {activeSection === 'shortcuts' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Keyboard className="h-4 w-4" />
-                    Keyboard Shortcuts
-                  </div>
-                  <div className="space-y-2 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">New Chat</span>
-                      <kbd className="px-2 py-1 rounded bg-background border border-border/50 text-xs">Ctrl + N</kbd>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Global Search</span>
-                      <kbd className="px-2 py-1 rounded bg-background border border-border/50 text-xs">Ctrl + K</kbd>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Focus Input</span>
-                      <kbd className="px-2 py-1 rounded bg-background border border-border/50 text-xs">Ctrl + /</kbd>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Stop Generation</span>
-                      <kbd className="px-2 py-1 rounded bg-background border border-border/50 text-xs">Esc</kbd>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Storage */}
-              {activeSection === 'storage' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Database className="h-4 w-4" />
-                    Storage
-                  </div>
-                  <div className="space-y-3 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    {loadingDocs ? (
-                      <div className="flex items-center justify-center py-6">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Uploaded Files</span>
-                            <span className="font-mono text-xs text-foreground">{documents.length}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Total Size</span>
-                            <span className="font-mono text-xs text-foreground">
-                              {documents.reduce((s, d) => s + d.size, 0) > 1048576
-                                ? `${(documents.reduce((s, d) => s + d.size, 0) / 1048576).toFixed(1)} MB`
-                                : `${(documents.reduce((s, d) => s + d.size, 0) / 1024).toFixed(0)} KB`}
-                            </span>
-                          </div>
-                        </div>
-                        {documents.length > 0 && (
-                          <div className="pt-2 space-y-1.5 max-h-40 overflow-y-auto">
-                            {documents.map((doc) => (
-                              <div key={doc.id} className="flex items-center gap-2 text-xs text-muted-foreground/70">
-                                <FileText className="h-3 w-3 shrink-0" />
-                                <button
-                                  onClick={async () => {
-                                    setSummarizingFile(doc.name);
-                                    setSummaryResult(null);
-                                    try {
-                                      const res = await api.summarizeDocument(doc.name);
-                                      setSummaryResult(res.summary);
-                                    } catch {
-                                      toast.error('Failed to summarize');
-                                    } finally {
-                                      setSummarizingFile(null);
-                                    }
-                                  }}
-                                  className="truncate flex-1 text-left hover:text-primary transition-colors"
-                                >
-                                  {doc.name}
-                                </button>
-                                <span className="shrink-0">{doc.size > 1024 ? `${(doc.size / 1024).toFixed(0)} KB` : `${doc.size} B`}</span>
-                                {summarizingFile === doc.name ? (
-                                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                                ) : (
-                                  <button
-                                    onClick={async () => {
-                                      setSummarizingFile(doc.name);
-                                      setSummaryResult(null);
-                                      try {
-                                        const res = await api.summarizeDocument(doc.name);
-                                        setSummaryResult(res.summary);
-                                      } catch {
-                                        toast.error('Failed to summarize');
-                                      } finally {
-                                        setSummarizingFile(null);
-                                      }
-                                    }}
-                                    className="text-[10px] text-primary/70 hover:text-primary shrink-0 ml-1"
-                                  >
-                                    Summarize
-                                  </button>
-                                )}
-                                {doc.source_url && (
-                                  <a
-                                    href={doc.source_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="shrink-0 ml-1 text-[10px] text-blue-400/60 hover:text-blue-400 transition-colors"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <ExternalLink className="h-2.5 w-2.5 inline" />
-                                  </a>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {summaryResult && (
-                          <div className="pt-2 border-t border-border/30">
-                            <p className="text-[11px] font-medium text-muted-foreground mb-1">Summary:</p>
-                            <p className="text-xs text-foreground/80 leading-relaxed">{summaryResult}</p>
-                            <button
-                              onClick={() => setSummaryResult(null)}
-                              className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground mt-1"
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        )}
-                        <div className="pt-3 border-t border-border/30 space-y-2">
-                          <Button variant="outline" className="w-full rounded-xl justify-start text-sm h-9 gap-2" onClick={async () => {
-                            try {
-                              const result = await api.clearAllDocuments();
-                              setDocuments([]);
-                              toast.success(`Deleted ${result.deleted} file(s)`);
-                            } catch {
-                              toast.error('Failed to clear files');
-                            }
-                          }}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                            <span>Delete All Files</span>
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                    <div className="pt-2 border-t border-border/30">
-                      <p className="text-[10px] text-muted-foreground/50">Uploaded documents are stored on the server.</p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Developer Mode */}
-              {activeSection === 'developer' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Code className="h-4 w-4" />
-                    Developer Mode
-                  </div>
-                  <div className="space-y-3 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-sm font-medium text-foreground">Enable Developer Mode</label>
-                        <p className="text-[11px] text-muted-foreground/60 mt-0.5">Show backend, system, and debug tools</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="accent-primary h-4 w-4 rounded-sm"
-                        checked={developerMode}
-                        onChange={(e) => setDeveloperMode(e.target.checked)}
-                      />
-                    </div>
-                    {developerMode && (
-                      <div className="pt-3 border-t border-border/30 space-y-2">
-                        <p className="text-xs text-muted-foreground/70">Additional sections are now visible in the sidebar navigation.</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
-                          <Cpu className="h-3 w-3" />
-                          <span>System — Model info, diagnostics</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
-
-
-              {/* System (developer only) */}
-              {activeSection === 'system' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Cpu className="h-4 w-4" />
-                    System
-                  </div>
-                  <div className="space-y-3 p-4 bg-muted/20 rounded-xl border border-border/50">
-                    <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background/70 p-3">
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          "grid h-7 w-7 place-items-center rounded-lg",
-                          readiness?.ready ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500",
-                        )}>
-                          <Activity className="h-3.5 w-3.5" />
-                        </span>
-                        <div>
-                          <p className="text-xs font-semibold text-foreground">AI readiness</p>
-                          <p className="text-[10px] text-muted-foreground">{readiness?.message || 'Checking provider…'}</p>
-                        </div>
-                      </div>
-                      <span className={cn(
-                        "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
-                        readiness?.ready ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500",
-                      )}>
-                        {readiness?.ready ? 'Ready' : 'Checking'}
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">AI Provider</label>
-                      <div className="text-sm font-mono p-2 bg-background rounded-md border text-foreground">
-                        {systemInfo?.llm_provider === 'groq'
-                          ? `Groq (${systemInfo.groq_model || 'configured model'})`
-                          : systemInfo?.llm_provider === 'ollama'
-                            ? `Ollama (${systemInfo.model || 'local model'})`
-                            : 'Checking…'}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-lg border border-border/40 bg-background/55 p-2">
-                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Version</p>
-                        <p className="mt-1 font-mono text-xs text-foreground">v{systemInfo?.version || '—'}</p>
-                      </div>
-                      <div className="rounded-lg border border-border/40 bg-background/55 p-2">
-                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Environment</p>
-                        <p className="mt-1 truncate font-mono text-xs capitalize text-foreground">{systemInfo?.environment || '—'}</p>
-                      </div>
-                      <div className="rounded-lg border border-border/40 bg-background/55 p-2">
-                        <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Uptime</p>
-                        <p className="mt-1 font-mono text-xs text-foreground">{systemInfo?.uptime_seconds != null ? `${Math.floor(systemInfo.uptime_seconds)}s` : '—'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-foreground">Retrieval Top-K</label>
-                      <span className="text-xs font-mono text-muted-foreground">5</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-foreground">Context Window</label>
-                      <span className="text-xs font-mono text-muted-foreground">4096</span>
-                    </div>
-                    <div className="pt-2 border-t border-border/30 space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">RAG Pipeline</label>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {(systemInfo?.retrieval === 'hybrid'
-                          ? ['BM25', 'Semantic vectors', 'RRF fusion', 'Context builder', 'Prompt assembly']
-                          : ['BM25 lexical search', 'Query expansion', 'Context builder', 'Prompt assembly']
-                        ).map((step) => (
-                          <span key={step} className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-medium">{step}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* About */}
-              {activeSection === 'about' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                    <Info className="h-4 w-4" />
-                    About
-                  </div>
-                  <div className="p-4 bg-muted/20 rounded-xl border border-border/50 text-center space-y-1">
-                    <h4 className="font-bold text-sm tracking-widest text-foreground">NOVA AI AGENT</h4>
-                    <p className="text-xs text-muted-foreground">Version 2.0.0</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-2">Premium Enterprise RAG Platform</p>
-                    <div className="pt-4 border-t border-border/30 mt-4">
-                      <p className="text-xs text-muted-foreground">Built with React, TypeScript, and Framer Motion</p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-              
+              </AnimatePresence>
             </div>
-          </ScrollArea>
-          </div>
+          </main>
         </div>
       </SheetContent>
     </Sheet>

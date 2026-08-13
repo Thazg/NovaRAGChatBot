@@ -80,3 +80,19 @@ def revoke(token: str) -> None:
         if token_hash in payload:
             payload[token_hash]["revoked"] = True
             _save(payload)
+
+
+def revoke_user(user_id: str) -> None:
+    if DATABASE_ENABLED:
+        from services.postgres_store import revoke_refresh_sessions_for_user
+        revoke_refresh_sessions_for_user(user_id)
+        return
+    with _LOCK:
+        payload = _load()
+        changed = False
+        for record in payload.values():
+            if record.get("user_id") == user_id and not record.get("revoked"):
+                record["revoked"] = True
+                changed = True
+        if changed:
+            _save(payload)

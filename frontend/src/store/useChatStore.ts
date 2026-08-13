@@ -2,7 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import type { Conversation, Message } from '../types';
-import { auth, api } from '../services/api';
+import { auth, api, type UserPreferences } from '../services/api';
+
+const preferenceState = (preferences: UserPreferences): Partial<ChatState> => ({
+  displayName: preferences.display_name,
+  theme: preferences.theme,
+  language: preferences.language,
+  characterStyle: preferences.character_style,
+  nickname: preferences.nickname,
+  customInstructions: preferences.custom_instructions,
+});
 
 interface ChatState {
   // Auth
@@ -42,6 +51,8 @@ interface ChatState {
   setNickname: (nickname: string) => void;
   setDeveloperMode: (mode: boolean) => void;
   setLanguage: (lang: 'auto' | 'english' | 'vietnamese') => void;
+  syncPreferences: () => Promise<void>;
+  savePreferences: () => Promise<void>;
   setSidebarActiveTab: (tab: 'conversations' | 'documents') => void;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
@@ -53,7 +64,7 @@ interface ChatState {
   renameConversation: (id: string, title: string) => void;
   pinConversation: (id: string) => void;
   duplicateConversation: (id: string) => void;
-  clearAllConversations: () => void;
+  clearAllConversations: () => Promise<void>;
   
   // Message actions
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'createdAt'>) => string;
@@ -80,7 +91,7 @@ type PersistedChatState = Pick<ChatState,
 
 export const useChatStore = create<ChatState>()(
   persist<ChatState, [], [], PersistedChatState>(
-    (set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void) => ({
+    (set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void, get) => ({
       token: null,
       userId: null,
       username: null,
@@ -123,15 +134,20 @@ export const useChatStore = create<ChatState>()(
         } catch {
           set({ conversations: [], currentConversationId: null });
         }
+        const preferences = await api.getPreferences().catch(() => null);
+        if (preferences) set(preferenceState(preferences));
       },
       register: async (username: string, password: string) => {
         const res = await auth.register(username, password);
         set({ token: res.access_token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
+        const preferences = await api.getPreferences().catch(() => null);
+        if (preferences) set(preferenceState(preferences));
       },
       bootstrapSession: async () => {
         const res = await auth.refresh();
         const username = res.username || 'User';
         const convs = await api.getConversations();
+        const preferences = await api.getPreferences().catch(() => null);
         const mapped: Conversation[] = convs.map((c) => ({
           id: c.id,
           title: c.title || 'New Chat',
@@ -152,6 +168,7 @@ export const useChatStore = create<ChatState>()(
           displayName: username,
           conversations: mapped,
           currentConversationId: mapped[0]?.id || null,
+          ...(preferences ? preferenceState(preferences) : {}),
         });
       },
       logout: async () => {
@@ -170,6 +187,22 @@ export const useChatStore = create<ChatState>()(
       },
 
       setLanguage: (language: 'auto' | 'english' | 'vietnamese') => set({ language }),
+      syncPreferences: async () => {
+        const preferences = await api.getPreferences();
+        set(preferenceState(preferences));
+      },
+      savePreferences: async () => {
+        const state = get();
+        const preferences = await api.updatePreferences({
+          display_name: state.displayName.trim().slice(0, 80),
+          theme: state.theme,
+          language: state.language,
+          character_style: state.characterStyle as UserPreferences['character_style'],
+          nickname: state.nickname.trim().slice(0, 80),
+          custom_instructions: state.customInstructions.trim().slice(0, 4000),
+        });
+        set(preferenceState(preferences));
+      },
       setSidebarActiveTab: (sidebarActiveTab: 'conversations' | 'documents') => set({ sidebarActiveTab }),
       setSettingsOpen: (settingsOpen: boolean) => set({ settingsOpen }),
       setAboutOpen: (aboutOpen: boolean) => set({ aboutOpen }),
@@ -258,8 +291,8 @@ export const useChatStore = create<ChatState>()(
         };
       }),
 
-      clearAllConversations: () => {
-        api.clearConversations().catch(() => {});
+      clearAllConversations: async () => {
+        await api.clearConversations();
         set({ conversations: [], currentConversationId: null });
       },
 
@@ -368,7 +401,7 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'rag-chat-storage',
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
         const unsafeState = persistedState as PersistedChatState & Record<string, unknown>;
         const {

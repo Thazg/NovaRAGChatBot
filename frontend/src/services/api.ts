@@ -38,7 +38,7 @@ export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 const StatusSchema = z.object({ status: z.string() });
 const DeleteCountSchema = StatusSchema.extend({ deleted: z.number().int().nonnegative() });
 const AccountDeleteSchema = StatusSchema.extend({ message: z.string() });
-const MeSchema = z.object({ user_id: z.string().uuid() });
+const MeSchema = z.object({ user_id: z.string().uuid(), username: z.string().optional().nullable() });
 const ChatResponseSchema = z.object({ answer: z.string() });
 const ErrorResponseSchema = z.object({ detail: z.string() });
 
@@ -137,6 +137,13 @@ const HealthStatusSchema = z.object({
   retrieval: z.string().optional(),
   embedding_model: z.string().nullable().optional(),
   infrastructure: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  rag_config: z.object({
+    top_k: z.number().int().positive(),
+    context_window: z.number().int().positive(),
+    max_tokens: z.number().int().positive(),
+    max_context_chars: z.number().int().positive(),
+    max_upload_bytes: z.number().int().positive(),
+  }).optional(),
 }).passthrough();
 
 const ReadinessStatusSchema = z.object({
@@ -150,6 +157,23 @@ const ReadinessStatusSchema = z.object({
   llm_provider: z.string().optional(),
   infrastructure: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
 }).passthrough();
+
+const UserPreferencesSchema = z.object({
+  display_name: z.string().max(80),
+  theme: z.enum(['light', 'dark', 'system']),
+  language: z.enum(['auto', 'english', 'vietnamese']),
+  character_style: z.enum(['warm', 'enthusiastic', 'professional', 'concise', 'friendly', 'custom']),
+  nickname: z.string().max(80),
+  custom_instructions: z.string().max(4000),
+});
+
+const AccountExportSchema = z.object({
+  exported_at: z.string(),
+  account: z.object({ user_id: z.string().uuid(), username: z.string().nullable().optional() }),
+  preferences: UserPreferencesSchema,
+  conversations: z.array(ConversationSchema),
+  documents: z.array(DocumentSchema),
+});
 
 const StreamEventSchema = z.union([
   z.object({ token: z.string() }),
@@ -307,6 +331,14 @@ export interface HealthStatus {
   model?: string;
   retrieval?: string;
   embedding_model?: string | null;
+  infrastructure?: Record<string, string | number>;
+  rag_config?: {
+    top_k: number;
+    context_window: number;
+    max_tokens: number;
+    max_context_chars: number;
+    max_upload_bytes: number;
+  };
 }
 
 export interface ReadinessStatus {
@@ -319,6 +351,9 @@ export interface ReadinessStatus {
   checked_at?: number;
   llm_provider?: string;
 }
+
+export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
+export type AccountExport = z.infer<typeof AccountExportSchema>;
 
 export const api = {
   async sendMessage(sessionId: string, question: string, abortSignal?: AbortSignal): Promise<ChatResponse> {
@@ -648,8 +683,8 @@ export const api = {
     return HealthStatusSchema.parse(await response.json());
   },
 
-  async readinessCheck(): Promise<ReadinessStatus> {
-    const response = await authorizedFetch('/health/ready', { headers: authHeaders() });
+  async readinessCheck(refresh = false): Promise<ReadinessStatus> {
+    const response = await authorizedFetch(`/health/ready${refresh ? '?refresh=true' : ''}`, { headers: authHeaders() });
     const data = await response.json().catch(() => null);
     if (!data) {
       throw new Error(`API error: ${response.statusText}`);
@@ -658,6 +693,38 @@ export const api = {
   },
 
   // Account
+  async getPreferences(): Promise<UserPreferences> {
+    const response = await authorizedFetch('/auth/preferences', { headers: authHeaders() });
+    if (!response.ok) throw await responseError(response, 'Failed to load preferences');
+    return UserPreferencesSchema.parse(await response.json());
+  },
+
+  async updatePreferences(preferences: UserPreferences): Promise<UserPreferences> {
+    const response = await authorizedFetch('/auth/preferences', {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(preferences),
+    });
+    if (!response.ok) throw await responseError(response, 'Failed to save preferences');
+    return UserPreferencesSchema.parse(await response.json());
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ status: string; message: string }> {
+    const response = await authorizedFetch('/auth/change-password', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    if (!response.ok) throw await responseError(response, 'Failed to update password');
+    return AccountDeleteSchema.parse(await response.json());
+  },
+
+  async exportAccountData(): Promise<AccountExport> {
+    const response = await authorizedFetch('/auth/export', { headers: authHeaders() });
+    if (!response.ok) throw await responseError(response, 'Failed to export account data');
+    return AccountExportSchema.parse(await response.json());
+  },
+
   async deleteAccount(): Promise<{ status: string; message: string }> {
     const response = await authorizedFetch('/auth/account', {
       method: 'DELETE',

@@ -26,6 +26,13 @@ def health_check():
         "index_queue": "rq" if settings.REDIS_URL else "thread-local",
         "monitoring": "sentry" if settings.SENTRY_DSN else "logs-only",
     }
+    rag_config = {
+        "top_k": settings.TOP_K,
+        "context_window": settings.NUM_CTX,
+        "max_tokens": settings.MAX_TOKENS,
+        "max_context_chars": settings.MAX_CONTEXT_CHARS,
+        "max_upload_bytes": settings.MAX_UPLOAD_BYTES,
+    }
     if settings.LLM_PROVIDER == "groq":
         api_key_set = bool(settings.GROQ_API_KEY)
         if not api_key_set:
@@ -44,6 +51,7 @@ def health_check():
             "embedding_model": settings.EMBEDDING_MODEL if settings.EMBEDDING_BASE_URL else None,
             "retrieval": "hybrid" if settings.EMBEDDING_BASE_URL else "bm25",
             "infrastructure": infrastructure,
+            "rag_config": rag_config,
         }
 
     return {
@@ -58,6 +66,7 @@ def health_check():
         "embedding_model": settings.EMBEDDING_MODEL if settings.EMBEDDING_BASE_URL else None,
         "retrieval": "hybrid" if settings.EMBEDDING_BASE_URL else "bm25",
         "infrastructure": infrastructure,
+        "rag_config": rag_config,
     }
 
 

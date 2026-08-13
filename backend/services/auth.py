@@ -173,6 +173,28 @@ def get_username(user_id: str) -> str | None:
     return None
 
 
+def change_password(user_id: str, current_password: str, new_password: str) -> bool:
+    if len(new_password) < 8 or len(new_password) > 256:
+        return False
+    if DATABASE_ENABLED:
+        from services.postgres_store import find_user_by_id, update_password
+        user = find_user_by_id(user_id)
+        if not user or not _verify_password(current_password, user.get("password_hash", ""))[0]:
+            return False
+        update_password(user_id, _hash_password(new_password))
+        return True
+    with _USERS_LOCK:
+        users = _load_users()
+        for user in users.values():
+            if isinstance(user, dict) and user.get("user_id") == user_id:
+                if not _verify_password(current_password, user.get("password_hash", ""))[0]:
+                    return False
+                user["password_hash"] = _hash_password(new_password)
+                _save_users(users)
+                return True
+    return False
+
+
 def delete_user(user_id: str) -> bool:
     if DATABASE_ENABLED:
         from services.postgres_store import delete_user_record
@@ -219,6 +241,12 @@ def delete_user(user_id: str) -> bool:
     try:
         from rag.rag_chain import unload_vector_store
         unload_vector_store(user_id)
+    except Exception:
+        pass
+
+    try:
+        from services.user_preferences import delete_preferences
+        delete_preferences(user_id)
     except Exception:
         pass
 
