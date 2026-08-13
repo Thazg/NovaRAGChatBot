@@ -378,13 +378,22 @@ test('scopes chat requests to a selected document and keeps settings usable', as
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText(/Reciprocal rank fusion merges both rankings/)).toBeVisible();
   expect(apiMock.lastChatRequest()).toMatchObject({ document_name: 'portfolio.txt' });
+  await expect(page.getByText('Private workspace')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Open settings' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  const settingsSidebarBox = await page.locator('.nova-settings-sidebar').boundingBox();
+  const activeNavBox = await page.getByRole('button', { name: /General/ }).boundingBox();
+  expect(settingsSidebarBox).not.toBeNull();
+  expect(activeNavBox).not.toBeNull();
+  expect(activeNavBox!.x + activeNavBox!.width).toBeLessThanOrEqual(settingsSidebarBox!.x + settingsSidebarBox!.width + 1);
   await page.getByRole('button', { name: 'Light', exact: true }).click();
   await expect(page.locator('html')).toHaveClass(/light/);
   await expect(page.getByText('Preferences save automatically')).toBeVisible();
   await expect.poll(() => apiMock.preferences().theme).toBe('light');
+  await page.getByRole('button', { name: /About Nova/ }).click();
+  await expect(page.getByText('Nova AI Knowledge OS')).toBeVisible();
+  await expect(page.getByText(/powered by Groq/i)).toHaveCount(0);
 });
 
 test('keeps the mobile workspace and settings navigation usable', async ({ page }) => {

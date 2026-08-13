@@ -168,6 +168,10 @@
       linear-gradient(180deg, hsl(var(--secondary) / 0.72), hsl(var(--background) / 0.92));
   }
 
+  .nova-sidebar {
+    background: linear-gradient(180deg, hsl(var(--sidebar-bg)), hsl(var(--card)));
+  }
+
   .nova-settings-card {
     background: hsl(var(--card) / 0.96);
     box-shadow: 0 1px 2px hsl(var(--foreground) / 0.035);
@@ -214,6 +218,17 @@
   .dark .nova-settings-card {
     background: hsl(var(--card) / 0.92);
     border-color: hsl(var(--border) / 0.72);
+  }
+
+  .dark .nova-settings-sidebar {
+    background: linear-gradient(180deg, hsl(230 22% 11%), hsl(231 25% 8%));
+    border-color: hsl(230 20% 22% / 0.9);
+  }
+
+  .dark .nova-sidebar {
+    background: linear-gradient(180deg, hsl(230 25% 9.5%), hsl(231 25% 7.5%));
+    border-color: hsl(230 20% 22% / 0.9);
+    box-shadow: inset -1px 0 0 hsl(var(--foreground) / 0.025);
   }
 
   .nova-shell {

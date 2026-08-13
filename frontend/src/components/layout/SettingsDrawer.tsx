@@ -104,7 +104,7 @@ const formatUptime = (seconds?: number) => {
 
 const SettingsCard = ({ children, className }: { children: ReactNode; className?: string }) => (
   <div className={cn(
-    'nova-settings-card rounded-[14px] border border-border/55 bg-card/90 shadow-sm',
+    'nova-settings-card min-w-0 max-w-full rounded-[14px] border border-border/55 bg-card/90 shadow-sm',
     className,
   )}>
     {children}
@@ -979,8 +979,11 @@ export const SettingsDrawer = () => {
         <div className="relative bg-gradient-to-br from-primary/16 via-violet-500/7 to-sky-500/5 p-6 text-center sm:p-8">
           <div className="pointer-events-none absolute left-1/2 top-0 h-36 w-72 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
           <div className="relative mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-primary/25 bg-background/65 text-primary shadow-xl shadow-primary/10"><Sparkles className="h-6 w-6" /></div>
-          <h3 className="relative mt-4 text-xl font-bold tracking-tight">Nova AI Agent</h3>
-          <p className="relative mt-1 text-sm text-muted-foreground">Version {systemInfo?.version || '2.1.0'} · {systemInfo?.environment || 'workspace'}</p>
+          <h3 className="relative mt-4 text-xl font-bold tracking-tight">Nova AI Knowledge OS</h3>
+          <p className="relative mx-auto mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+            A private, document-grounded workspace for searchable and citation-aware conversations.
+          </p>
+          <p className="relative mt-2 text-xs font-medium text-muted-foreground">Version {systemInfo?.version || '2.1.0'} · {systemInfo?.environment || 'workspace'}</p>
         </div>
         <div className="grid gap-2 p-4 sm:grid-cols-3 sm:p-5">
           {[
@@ -999,7 +1002,7 @@ export const SettingsDrawer = () => {
           })}
         </div>
         <div className="flex flex-col gap-2 border-t border-border/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-          <p className="text-xs text-muted-foreground">React · TypeScript · FastAPI · BM25 / Hybrid retrieval</p>
+          <p className="text-xs text-muted-foreground">React · TypeScript · FastAPI · Hybrid retrieval</p>
           <Button asChild variant="outline" size="sm" className="rounded-xl">
             <a href="https://github.com/Thazg/NovaRAGChatBot" target="_blank" rel="noopener noreferrer">GitHub <ExternalLink /></a>
           </Button>
@@ -1046,8 +1049,8 @@ export const SettingsDrawer = () => {
         </SheetHeader>
 
         <div className="flex h-[calc(100dvh-73px)] min-h-0 flex-col sm:flex-row">
-          <aside className="nova-settings-sidebar shrink-0 border-b border-border/45 bg-muted/15 sm:w-60 sm:border-b-0 sm:border-r">
-            <div className="flex gap-1.5 overflow-x-auto p-3 sm:block sm:space-y-1 sm:overflow-visible sm:p-4">
+          <aside className="nova-settings-sidebar min-w-0 shrink-0 overflow-hidden border-b border-border/45 bg-muted/15 sm:w-60 sm:border-b-0 sm:border-r">
+            <div className="flex min-w-0 gap-1.5 overflow-x-auto p-3 sm:block sm:space-y-1 sm:overflow-visible sm:p-4">
               {sections.map((section) => {
                 const Icon = section.icon;
                 const active = section.id === activeSection;
@@ -1057,7 +1060,7 @@ export const SettingsDrawer = () => {
                     type="button"
                     onClick={() => setActiveSection(section.id)}
                     className={cn(
-                      'group flex min-w-fit items-center gap-2 rounded-[10px] px-3 py-2.5 text-left transition-colors sm:w-full sm:gap-3',
+                      'group box-border flex min-w-[10rem] max-w-full items-center gap-2 overflow-hidden rounded-[10px] px-3 py-2.5 text-left transition-colors sm:w-full sm:min-w-0 sm:gap-3',
                       active
                         ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.16)]'
                         : 'text-muted-foreground hover:bg-muted/55 hover:text-foreground',
@@ -1086,7 +1089,7 @@ export const SettingsDrawer = () => {
             </div>
           </aside>
 
-          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl p-4 pb-12 sm:p-6 sm:pb-16 lg:p-8">
               <div className="mb-4 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:hidden">
                 <ActiveSectionIcon className="h-3.5 w-3.5" /> {activeMeta.label}

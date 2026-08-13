@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FolderOpen, LogOut, Menu, MessageSquare, Plus, Settings as SettingsIcon, ShieldCheck, Sparkles, User } from 'lucide-react';
+import { FolderOpen, LogOut, Menu, MessageSquare, Plus, Settings as SettingsIcon, Sparkles, User } from 'lucide-react';
 import { Sidebar } from '../sidebar/Sidebar';
 import { ChatArea } from '../chat/ChatArea';
 import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
@@ -137,10 +137,6 @@ export const Layout = () => {
           </div>
 
           <div className="flex items-center gap-2.5 flex-1 justify-end">
-            <div className="hidden items-center gap-1.5 rounded-full border border-border/55 bg-muted/35 px-2.5 py-1.5 text-xs font-medium text-muted-foreground lg:flex">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Private workspace
-            </div>
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}

@@ -168,7 +168,7 @@ export const DocumentManager = ({
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
-      className="flex flex-col h-full relative"
+      className="relative flex h-full min-w-0 max-w-full flex-col overflow-x-hidden"
     >
       {/* Drag overlay */}
       <AnimatePresence>
@@ -248,7 +248,7 @@ export const DocumentManager = ({
       </div>
 
       {/* Document list — scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 -mx-1 px-1">
+      <div className="-mx-1 min-h-0 min-w-0 flex-1 space-y-1.5 overflow-x-hidden overflow-y-auto px-1">
         <AnimatePresence mode="popLayout">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-10 text-center">
@@ -293,7 +293,7 @@ export const DocumentManager = ({
                   transition={{ duration: 0.2, delay: idx * 0.03 }}
                   layout
                   className={cn(
-                    "group rounded-[14px] border p-3 transition-colors",
+                    "group w-full min-w-0 max-w-full overflow-hidden rounded-[14px] border p-3 transition-colors",
                     selectedDocument?.id === doc.id
                       ? "border-primary/35 bg-primary/10"
                       : "border-border/35 bg-muted/20 hover:border-border/60 hover:bg-muted/35",
