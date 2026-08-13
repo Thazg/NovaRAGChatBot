@@ -105,7 +105,7 @@ const formatUptime = (seconds?: number) => {
 
 const SettingsCard = ({ children, className }: { children: ReactNode; className?: string }) => (
   <div className={cn(
-    'rounded-2xl border border-border/55 bg-card/60 shadow-[0_18px_48px_-38px_rgba(var(--primary-rgb),0.45)] backdrop-blur-sm',
+    'nova-settings-card rounded-2xl border border-border/55 bg-card/60 shadow-[0_18px_48px_-38px_rgba(var(--primary-rgb),0.45)] backdrop-blur-sm',
     className,
   )}>
     {children}
@@ -501,7 +501,7 @@ export const SettingsDrawer = () => {
               <p className="truncate text-lg font-semibold text-foreground">{displayName || username || 'Nova user'}</p>
               <p className="mt-1 truncate text-sm text-muted-foreground">@{username || 'user'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2.5 py-1 text-[10px] font-semibold text-emerald-500">Private workspace</span>
+                <span className="rounded-full border border-emerald-600/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:text-emerald-400">Private workspace</span>
                 <span className="rounded-full border border-border/50 bg-background/55 px-2.5 py-1 text-[10px] text-muted-foreground">Avatar stays on this device</span>
               </div>
             </div>
@@ -516,7 +516,7 @@ export const SettingsDrawer = () => {
               maxLength={80}
               onChange={(event) => setDisplayName(event.target.value)}
               placeholder="How should your name appear?"
-              className="h-11 rounded-xl bg-background/65"
+              className="nova-settings-field h-11 rounded-xl bg-background/65"
             />
             <p className="text-[11px] text-muted-foreground">Synced across devices when you save your preferences.</p>
           </div>
@@ -539,15 +539,15 @@ export const SettingsDrawer = () => {
         <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
           <div className="space-y-2 sm:col-span-2">
             <label htmlFor="current-password" className="text-xs font-semibold">Current password</label>
-            <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="h-11 rounded-xl bg-background/65" />
+            <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="nova-settings-field h-11 rounded-xl bg-background/65" />
           </div>
           <div className="space-y-2">
             <label htmlFor="new-password" className="text-xs font-semibold">New password</label>
-            <Input id="new-password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="h-11 rounded-xl bg-background/65" />
+            <Input id="new-password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="nova-settings-field h-11 rounded-xl bg-background/65" />
           </div>
           <div className="space-y-2">
             <label htmlFor="confirm-password" className="text-xs font-semibold">Confirm new password</label>
-            <Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="h-11 rounded-xl bg-background/65" />
+            <Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="nova-settings-field h-11 rounded-xl bg-background/65" />
           </div>
           <div className="flex items-center justify-between gap-3 sm:col-span-2">
             <p className="text-[11px] text-muted-foreground">Use at least 8 characters.</p>
@@ -605,7 +605,7 @@ export const SettingsDrawer = () => {
         <div className="space-y-4 p-4 sm:p-5">
           <div className="space-y-2">
             <label htmlFor="nickname" className="text-xs font-semibold">What should Nova call you?</label>
-            <Input id="nickname" value={nickname} maxLength={80} onChange={(event) => setNickname(event.target.value)} placeholder="Optional nickname" className="h-11 rounded-xl bg-background/65" />
+            <Input id="nickname" value={nickname} maxLength={80} onChange={(event) => setNickname(event.target.value)} placeholder="Optional nickname" className="nova-settings-field h-11 rounded-xl bg-background/65" />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -621,7 +621,7 @@ export const SettingsDrawer = () => {
                 if (event.target.value && characterStyle !== 'custom') setCharacterStyle('custom');
               }}
               placeholder="Example: Prefer structured answers, cite document names, and explain technical terms briefly."
-              className="min-h-36 w-full resize-y rounded-xl border border-input bg-background/65 px-3.5 py-3 text-sm leading-6 outline-none transition-shadow placeholder:text-muted-foreground/45 focus:ring-2 focus:ring-ring/60"
+              className="nova-settings-field min-h-36 w-full resize-y rounded-xl border border-input bg-background/65 px-3.5 py-3 text-sm leading-6 text-foreground outline-none transition-shadow placeholder:text-muted-foreground/55 focus:ring-2 focus:ring-ring/60"
             />
           </div>
           <div className="flex justify-end">
@@ -688,7 +688,7 @@ export const SettingsDrawer = () => {
                   <p className="truncate text-sm font-semibold text-foreground" title={document.name}>{document.name}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                     <span>{formatBytes(document.size)}</span><span>•</span><span>{document.chunks || 0} chunks</span><span>•</span>
-                    <span className={document.indexed ? 'text-emerald-500' : 'text-amber-500'}>{document.indexed ? 'Indexed' : 'Processing'}</span>
+                    <span className={document.indexed ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}>{document.indexed ? 'Indexed' : 'Processing'}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 sm:justify-end">
@@ -819,7 +819,7 @@ export const SettingsDrawer = () => {
                 <p className="text-sm font-semibold text-destructive">Permanently delete this account</p>
                 <p className="mt-1 text-xs text-muted-foreground">Type <span className="font-mono font-semibold text-foreground">{username}</span> to confirm.</p>
               </div>
-              <Input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder={username || 'username'} className="h-10 rounded-xl bg-background/70" />
+              <Input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder={username || 'username'} className="nova-settings-field h-10 rounded-xl bg-background/70" />
               <div className="flex justify-end gap-2">
                 <Button variant="outline" size="sm" className="rounded-lg" onClick={() => { setConfirmDeleteAccount(false); setDeleteConfirmation(''); }}>Cancel</Button>
                 <Button variant="destructive" size="sm" className="rounded-lg" disabled={deletingAccount || deleteConfirmation !== username} onClick={async () => {
@@ -860,7 +860,7 @@ export const SettingsDrawer = () => {
             readiness?.ready ? 'border-emerald-500/15 bg-emerald-500/5' : 'border-amber-500/15 bg-amber-500/5',
           )}>
             <div className="flex items-center gap-3">
-              <span className={cn('relative grid h-11 w-11 place-items-center rounded-2xl', readiness?.ready ? 'bg-emerald-500/12 text-emerald-500' : 'bg-amber-500/12 text-amber-500')}>
+              <span className={cn('relative grid h-11 w-11 place-items-center rounded-2xl', readiness?.ready ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400' : 'bg-amber-500/12 text-amber-700 dark:text-amber-400')}>
                 <Activity className="h-5 w-5" />
                 <span className={cn('absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-card', readiness?.ready ? 'bg-emerald-500' : 'bg-amber-500')} />
               </span>
@@ -990,7 +990,7 @@ export const SettingsDrawer = () => {
           <SettingsIcon className="h-5 w-5 transition-transform duration-300 group-hover:rotate-45" />
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full overflow-hidden border-l border-border/50 bg-background/96 p-0 backdrop-blur-2xl sm:max-w-[980px]">
+      <SheetContent className="nova-settings-shell w-full overflow-hidden border-l border-border/50 bg-background p-0 backdrop-blur-2xl sm:max-w-[980px]">
         <SheetHeader className="relative border-b border-border/45 px-5 py-4 text-left sm:px-6 sm:py-5">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/80 to-transparent" />
           <div className="flex items-center gap-3 pr-8">
@@ -1003,7 +1003,7 @@ export const SettingsDrawer = () => {
         </SheetHeader>
 
         <div className="flex h-[calc(100dvh-73px)] min-h-0 flex-col sm:flex-row">
-          <aside className="shrink-0 border-b border-border/45 bg-muted/15 sm:w-64 sm:border-b-0 sm:border-r">
+          <aside className="nova-settings-sidebar shrink-0 border-b border-border/45 bg-muted/15 sm:w-64 sm:border-b-0 sm:border-r">
             <div className="flex gap-1.5 overflow-x-auto p-3 sm:block sm:space-y-1 sm:overflow-visible sm:p-4">
               {sections.map((section) => {
                 const Icon = section.icon;
