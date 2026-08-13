@@ -35,6 +35,7 @@ interface ChatState {
   developerMode: boolean;
   language: 'auto' | 'english' | 'vietnamese';
   sidebarActiveTab: 'conversations' | 'documents';
+  selectedDocument: { id: string; name: string } | null;
   
   // Actions
   login: (username: string, password: string) => Promise<void>;
@@ -54,6 +55,7 @@ interface ChatState {
   syncPreferences: () => Promise<void>;
   savePreferences: () => Promise<void>;
   setSidebarActiveTab: (tab: 'conversations' | 'documents') => void;
+  setSelectedDocument: (document: { id: string; name: string } | null) => void;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   
@@ -87,6 +89,7 @@ type PersistedChatState = Pick<ChatState,
   | 'developerMode'
   | 'language'
   | 'sidebarActiveTab'
+  | 'selectedDocument'
 >;
 
 export const useChatStore = create<ChatState>()(
@@ -111,6 +114,7 @@ export const useChatStore = create<ChatState>()(
       developerMode: false,
       language: 'auto',
       sidebarActiveTab: 'conversations',
+      selectedDocument: null,
 
       login: async (username: string, password: string) => {
         const res = await auth.login(username, password);
@@ -182,6 +186,7 @@ export const useChatStore = create<ChatState>()(
           displayName: 'User',
           nickname: '',
           customInstructions: '',
+          selectedDocument: null,
         });
         await auth.logout().catch(() => undefined);
       },
@@ -204,6 +209,7 @@ export const useChatStore = create<ChatState>()(
         set(preferenceState(preferences));
       },
       setSidebarActiveTab: (sidebarActiveTab: 'conversations' | 'documents') => set({ sidebarActiveTab }),
+      setSelectedDocument: (selectedDocument) => set({ selectedDocument }),
       setSettingsOpen: (settingsOpen: boolean) => set({ settingsOpen }),
       setAboutOpen: (aboutOpen: boolean) => set({ aboutOpen }),
       setCustomInstructions: (customInstructions: string) => set({ customInstructions }),
@@ -436,6 +442,7 @@ export const useChatStore = create<ChatState>()(
         developerMode: state.developerMode,
         language: state.language,
         sidebarActiveTab: state.sidebarActiveTab,
+        selectedDocument: state.selectedDocument,
       }),
     }
   )

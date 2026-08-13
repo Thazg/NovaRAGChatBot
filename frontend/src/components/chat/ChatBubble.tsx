@@ -77,16 +77,16 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className={cn("group flex gap-3 w-full my-5", isUser ? "justify-end" : "justify-start")}
+      className={cn("group my-4 flex w-full gap-3", isUser ? "justify-end" : "justify-start")}
     >
-      <div className={cn("flex gap-3 max-w-[820px] w-full", isUser ? "flex-row-reverse" : "flex-row")}>
+      <div className={cn("flex w-full max-w-[880px] gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
         
         {/* Avatar */}
         <div className={cn(
-          "h-8 w-8 mt-0.5 rounded-xl flex items-center justify-center shrink-0 z-10 overflow-hidden shadow-sm",
+          "z-10 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border",
           isUser
-            ? "bg-muted border border-border/50 text-muted-foreground"
-            : "bg-gradient-to-br from-primary/25 via-primary/15 to-violet-500/20 border border-primary/25 text-primary"
+            ? "border-border/50 bg-muted text-muted-foreground"
+            : "border-primary/25 bg-primary/10 text-primary"
         )}>
           {isUser ? (
             avatar ? (
@@ -95,22 +95,22 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
               <User className="h-3.5 w-3.5" />
             )
           ) : (
-            <Sparkles className="h-3.5 w-3.5" />
+            <Sparkles className="h-4 w-4" />
           )}
         </div>
 
         {/* Message bubble container */}
         <div className={cn(
-          "flex flex-col relative group max-w-[760px] w-full",
-          isUser ? "items-end" : "items-start"
+          "group relative flex min-w-0 flex-col",
+          isUser ? "w-auto max-w-[76%] items-end" : "w-full max-w-[800px] items-start"
         )}>
           
           {/* Bubble */}
           <div className={cn(
-            "prose prose-sm dark:prose-invert max-w-none break-words rounded-2xl px-5 py-3.5 shadow-sm w-full transition-all duration-200",
+            "prose prose-sm dark:prose-invert w-full max-w-none break-words rounded-[14px] px-4 py-3 shadow-sm transition-colors",
             isUser
-              ? "bg-primary/10 border border-primary/20 text-foreground rounded-tr-sm backdrop-blur-sm"
-              : "bg-card/70 border border-border/40 text-foreground rounded-tl-sm backdrop-blur-sm"
+              ? "rounded-tr-[5px] border border-primary/20 bg-primary/10 text-foreground"
+              : "rounded-tl-[5px] border border-border/50 bg-card/90 text-foreground"
           )}>
             {isUser || !isStreaming ? (
               <ReactMarkdown
@@ -256,7 +256,7 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
             "flex items-center gap-0.5 mt-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200",
             isUser ? "flex-row-reverse" : "flex-row"
           )}>
-            <span className="text-[10.5px] text-muted-foreground/65 px-1.5 font-medium tabular-nums">
+            <span className="px-1.5 text-xs font-medium tabular-nums text-muted-foreground/70">
               {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             {!isUser && !isStreaming && (
@@ -264,20 +264,20 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                 <ActionButton
                   onClick={() => handleCopy(message.content)}
                   label="Copy"
-                  icon={copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                  icon={copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                   active={copied}
                 />
                 <ActionButton
                   onClick={() => handleFeedback('like')}
                   label="Like"
-                  icon={<ThumbsUp className="h-3 w-3" />}
+                  icon={<ThumbsUp className="h-3.5 w-3.5" />}
                   active={message.feedback === 'like'}
                   activeClass="text-emerald-400 bg-emerald-400/10"
                 />
                 <ActionButton
                   onClick={() => handleFeedback('dislike')}
                   label="Dislike"
-                  icon={<ThumbsDown className="h-3 w-3" />}
+                  icon={<ThumbsDown className="h-3.5 w-3.5" />}
                   active={message.feedback === 'dislike'}
                   activeClass="text-red-400 bg-red-400/10"
                 />
@@ -285,13 +285,13 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                   <ActionButton
                     onClick={onRegenerate}
                     label="Regenerate"
-                    icon={<RotateCcw className="h-3 w-3" />}
+                    icon={<RotateCcw className="h-3.5 w-3.5" />}
                   />
                 )}
                 <ActionButton
                   onClick={handleShare}
                   label="Share"
-                  icon={<Share2 className="h-3 w-3" />}
+                  icon={<Share2 className="h-3.5 w-3.5" />}
                 />
               </>
             )}
@@ -320,7 +320,7 @@ const ActionButton = ({
     variant="ghost"
     size="icon"
     className={cn(
-      "h-6 w-6 rounded-lg border border-transparent transition-all text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:border-border/40 shadow-none",
+      "h-8 w-8 rounded-[10px] border border-transparent text-muted-foreground shadow-none transition-colors hover:border-border/40 hover:bg-muted/60 hover:text-foreground",
       active && (activeClass || "text-primary bg-primary/10")
     )}
     onClick={onClick}

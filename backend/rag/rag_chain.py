@@ -96,10 +96,17 @@ def _representative_nodes(documents: list[dict], top_k: int) -> list[dict]:
     return nodes
 
 
-def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, allow_broad: bool = True):
+def retrieve_context(
+    query: str,
+    user_id: str = "",
+    top_k: int | None = None,
+    allow_broad: bool = True,
+    document_name: str = "",
+):
     normalized_query = (query or "").strip()
+    normalized_document_name = (document_name or "").strip()
     uid = _ensure_user_id(user_id)
-    cache_key = f"{uid}::{normalized_query.lower()}::{top_k or settings.TOP_K}"
+    cache_key = f"{uid}::{normalized_document_name.casefold()}::{normalized_query.lower()}::{top_k or settings.TOP_K}"
     cached = retrieval_cache.get(cache_key)
     if cached is not None:
         return cached
@@ -110,17 +117,39 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
 
     top_k_val = max(3, min(top_k or settings.TOP_K, 15))
     is_overview_query = allow_broad and _is_document_overview_query(normalized_query)
-    nodes = retriever.retrieve(normalized_query, top_k=top_k_val)
+    scoped_documents = [
+        document
+        for document in getattr(retriever, "documents", [])
+        if not normalized_document_name
+        or normalized_document_name.casefold() in {
+            str(document.get("metadata", {}).get("file_name", "")).strip().casefold(),
+            str(document.get("metadata", {}).get("storage_name", "")).strip().casefold(),
+        }
+    ]
+    nodes = retriever.retrieve(
+        normalized_query,
+        top_k=top_k_val,
+        file_name=normalized_document_name or None,
+    )
 
     if not nodes and normalized_query != query.strip():
-        nodes = retriever.retrieve(query.strip(), top_k=top_k_val)
+        nodes = retriever.retrieve(
+            query.strip(),
+            top_k=top_k_val,
+            file_name=normalized_document_name or None,
+        )
 
     if not nodes:
-        nodes = retriever.retrieve(normalized_query, top_k=top_k_val, min_score=0.0)
+        nodes = retriever.retrieve(
+            normalized_query,
+            top_k=top_k_val,
+            min_score=0.0,
+            file_name=normalized_document_name or None,
+        )
 
     overview_fallback = False
     if not nodes and is_overview_query:
-        nodes = _representative_nodes(getattr(retriever, "documents", []), top_k_val)
+        nodes = _representative_nodes(scoped_documents, top_k_val)
         overview_fallback = bool(nodes)
 
     expanded_query = expand_query(normalized_query)
@@ -150,9 +179,19 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
                     found_terms.add(t)
         avg_score = sum(n.get("_score", 0) for n in nodes) / len(nodes) if nodes else 0
         if len(found_terms) < max(1, len(query_terms) // 2) and avg_score < 0.3:
-            broad_nodes = retriever.retrieve(normalized_query, top_k=settings.BROAD_TOP_K, min_score=settings.MIN_SIMILARITY_SCORE)
+            broad_nodes = retriever.retrieve(
+                normalized_query,
+                top_k=settings.BROAD_TOP_K,
+                min_score=settings.MIN_SIMILARITY_SCORE,
+                file_name=normalized_document_name or None,
+            )
             if not broad_nodes:
-                broad_nodes = retriever.retrieve(normalized_query, top_k=settings.BROAD_TOP_K, min_score=0.0)
+                broad_nodes = retriever.retrieve(
+                    normalized_query,
+                    top_k=settings.BROAD_TOP_K,
+                    min_score=0.0,
+                    file_name=normalized_document_name or None,
+                )
             if broad_nodes:
                 broad_avg = sum(n.get("_score", 0) for n in broad_nodes) / len(broad_nodes)
                 if broad_avg > avg_score:
@@ -169,7 +208,7 @@ def retrieve_context(query: str, user_id: str = "", top_k: int | None = None, al
         nodes = [n for n in nodes if term_score(n) >= 1]
 
     if not nodes and is_overview_query:
-        nodes = _representative_nodes(getattr(retriever, "documents", []), top_k_val)
+        nodes = _representative_nodes(scoped_documents, top_k_val)
 
     retrieval_cache.set(cache_key, nodes)
     return nodes

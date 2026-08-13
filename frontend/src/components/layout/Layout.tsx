@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogOut, Menu, Sparkles, User, MessageSquare, FolderOpen, Plus, ShieldCheck } from 'lucide-react';
+import { FolderOpen, LogOut, Menu, MessageSquare, Plus, Settings as SettingsIcon, ShieldCheck, Sparkles, User } from 'lucide-react';
 import { Sidebar } from '../sidebar/Sidebar';
 import { ChatArea } from '../chat/ChatArea';
 import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
@@ -10,7 +10,7 @@ import { cn } from '../../lib/utils';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 
 export const Layout = () => {
-  const { theme, avatar, sidebarActiveTab, setSidebarActiveTab, createConversation } = useChatStore();
+  const { theme, avatar, sidebarActiveTab, setSidebarActiveTab, createConversation, setSettingsOpen } = useChatStore();
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const resolvedTheme = useResolvedTheme(theme);
 
@@ -21,6 +21,12 @@ export const Layout = () => {
 
     root.classList.add(resolvedTheme);
   }, [resolvedTheme]);
+
+  useEffect(() => {
+    const openMobileSidebar = () => setMobileSheetOpen(true);
+    window.addEventListener('nova:open-sidebar', openMobileSidebar);
+    return () => window.removeEventListener('nova:open-sidebar', openMobileSidebar);
+  }, []);
 
   return (
     <div className="nova-shell relative flex h-dvh w-full overflow-hidden text-foreground">
@@ -66,7 +72,14 @@ export const Layout = () => {
                 <Plus className="h-3.5 w-3.5" />
                 <span>New</span>
               </button>
-              <SettingsDrawer />
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="grid h-9 w-9 place-items-center rounded-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                aria-label="Open settings"
+              >
+                <SettingsIcon className="h-[18px] w-[18px]" />
+              </button>
               <button
                 type="button"
                 onClick={() => useChatStore.getState().logout()}
@@ -110,7 +123,7 @@ export const Layout = () => {
         </header>
 
         {/* ===== DESKTOP HEADER ===== */}
-        <header className="hidden md:flex h-[64px] border-b border-border/40 items-center justify-between px-6 bg-background/45 backdrop-blur-2xl z-20 sticky top-0 shrink-0">
+        <header className="sticky top-0 z-20 hidden h-14 shrink-0 items-center justify-between border-b border-border/45 bg-background/85 px-5 backdrop-blur-xl md:flex">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary/30 via-primary/20 to-violet-500/20 border border-primary/25 flex items-center justify-center shadow-sm">
@@ -124,13 +137,20 @@ export const Layout = () => {
           </div>
 
           <div className="flex items-center gap-2.5 flex-1 justify-end">
-            <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[10px] font-semibold text-emerald-500/80">
-              <ShieldCheck className="h-3 w-3" />
+            <div className="hidden items-center gap-1.5 rounded-full border border-border/55 bg-muted/35 px-2.5 py-1.5 text-xs font-medium text-muted-foreground lg:flex">
+              <ShieldCheck className="h-3.5 w-3.5" />
               Private workspace
             </div>
-            <SettingsDrawer />
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="grid h-9 w-9 place-items-center rounded-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              aria-label="Open settings"
+            >
+              <SettingsIcon className="h-[18px] w-[18px]" />
+            </button>
             <div className={cn(
-              "w-8 h-8 rounded-full overflow-hidden border-2 shrink-0 transition-all",
+              "h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-colors",
               avatar ? "border-primary/40 shadow-sm shadow-primary/20" : "border-border/50 bg-muted/50"
             )}>
               {avatar ? (
@@ -147,6 +167,7 @@ export const Layout = () => {
         {/* Chat area */}
         <ChatArea />
       </main>
+      <SettingsDrawer />
     </div>
   );
 };

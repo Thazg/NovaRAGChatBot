@@ -58,120 +58,87 @@ export const UploadGate = ({ onContinue }: { onContinue: () => void }) => {
         className="nova-shell nova-upload-shell fixed inset-0 z-50 h-[100dvh] w-screen overflow-y-auto bg-background"
       >
         <div className="nova-grid" />
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{ x: [0, 42, -18, 0], y: [0, -26, 18, 0], scale: [1, 1.12, 0.96, 1] }}
-            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-[8%] left-[12%] h-72 w-72 rounded-full bg-violet-500/20 blur-3xl"
-          />
-          <motion.div
-            animate={{ x: [0, -48, 16, 0], y: [0, 32, -20, 0], scale: [1, 0.94, 1.1, 1] }}
-            transition={{ duration: 21, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute bottom-[6%] right-[8%] h-80 w-80 rounded-full bg-sky-400/20 blur-3xl"
-          />
-        </div>
-
         <div className="nova-viewport-center">
           <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ delay: 0.15, type: "spring", stiffness: 300, damping: 28 }}
-            className="nova-panel nova-upload-panel relative flex w-full max-w-xl flex-col items-center overflow-hidden rounded-[2rem] px-6 py-9 text-center md:px-11 md:py-11"
-          >
-          <div className="absolute inset-x-12 top-0 h-[2px] bg-gradient-to-r from-transparent via-primary to-transparent" />
-          <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-violet-400/15 blur-3xl" />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.7 }}
-            animate={{ opacity: 1, scale: 1, y: [0, -7, 0] }}
-            transition={{
-              opacity: { delay: 0.25, duration: 0.4 },
-              scale: { delay: 0.25, type: "spring", stiffness: 260, damping: 20 },
-              y: { delay: 0.8, duration: 5, repeat: Infinity, ease: "easeInOut" },
-            }}
-            className="w-[132px] h-[104px] flex items-center justify-center mb-6 relative"
-          >
-            <div className="absolute inset-5 rounded-full bg-primary/20 blur-2xl" />
-            <img src={heroImage} alt="Nova knowledge layers" className="relative h-full w-full object-contain drop-shadow-[0_18px_26px_rgba(124,58,237,0.3)]" />
-          </motion.div>
-
-          <motion.h1
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, duration: 0.5 }}
-            className="text-3xl md:text-4xl font-bold tracking-tight mb-3"
+            transition={{ duration: 0.28 }}
+            className="nova-panel nova-upload-panel relative flex w-full max-w-lg flex-col items-center overflow-hidden rounded-[20px] px-6 py-7 text-center sm:px-9 sm:py-9"
           >
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-foreground via-foreground/95 to-foreground/70">
-              Welcome to{" "}
-            </span>
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary via-violet-400 to-primary/80">
-              Nova
-            </span>
-          </motion.h1>
+            <div className="absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
+            {loading && !uploading && !loadError ? (
+              <div className="grid min-h-[280px] place-items-center">
+                <div>
+                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-[14px] bg-primary/10 text-primary">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                  <h1 className="mt-5 text-2xl font-semibold tracking-tight">Opening your workspace</h1>
+                  <p className="mt-2 text-sm text-muted-foreground">Checking your indexed documents…</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex h-20 w-24 items-center justify-center">
+                  <img src={heroImage} alt="Nova knowledge layers" className="h-full w-full object-contain" />
+                </div>
+                <h1 className="mt-4 text-2xl font-semibold tracking-tight">
+                  {loadError ? 'Workspace unavailable' : 'Add your first document'}
+                </h1>
+                <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                  {loadError
+                    ? 'Nova could not connect to your document workspace.'
+                    : 'Upload a document to create a private, searchable knowledge base.'}
+                </p>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.45 }}
-            className="text-base font-medium text-muted-foreground mb-8 max-w-sm"
-          >
-            Your knowledge base is empty. Upload at least one document to get started.
-          </motion.p>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  accept=".pdf,.md,.markdown,.rst,.txt,.py,.docx,.ipynb"
+                />
 
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-            accept=".pdf,.md,.markdown,.rst,.txt,.py,.docx,.ipynb"
-          />
+                {loadError ? (
+                  <div className="mt-6 w-full max-w-sm rounded-[14px] border border-destructive/25 bg-destructive/5 p-4 text-left">
+                    <div className="flex items-start gap-3 text-sm text-destructive">
+                      <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0" />
+                      <p className="flex-1 leading-5">{loadError}</p>
+                    </div>
+                    <button onClick={loadDocs} className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[10px] border border-border bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted">
+                      <RefreshCw className="h-4 w-4" /> Try again
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    aria-label="Upload a document"
+                    className="nova-upload-dropzone mt-6 flex w-full max-w-sm items-center gap-3 rounded-[14px] border border-dashed border-primary/40 bg-primary/10 p-4 text-left transition-colors hover:bg-primary/15 disabled:cursor-wait disabled:opacity-70"
+                  >
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-primary text-primary-foreground">
+                      {uploading ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Upload className="h-[18px] w-[18px]" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground">{uploading ? 'Uploading and indexing…' : 'Choose a document'}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">PDF, DOCX, Markdown, TXT, Python or notebook</p>
+                    </div>
+                  </button>
+                )}
 
-          <motion.button
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.55 }}
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.985 }}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="nova-upload-dropzone group flex items-center gap-4 w-full max-w-sm p-5 rounded-2xl border-2 border-dashed border-primary/45 bg-primary/10 hover:bg-primary/15 backdrop-blur-sm transition-all duration-300 text-left relative overflow-hidden"
-          >
-            <div className="relative z-10 p-3 rounded-xl bg-gradient-to-br from-primary to-violet-600 shadow-[0_10px_24px_-8px_rgba(112,78,250,0.75)] group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-300 text-white">
-              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                {uploadError && (
+                  <div className="mt-4 flex w-full max-w-sm items-start gap-2.5 rounded-[12px] border border-destructive/20 bg-destructive/5 p-3 text-left text-xs text-destructive">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span className="leading-5">{uploadError}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="mt-6 w-full border-t border-border/45 pt-4">
+              <button onClick={logout} className="inline-flex h-10 items-center gap-2 rounded-[10px] px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
             </div>
-            <div className="relative z-10 space-y-1 flex-1 min-w-0">
-              <p className="font-bold text-sm text-foreground">
-                {uploading ? "Uploading..." : "Upload a document"}
-              </p>
-              <p className="text-[13px] font-medium text-muted-foreground leading-snug">
-                PDF, DOCX, Markdown, TXT, or Python files
-              </p>
-            </div>
-          </motion.button>
-
-          {(uploadError || loadError) && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5 flex w-full max-w-sm items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-left text-xs text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="flex-1 leading-relaxed">{uploadError || loadError}</span>
-              {loadError && !uploadError && (
-                <button onClick={loadDocs} className="rounded-lg p-1 hover:bg-destructive/10" aria-label="Retry"><RefreshCw className="h-3.5 w-3.5" /></button>
-              )}
-            </motion.div>
-          )}
-
-          {loading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2 text-sm text-muted-foreground/50 mt-6"
-            >
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking documents...
-            </motion.div>
-          )}
-
-          <button onClick={logout} className="mt-5 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground/80 transition-colors hover:bg-secondary hover:text-foreground">
-            <LogOut className="h-3.5 w-3.5" /> Sign out
-          </button>
           </motion.div>
         </div>
       </motion.div>

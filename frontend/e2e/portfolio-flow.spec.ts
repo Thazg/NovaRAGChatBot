@@ -27,6 +27,15 @@ async function mockPortfolioApi(
   let documents: Array<Record<string, unknown>> = [];
   let streamAttempts = 0;
   let refreshAttempts = 0;
+  let lastChatRequest: Record<string, unknown> | null = null;
+  let preferences = {
+    display_name: 'Portfolio User',
+    theme: 'dark',
+    language: 'auto',
+    character_style: 'warm',
+    nickname: '',
+    custom_instructions: '',
+  };
 
   await page.route(API_PATTERN, async (route) => {
     const request = route.request();
@@ -70,6 +79,15 @@ async function mockPortfolioApi(
     }
     if (method === 'GET' && endpoint === '/auth/me') {
       await fulfillJson(route, { user_id: '6ab4ef03-50ba-4782-95db-ecc55d64c53d' });
+      return;
+    }
+    if (method === 'GET' && endpoint === '/auth/preferences') {
+      await fulfillJson(route, preferences);
+      return;
+    }
+    if ((method === 'PUT' || method === 'PATCH') && endpoint === '/auth/preferences') {
+      preferences = { ...preferences, ...request.postDataJSON() };
+      await fulfillJson(route, preferences);
       return;
     }
     if (method === 'GET' && endpoint === '/health/ready') {
@@ -121,6 +139,7 @@ async function mockPortfolioApi(
       return;
     }
     if (method === 'POST' && endpoint === '/chat/stream') {
+      lastChatRequest = request.postDataJSON();
       streamAttempts += 1;
       if (options.disconnectFirstStream && streamAttempts === 1) {
         await route.abort('connectionfailed');
@@ -145,6 +164,8 @@ async function mockPortfolioApi(
 
   return {
     refreshAttempts: () => refreshAttempts,
+    lastChatRequest: () => lastChatRequest,
+    preferences: () => preferences,
   };
 }
 
@@ -185,7 +206,7 @@ test('logs in, uploads a document, chats, and receives a citation', async ({ pag
   await page.getByPlaceholder('Enter password').fill('strong-password');
   await page.getByRole('button', { name: 'Sign In' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Welcome to Nova' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Add your first document' })).toBeVisible({ timeout: 15_000 });
   const persistedAfterLogin = await page.evaluate(() => localStorage.getItem('rag-chat-storage'));
   expect(persistedAfterLogin).not.toContain('portfolio-e2e-access-token');
   expect(persistedAfterLogin).not.toContain('"token"');
@@ -222,7 +243,7 @@ test('restores a cookie session while removing legacy localStorage credentials',
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Welcome to Nova' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Add your first document' })).toBeVisible({ timeout: 15_000 });
   expect(apiMock.refreshAttempts()).toBe(1);
 
   const persisted = await page.evaluate(() => localStorage.getItem('rag-chat-storage'));
@@ -332,4 +353,63 @@ test('reconnects mid-stream without duplicating rendered tokens', async ({ page 
   await expect(answer).toContainText('Reciprocal rank fusion merges both rankings.');
   await expect(answer).toContainText('(Source: portfolio.txt)');
   await expect(answer).not.toContainText('vectors. Nova combines');
+});
+
+test('scopes chat requests to a selected document and keeps settings usable', async ({ page }) => {
+  const apiMock = await mockPortfolioApi(page);
+  await page.goto('/');
+  await page.getByPlaceholder('Enter username').fill('portfolio.user');
+  await page.getByPlaceholder('Enter password').fill('strong-password');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Add your first document' })).toBeVisible({ timeout: 15_000 });
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Upload a document' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles(path.join(process.cwd(), 'e2e', 'fixtures', 'portfolio.txt'));
+
+  await page.getByRole('button', { name: 'Docs' }).click();
+  await page.getByRole('button', { name: 'Ask questions about portfolio.txt' }).click();
+  await expect(page.getByText('Document scope')).toBeVisible();
+  await expect(page.getByPlaceholder('Ask about portfolio.txt...')).toBeVisible();
+
+  const messageInput = page.getByLabel('Message input');
+  await messageInput.fill('Summarize this document.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText(/Reciprocal rank fusion merges both rankings/)).toBeVisible();
+  expect(apiMock.lastChatRequest()).toMatchObject({ document_name: 'portfolio.txt' });
+
+  await page.getByRole('button', { name: 'Open settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Light', exact: true }).click();
+  await expect(page.locator('html')).toHaveClass(/light/);
+  await expect(page.getByText('Preferences save automatically')).toBeVisible();
+  await expect.poll(() => apiMock.preferences().theme).toBe('light');
+});
+
+test('keeps the mobile workspace and settings navigation usable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockPortfolioApi(page);
+  await page.goto('/');
+  await page.getByPlaceholder('Enter username').fill('portfolio.user');
+  await page.getByPlaceholder('Enter password').fill('strong-password');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Add your first document' })).toBeVisible({ timeout: 15_000 });
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Upload a document' }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles(path.join(process.cwd(), 'e2e', 'fixtures', 'portfolio.txt'));
+
+  await expect(page.getByRole('button', { name: 'New' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Docs' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /General/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Profile/ })).toBeVisible();
+  await page.getByRole('button', { name: /Profile/ }).click();
+  await expect(page.getByRole('heading', { name: 'Your Nova profile' })).toBeVisible();
+
+  const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(hasHorizontalOverflow).toBe(false);
 });

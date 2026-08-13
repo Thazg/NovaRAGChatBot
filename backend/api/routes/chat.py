@@ -5,7 +5,7 @@ import re
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config.settings import settings
 from rag.llm_client import stream_tokens
@@ -35,13 +35,33 @@ class ChatRequest(BaseModel):
     instructions: str = ""
     language: str = ""
     regenerate: bool = False
+    document_name: str = Field(default="", max_length=180)
 
 
-async def _retrieve_nodes(question: str, rewritten_question: str, user_id: str):
+async def _retrieve_nodes(
+    question: str,
+    rewritten_question: str,
+    user_id: str,
+    document_name: str = "",
+):
     try:
-        nodes = await asyncio.to_thread(retrieve_context, rewritten_question, user_id, settings.TOP_K)
+        nodes = await asyncio.to_thread(
+            retrieve_context,
+            rewritten_question,
+            user_id,
+            settings.TOP_K,
+            True,
+            document_name,
+        )
         if not nodes:
-            nodes = await asyncio.to_thread(retrieve_context, question, user_id, settings.TOP_K)
+            nodes = await asyncio.to_thread(
+                retrieve_context,
+                question,
+                user_id,
+                settings.TOP_K,
+                True,
+                document_name,
+            )
     except FileNotFoundError:
         nodes = []
     except Exception as exc:
@@ -77,6 +97,7 @@ async def chat_stream(http_request: Request, request: ChatRequest):
     session_id = request.session_id
     question = request.question.strip()
     language = request.language.strip().lower() if request.language else ""
+    document_name = request.document_name.strip()
 
     if not question:
         return StreamingResponse(
@@ -114,7 +135,7 @@ async def chat_stream(http_request: Request, request: ChatRequest):
         history_text = "\n".join(f"{m['role']}: {m['content'][:200]}" for m in history)
         rewritten_question = f"{question} (Previous context: {history_text})"
 
-    nodes = await _retrieve_nodes(question, rewritten_question, user_id)
+    nodes = await _retrieve_nodes(question, rewritten_question, user_id, document_name)
     has_docs = False
     try:
         retriever = get_retriever(user_id)

@@ -7,7 +7,7 @@ import { GlobalSearch } from './GlobalSearch';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { Search, Loader2 } from 'lucide-react';
+import { FolderOpen, Globe2, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : 'Unknown error';
@@ -27,7 +27,11 @@ export const ChatArea = () => {
     customInstructions,
     characterStyle,
     nickname,
-    language
+    language,
+    selectedDocument,
+    setSelectedDocument,
+    setSidebarActiveTab,
+    setSidebarOpen,
   } = useChatStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -211,7 +215,9 @@ export const ChatArea = () => {
             setSearchOffer({ query: action.query, loading: false });
           }
         },
-        language
+        language,
+        false,
+        selectedDocument?.name,
       );
     } catch (error: unknown) {
       if (errorName(error) === 'AbortError') {
@@ -260,6 +266,7 @@ export const ChatArea = () => {
         undefined,
         language,
         true,
+        selectedDocument?.name,
       );
     } catch (error: unknown) {
       if (errorName(error) === 'AbortError') {
@@ -286,7 +293,7 @@ export const ChatArea = () => {
         {messages.length === 0 ? (
           <WelcomeScreen onSelectSuggestion={handleSend} />
         ) : (
-          <div className="flex flex-col max-w-[950px] mx-auto w-full px-4 md:px-10 lg:px-16 pb-4">
+          <div className="mx-auto flex w-full max-w-[960px] flex-col px-4 pb-4 md:px-8 lg:px-10">
             {messages.map((message, index) => {
               const isLastMessage = index === messages.length - 1;
               const messageIsStreaming = isLastMessage && message.role === 'assistant' && isStreaming;
@@ -303,19 +310,70 @@ export const ChatArea = () => {
 
             {searchOffer && !searchOffer.loading && !isStreaming && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex justify-center mt-2"
+                className="mx-auto mt-2 w-full max-w-[680px] rounded-[14px] border border-border/50 bg-card/75 p-3.5 shadow-sm"
               >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSearchDownload(searchOffer.query)}
-                  className="gap-2 text-xs"
-                >
-                  <Search className="h-3.5 w-3.5" />
-                  Search & download PDFs about "{searchOffer.query.slice(0, 50)}"
-                </Button>
+                <p className="text-sm font-semibold text-foreground">
+                  {selectedDocument
+                    ? `No matching passages found in ${selectedDocument.name}`
+                    : 'No relevant document passages were found'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Choose a document, rebuild the index, or expand the search to the web.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-[10px] px-3 text-xs"
+                    onClick={() => {
+                      setSidebarActiveTab('documents');
+                      setSidebarOpen(true);
+                      window.dispatchEvent(new CustomEvent('nova:open-sidebar'));
+                    }}
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    Choose a document
+                  </Button>
+                  {selectedDocument && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 rounded-[10px] px-3 text-xs"
+                      onClick={() => setSelectedDocument(null)}
+                    >
+                      Clear scope
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-[10px] px-3 text-xs"
+                    onClick={async () => {
+                      try {
+                        const result = await api.reindexDocuments();
+                        if (result.job_id) await api.waitForIndexJob(result.job_id);
+                        toast.success('Knowledge index rebuilt');
+                        setSearchOffer(null);
+                      } catch (error) {
+                        toast.error(errorMessage(error));
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Re-index
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSearchDownload(searchOffer.query)}
+                    className="h-9 rounded-[10px] px-3 text-xs text-muted-foreground"
+                  >
+                    <Globe2 className="h-4 w-4" />
+                    Search web
+                  </Button>
+                </div>
               </motion.div>
             )}
 
@@ -335,7 +393,7 @@ export const ChatArea = () => {
 
       {/* Input area with a feathered backdrop instead of a hard color edge */}
       <div className="nova-composer-dock relative isolate px-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0.75rem))] pt-5 md:pb-6 md:pt-6">
-        <div className="relative z-10 mx-auto w-full max-w-[850px]">
+        <div className="relative z-10 mx-auto w-full max-w-[920px]">
           <ChatInput onSend={handleSend} onStop={handleStop} />
         </div>
       </div>

@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import { Trash2, RefreshCw, Search, Plus, FolderOpen, File, CheckCircle2, AlertCircle, Upload, Database, HardDrive, ExternalLink } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, Database, ExternalLink, File, FolderOpen, HardDrive, MessageSquareText, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
 import { cn } from '../../lib/utils';
+import { useChatStore } from '../../store/useChatStore';
 
 interface Document {
   id: string;
@@ -25,7 +26,19 @@ const FILE_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   docx: { bg: 'bg-violet-500/15', text: 'text-violet-400' },
 };
 
-export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () => void }) => {
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
+
+export const DocumentManager = ({
+  onUploadComplete,
+  onSelectDocument,
+}: {
+  onUploadComplete?: () => void;
+  onSelectDocument?: () => void;
+}) => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,12 +46,11 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  const selectedDocument = useChatStore((state) => state.selectedDocument);
+  const setSelectedDocument = useChatStore((state) => state.setSelectedDocument);
+  const setSidebarActiveTab = useChatStore((state) => state.setSidebarActiveTab);
 
-  useEffect(() => {
-    loadDocuments();
-  }, []);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       setLoading(true);
       const docs = await api.getDocuments();
@@ -58,19 +70,21 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
         source_url: doc.source_url
       }));
       setDocuments(formattedDocs);
+      const currentSelection = useChatStore.getState().selectedDocument;
+      if (currentSelection && !formattedDocs.some((document) => document.id === currentSelection.id)) {
+        setSelectedDocument(null);
+      }
     } catch (error) {
       console.error('Failed to load documents:', error);
       toast.error('Failed to load documents');
     } finally {
       setLoading(false);
     }
-  };
+  }, [setSelectedDocument]);
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
 
   const handleUpload = async (file: File) => {
     setUploading(true);
@@ -112,6 +126,7 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
     try {
       await api.deleteDocument(id);
       setDocuments(prev => prev.filter(d => d.id !== id));
+      if (selectedDocument?.id === id) setSelectedDocument(null);
       toast.success('Document deleted');
     } catch (error) {
       console.error('Failed to delete document:', error);
@@ -138,6 +153,14 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
   );
 
   const totalChunks = documents.reduce((acc, doc) => acc + (doc.chunks || 0), 0);
+
+  const handleAskDocument = (document: Document) => {
+    setSelectedDocument({ id: document.id, name: document.name });
+    setSidebarActiveTab('conversations');
+    onSelectDocument?.();
+    window.setTimeout(() => window.document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message input"]')?.focus(), 0);
+    toast.success(`Questions will use ${document.name}`);
+  };
 
   return (
     <div
@@ -173,14 +196,14 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
             </div>
             <div>
               <p className="text-[12px] font-semibold text-foreground leading-tight">Knowledge Base</p>
-              <p className="text-[10.5px] text-muted-foreground/50">{documents.length} docs · {totalChunks} chunks</p>
+              <p className="text-xs text-muted-foreground/70">{documents.length} docs · {totalChunks} chunks</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
+              className="h-9 w-9 rounded-[10px] text-muted-foreground hover:text-foreground"
               onClick={handleReindex}
               title="Re-index all"
             >
@@ -188,7 +211,7 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
             </Button>
             <Button
               size="icon"
-              className="h-7 w-7 rounded-lg bg-primary text-white hover:bg-primary/90 shadow-sm"
+              className="h-9 w-9 rounded-[10px] bg-primary text-white shadow-sm hover:bg-primary/90"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
             >
@@ -218,7 +241,7 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
               placeholder="Filter documents..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-7 h-7 rounded-lg bg-muted/25 border-border/20 text-[12px] placeholder:text-muted-foreground/35 focus-visible:ring-1 focus-visible:ring-primary/30"
+              className="h-10 rounded-[10px] border-border/40 bg-muted/25 pl-8 text-[13px] placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-primary/30"
             />
           </div>
         )}
@@ -269,7 +292,12 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
                   exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
                   transition={{ duration: 0.2, delay: idx * 0.03 }}
                   layout
-                  className="group p-2.5 rounded-xl bg-muted/20 border border-border/20 hover:border-border/40 hover:bg-muted/35 transition-all"
+                  className={cn(
+                    "group rounded-[14px] border p-3 transition-colors",
+                    selectedDocument?.id === doc.id
+                      ? "border-primary/35 bg-primary/10"
+                      : "border-border/35 bg-muted/20 hover:border-border/60 hover:bg-muted/35",
+                  )}
                 >
                   <div className="flex items-start gap-2.5">
                     {/* File icon */}
@@ -279,23 +307,35 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
 
                     {/* File info */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12.5px] font-medium text-foreground/90 truncate leading-tight">{doc.name}</p>
+                      <p className="truncate text-[13px] font-medium leading-tight text-foreground" title={doc.name}>{doc.name}</p>
                       <div className="flex items-center gap-1.5 mt-1">
-                        <span className="text-[10.5px] text-muted-foreground/50 uppercase font-medium">{doc.type}</span>
-                        <span className="text-muted-foreground/25 text-[9px]">·</span>
-                        <span className="text-[10.5px] text-muted-foreground/50">{doc.size}</span>
-                        <span className="text-muted-foreground/25 text-[9px]">·</span>
-                        <span className="text-[10.5px] text-muted-foreground/50">{doc.chunks} chunks</span>
+                        <span className="text-xs font-medium uppercase text-muted-foreground/70">{doc.type}</span>
+                        <span className="text-xs text-muted-foreground/45">·</span>
+                        <span className="text-xs text-muted-foreground/70">{doc.size}</span>
+                        <span className="text-xs text-muted-foreground/45">·</span>
+                        <span className="text-xs text-muted-foreground/70">{doc.chunks} chunks</span>
                       </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant={selectedDocument?.id === doc.id ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="h-9 rounded-[10px] px-2.5 text-xs"
+                        onClick={() => handleAskDocument(doc)}
+                        disabled={!doc.indexed}
+                        aria-label={`Ask questions about ${doc.name}`}
+                      >
+                        <MessageSquareText className="h-4 w-4" />
+                        <span className="hidden min-[300px]:inline">Ask</span>
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 rounded-md text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                        className="h-9 w-9 rounded-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => handleDelete(doc.id)}
+                        aria-label={`Delete ${doc.name}`}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -314,7 +354,7 @@ export const DocumentManager = ({ onUploadComplete }: { onUploadComplete?: () =>
                       <AlertCircle className="h-3 w-3 text-red-400" />
                     )}
                     <span className={cn(
-                      "text-[10px] font-medium",
+                      "text-xs font-medium",
                       doc.status === 'indexed' ? "text-emerald-400/70" : doc.status === 'processing' ? "text-primary/70" : "text-red-400/70"
                     )}>
                       {doc.status === 'indexed' ? 'Indexed' : doc.status === 'processing' ? 'Processing...' : 'Failed'}

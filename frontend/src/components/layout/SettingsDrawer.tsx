@@ -20,11 +20,11 @@ import {
   Laptop,
   Loader2,
   LockKeyhole,
+  MessageSquareText,
   MessageSquare,
   MonitorSmartphone,
   Moon,
   RefreshCw,
-  Save,
   Settings as SettingsIcon,
   ShieldCheck,
   SlidersHorizontal,
@@ -45,7 +45,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '../ui/sheet';
 import { cn } from '../../lib/utils';
 import { useChatStore } from '../../store/useChatStore';
@@ -105,7 +104,7 @@ const formatUptime = (seconds?: number) => {
 
 const SettingsCard = ({ children, className }: { children: ReactNode; className?: string }) => (
   <div className={cn(
-    'nova-settings-card rounded-2xl border border-border/55 bg-card/60 shadow-[0_18px_48px_-38px_rgba(var(--primary-rgb),0.45)] backdrop-blur-sm',
+    'nova-settings-card rounded-[14px] border border-border/55 bg-card/90 shadow-sm',
     className,
   )}>
     {children}
@@ -124,8 +123,8 @@ const SectionHeading = ({
   description: string;
 }) => (
   <div className="flex items-start gap-3.5">
-    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/18 to-violet-500/5 text-primary shadow-sm">
-      <Icon className="h-5 w-5" />
+    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+      <Icon className="h-[18px] w-[18px]" />
     </div>
     <div className="min-w-0">
       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary/75">{eyebrow}</p>
@@ -146,7 +145,7 @@ const CardHeader = ({ title, description, action }: { title: string; description
 );
 
 const Metric = ({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Activity }) => (
-  <div className="rounded-xl border border-border/45 bg-background/55 p-3.5">
+  <div className="rounded-[12px] border border-border/45 bg-background/55 p-3.5">
     <div className="flex items-center gap-2 text-muted-foreground">
       <Icon className="h-3.5 w-3.5" />
       <span className="text-[10px] font-bold uppercase tracking-[0.12em]">{label}</span>
@@ -201,6 +200,8 @@ export const SettingsDrawer = () => {
     syncPreferences,
     clearAllConversations,
     logout,
+    setSelectedDocument,
+    setSidebarActiveTab,
   } = useChatStore();
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -213,8 +214,9 @@ export const SettingsDrawer = () => {
   const [deletingDocument, setDeletingDocument] = useState<string | null>(null);
   const [confirmClearDocuments, setConfirmClearDocuments] = useState(false);
   const [reindexing, setReindexing] = useState(false);
-  const [savingPreferences, setSavingPreferences] = useState(false);
-  const [preferencesSaved, setPreferencesSaved] = useState(false);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [preferenceSaveState, setPreferenceSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const lastSavedPreferencesRef = useRef('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -231,6 +233,14 @@ export const SettingsDrawer = () => {
 
   const totalSize = useMemo(() => documents.reduce((sum, document) => sum + document.size, 0), [documents]);
   const totalChunks = useMemo(() => documents.reduce((sum, document) => sum + (document.chunks || 0), 0), [documents]);
+  const preferenceSnapshot = useMemo(() => JSON.stringify({
+    displayName,
+    theme,
+    language,
+    characterStyle,
+    nickname,
+    customInstructions,
+  }), [characterStyle, customInstructions, displayName, language, nickname, theme]);
 
   const loadDocuments = async () => {
     setLoadingDocs(true);
@@ -258,28 +268,58 @@ export const SettingsDrawer = () => {
   };
 
   useEffect(() => {
-    if (!settingsOpen) return;
-    void syncPreferences().catch(() => undefined);
+    if (!settingsOpen) {
+      setPreferencesReady(false);
+      setPreferenceSaveState('idle');
+      return;
+    }
+    let cancelled = false;
+    setPreferencesReady(false);
+    void syncPreferences()
+      .catch(() => undefined)
+      .finally(() => {
+        if (cancelled) return;
+        const state = useChatStore.getState();
+        lastSavedPreferencesRef.current = JSON.stringify({
+          displayName: state.displayName,
+          theme: state.theme,
+          language: state.language,
+          characterStyle: state.characterStyle,
+          nickname: state.nickname,
+          customInstructions: state.customInstructions,
+        });
+        setPreferencesReady(true);
+        setPreferenceSaveState('saved');
+      });
+    return () => { cancelled = true; };
   }, [settingsOpen, syncPreferences]);
+
+  useEffect(() => {
+    if (!settingsOpen || !preferencesReady || preferenceSnapshot === lastSavedPreferencesRef.current) return;
+    setPreferenceSaveState('saving');
+    const timer = window.setTimeout(async () => {
+      try {
+        await savePreferences();
+        lastSavedPreferencesRef.current = preferenceSnapshot;
+        setPreferenceSaveState('saved');
+      } catch (error) {
+        setPreferenceSaveState('error');
+        toast.error(error instanceof Error ? error.message : 'Could not save preferences');
+      }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [preferenceSnapshot, preferencesReady, savePreferences, settingsOpen]);
 
   useEffect(() => {
     if (settingsOpen && activeSection === 'knowledge') void loadDocuments();
     if (settingsOpen && (activeSection === 'system' || activeSection === 'about')) void loadSystem();
   }, [activeSection, settingsOpen]);
 
-  const handleSavePreferences = async () => {
-    setSavingPreferences(true);
-    setPreferencesSaved(false);
-    try {
-      await savePreferences();
-      setPreferencesSaved(true);
-      toast.success('Preferences saved to your account');
-      window.setTimeout(() => setPreferencesSaved(false), 1800);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not save preferences');
-    } finally {
-      setSavingPreferences(false);
+  const handleSettingsOpenChange = (open: boolean) => {
+    if (!open && preferencesReady && preferenceSnapshot !== lastSavedPreferencesRef.current) {
+      void savePreferences().catch(() => undefined);
     }
+    setSettingsOpen(open);
   };
 
   const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -332,6 +372,14 @@ export const SettingsDrawer = () => {
     } finally {
       setSummarizingFile(null);
     }
+  };
+
+  const handleAskDocument = (document: Document) => {
+    setSelectedDocument({ id: document.id, name: document.name });
+    setSidebarActiveTab('conversations');
+    setSettingsOpen(false);
+    window.setTimeout(() => window.document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message input"]')?.focus(), 0);
+    toast.success(`Questions will use ${document.name}`);
   };
 
   const handleDeleteDocument = async (document: Document) => {
@@ -461,12 +509,7 @@ export const SettingsDrawer = () => {
         </div>
       </SettingsCard>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSavePreferences} disabled={savingPreferences} className="h-10 rounded-xl px-4 shadow-lg shadow-primary/15">
-          {savingPreferences ? <Loader2 className="animate-spin" /> : preferencesSaved ? <Check /> : <Save />}
-          {preferencesSaved ? 'Saved' : 'Save preferences'}
-        </Button>
-      </div>
+      <p className="text-right text-xs text-muted-foreground">Changes save automatically to your Nova account.</p>
     </div>
   );
 
@@ -501,8 +544,8 @@ export const SettingsDrawer = () => {
               <p className="truncate text-lg font-semibold text-foreground">{displayName || username || 'Nova user'}</p>
               <p className="mt-1 truncate text-sm text-muted-foreground">@{username || 'user'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full border border-emerald-600/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:text-emerald-400">Private workspace</span>
-                <span className="rounded-full border border-border/50 bg-background/55 px-2.5 py-1 text-[10px] text-muted-foreground">Avatar stays on this device</span>
+                <span className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-xs font-medium text-muted-foreground">Private workspace</span>
+                <span className="rounded-full border border-border/50 bg-background/55 px-2.5 py-1 text-xs text-muted-foreground">Avatar stays on this device</span>
               </div>
             </div>
           </div>
@@ -518,13 +561,9 @@ export const SettingsDrawer = () => {
               placeholder="How should your name appear?"
               className="nova-settings-field h-11 rounded-xl bg-background/65"
             />
-            <p className="text-[11px] text-muted-foreground">Synced across devices when you save your preferences.</p>
+            <p className="text-xs text-muted-foreground">Saved automatically and synced across devices.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={handleSavePreferences} disabled={savingPreferences} className="rounded-xl">
-              {savingPreferences ? <Loader2 className="animate-spin" /> : <Save />}
-              Save profile
-            </Button>
             {avatar && (
               <Button variant="outline" onClick={() => setAvatar(null)} className="rounded-xl text-destructive">
                 <Trash2 /> Remove avatar
@@ -624,12 +663,7 @@ export const SettingsDrawer = () => {
               className="nova-settings-field min-h-36 w-full resize-y rounded-xl border border-input bg-background/65 px-3.5 py-3 text-sm leading-6 text-foreground outline-none transition-shadow placeholder:text-muted-foreground/55 focus:ring-2 focus:ring-ring/60"
             />
           </div>
-          <div className="flex justify-end">
-            <Button onClick={handleSavePreferences} disabled={savingPreferences} className="rounded-xl">
-              {savingPreferences ? <Loader2 className="animate-spin" /> : <Save />}
-              Save personalization
-            </Button>
-          </div>
+          <p className="text-right text-xs text-muted-foreground">Tone and instructions save automatically.</p>
         </div>
       </SettingsCard>
     </div>
@@ -692,6 +726,10 @@ export const SettingsDrawer = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 sm:justify-end">
+                  <Button variant="outline" size="sm" className="h-9 rounded-[10px] text-xs" onClick={() => handleAskDocument(document)} disabled={!document.indexed}>
+                    <MessageSquareText className="h-4 w-4" />
+                    Ask
+                  </Button>
                   <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" onClick={() => void handleSummarize(document)} disabled={summarizingFile === document.id || !document.indexed}>
                     {summarizingFile === document.id ? <Loader2 className="animate-spin" /> : <Sparkles />}
                     Summarize
@@ -860,7 +898,7 @@ export const SettingsDrawer = () => {
             readiness?.ready ? 'border-emerald-500/15 bg-emerald-500/5' : 'border-amber-500/15 bg-amber-500/5',
           )}>
             <div className="flex items-center gap-3">
-              <span className={cn('relative grid h-11 w-11 place-items-center rounded-2xl', readiness?.ready ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400' : 'bg-amber-500/12 text-amber-700 dark:text-amber-400')}>
+              <span className={cn('relative grid h-11 w-11 place-items-center rounded-2xl', readiness?.ready ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400')}>
                 <Activity className="h-5 w-5" />
                 <span className={cn('absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-card', readiness?.ready ? 'bg-emerald-500' : 'bg-amber-500')} />
               </span>
@@ -984,26 +1022,31 @@ export const SettingsDrawer = () => {
   const ActiveSectionIcon = activeMeta.icon;
 
   return (
-    <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-      <SheetTrigger asChild>
-        <Button aria-label="Open settings" variant="ghost" size="icon" className="group text-muted-foreground hover:text-foreground">
-          <SettingsIcon className="h-5 w-5 transition-transform duration-300 group-hover:rotate-45" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="nova-settings-shell w-full overflow-hidden border-l border-border/50 bg-background p-0 backdrop-blur-2xl sm:max-w-[980px]">
+    <Sheet open={settingsOpen} onOpenChange={handleSettingsOpenChange}>
+      <SheetContent className="nova-settings-shell w-full overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-[900px]">
         <SheetHeader className="relative border-b border-border/45 px-5 py-4 text-left sm:px-6 sm:py-5">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/80 to-transparent" />
           <div className="flex items-center gap-3 pr-8">
             <div className="grid h-9 w-9 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary"><SettingsIcon className="h-4 w-4" /></div>
             <div>
               <SheetTitle className="text-lg tracking-tight">Settings</SheetTitle>
-              <SheetDescription className="mt-0.5 text-xs">Control your workspace, knowledge and account.</SheetDescription>
+              <SheetDescription className="mt-0.5 flex items-center gap-1.5 text-xs">
+                {preferenceSaveState === 'saving' && <Loader2 className="h-3 w-3 animate-spin" />}
+                {preferenceSaveState === 'saved' && <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
+                <span>
+                  {preferenceSaveState === 'saving'
+                    ? 'Saving changes…'
+                    : preferenceSaveState === 'error'
+                      ? 'Some preferences could not be saved'
+                      : 'Preferences save automatically'}
+                </span>
+              </SheetDescription>
             </div>
           </div>
         </SheetHeader>
 
         <div className="flex h-[calc(100dvh-73px)] min-h-0 flex-col sm:flex-row">
-          <aside className="nova-settings-sidebar shrink-0 border-b border-border/45 bg-muted/15 sm:w-64 sm:border-b-0 sm:border-r">
+          <aside className="nova-settings-sidebar shrink-0 border-b border-border/45 bg-muted/15 sm:w-60 sm:border-b-0 sm:border-r">
             <div className="flex gap-1.5 overflow-x-auto p-3 sm:block sm:space-y-1 sm:overflow-visible sm:p-4">
               {sections.map((section) => {
                 const Icon = section.icon;
@@ -1014,18 +1057,18 @@ export const SettingsDrawer = () => {
                     type="button"
                     onClick={() => setActiveSection(section.id)}
                     className={cn(
-                      'group flex min-w-fit items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all sm:w-full',
+                      'group flex min-w-fit items-center gap-2 rounded-[10px] px-3 py-2.5 text-left transition-colors sm:w-full sm:gap-3',
                       active
                         ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.16)]'
                         : 'text-muted-foreground hover:bg-muted/55 hover:text-foreground',
                     )}
                   >
                     <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors', active ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background/60 group-hover:bg-background')}>
-                      <Icon className="h-3.5 w-3.5" />
+                      <Icon className="h-4 w-4" />
                     </span>
-                    <span className="hidden min-w-0 flex-1 sm:block">
+                    <span className="min-w-0 flex-1">
                       <span className="block text-xs font-semibold">{section.label}</span>
-                      <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{section.description}</span>
+                      <span className="mt-0.5 hidden truncate text-xs text-muted-foreground sm:block">{section.description}</span>
                     </span>
                     <ChevronRight className={cn('hidden h-3.5 w-3.5 sm:block', active ? 'opacity-70' : 'opacity-0 group-hover:opacity-40')} />
                   </button>

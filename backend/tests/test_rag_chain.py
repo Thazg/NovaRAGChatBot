@@ -50,3 +50,32 @@ def test_retrieval_checks_the_entire_chunk_for_query_terms(monkeypatch) -> None:
 
     assert len(nodes) == 1
     assert "Reciprocal fusion" in nodes[0]["content"]
+
+
+def test_document_scope_limits_overview_to_selected_file(monkeypatch) -> None:
+    store = HybridVectorStore(
+        user_id="retrieval-test-user",
+        documents=[
+            {
+                "content": "Alpha opening and Alpha conclusion.",
+                "metadata": {"file_name": "alpha.pdf", "storage_name": "alpha.pdf"},
+            },
+            {
+                "content": "Beta opening and Beta conclusion.",
+                "metadata": {"file_name": "beta.pdf", "storage_name": "beta.pdf"},
+            },
+        ],
+    )
+    store._build_bm25()
+    monkeypatch.setattr(rag_chain, "get_retriever", lambda _user_id: store)
+    rag_chain.retrieval_cache.clear()
+
+    nodes = rag_chain.retrieve_context(
+        "Summarize this document.",
+        "retrieval-test-user",
+        top_k=3,
+        document_name="beta.pdf",
+    )
+
+    assert nodes
+    assert {node["metadata"]["file_name"] for node in nodes} == {"beta.pdf"}

@@ -272,10 +272,26 @@ class HybridVectorStore:
         )
 
     def retrieve(
-        self, query: str, top_k: int = 5, min_score: float = 0.0
+        self,
+        query: str,
+        top_k: int = 5,
+        min_score: float = 0.0,
+        file_name: str | None = None,
     ) -> list[Dict[str, Any]]:
         n = len(self.documents)
         if n == 0:
+            return []
+        normalized_file_name = (file_name or "").strip().casefold()
+        eligible_indices = {
+            index
+            for index, document in enumerate(self.documents)
+            if not normalized_file_name
+            or normalized_file_name in {
+                str(document.get("metadata", {}).get("file_name", "")).strip().casefold(),
+                str(document.get("metadata", {}).get("storage_name", "")).strip().casefold(),
+            }
+        }
+        if not eligible_indices:
             return []
         expanded = expand_query(query)
         tokenized_query = self._tokenize(expanded)
@@ -326,6 +342,7 @@ class HybridVectorStore:
         candidates = [
             (idx, rrf_score)
             for idx, rrf_score in ranked
+            if idx in eligible_indices
             if min_score <= 0 or (max_rrf > 0 and rrf_score / max_rrf >= min_score)
         ]
 

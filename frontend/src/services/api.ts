@@ -380,6 +380,7 @@ export const api = {
     onAction?: (action: { type: string; query: string }) => void,
     language?: string,
     regenerate = false,
+    documentName?: string,
     reconnectAttempt = 0,
     replayPrefix = '',
   ): Promise<void> {
@@ -387,6 +388,7 @@ export const api = {
     if (instructions) body.instructions = instructions;
     if (language && language !== 'auto') body.language = language;
     if (regenerate) body.regenerate = true;
+    if (documentName) body.document_name = documentName;
     let response: Response;
     try {
       response = await authorizedFetch('/chat/stream', {
@@ -400,7 +402,7 @@ export const api = {
         await new Promise((resolve) => setTimeout(resolve, 500));
         return api.streamMessage(
           sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, reconnectAttempt + 1, replayPrefix,
+          onAction, language, regenerate, documentName, reconnectAttempt + 1, replayPrefix,
         );
       }
       throw error;
@@ -481,7 +483,7 @@ export const api = {
         await new Promise((resolve) => setTimeout(resolve, 500));
         return api.streamMessage(
           sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, reconnectAttempt + 1, emittedText,
+          onAction, language, regenerate, documentName, reconnectAttempt + 1, emittedText,
         );
       }
       throw streamError;

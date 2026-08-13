@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { MessageSquare, PanelLeftClose, PanelLeft, MoreHorizontal, Trash2, Edit2, Search, UserCircle, Sparkles, Pin, Copy, Download, FolderOpen, Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { Copy, Download, Edit2, FolderOpen, LogOut, MessageSquare, Moon, MoreHorizontal, PanelLeft, PanelLeftClose, Pin, Search, Settings, Sparkles, SquarePen, Sun, Trash2, UserCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '../../store/useChatStore';
 import { Button } from '../ui/button';
@@ -83,7 +83,7 @@ const ConversationItem = ({
         <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
           {isPinned && <Pin className="h-3 w-3 text-primary/60 shrink-0 -rotate-45" />}
           <div className={cn(
-            "h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] transition-colors",
             isActive ? "bg-primary/20 text-primary" : "bg-muted/50 text-muted-foreground group-hover:text-foreground"
           )}>
             <MessageSquare className="h-3.5 w-3.5" />
@@ -91,7 +91,7 @@ const ConversationItem = ({
           {sidebarOpen && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium leading-tight">{conv.title}</p>
-              <p className="text-[11px] text-muted-foreground/60 truncate mt-0.5">
+              <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
                 {conv.messages.length > 0 ? `${conv.messages.length} messages` : 'Empty'}
               </p>
             </div>
@@ -104,7 +104,7 @@ const ConversationItem = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground/50 hover:text-foreground rounded-lg opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                className="h-9 w-9 shrink-0 rounded-[10px] text-muted-foreground opacity-100 transition-colors hover:text-foreground lg:opacity-0 lg:group-hover:opacity-100"
                   onClick={(e: React.MouseEvent) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
@@ -299,7 +299,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
   return (
     <motion.div 
       initial={false}
-      animate={{ width: forceShow ? "100%" : (sidebarOpen ? 340 : 76) }}
+      animate={{ width: forceShow ? "100%" : (sidebarOpen ? 320 : 72) }}
       transition={{ type: "spring", stiffness: 320, damping: 32 }}
       className={cn(
         "h-full flex flex-col z-40 shrink-0 overflow-hidden border-r border-border/40",
@@ -311,19 +311,19 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
     >
       {/* Header: New Chat + Toggle */}
       <div className={cn("p-3 flex items-center shrink-0", sidebarOpen ? "justify-between gap-2" : "justify-center flex-col gap-3")}>
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} className={cn(sidebarOpen ? "w-full" : "w-auto")}>
+        <motion.div whileTap={{ scale: 0.98 }} className={cn(sidebarOpen ? "w-full" : "w-auto")}>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button 
                   onClick={() => { createConversation(); toast.success('New chat created'); }}
                   className={cn(
-                    "h-10 rounded-xl bg-gradient-to-r from-primary to-violet-500 text-white shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all font-medium border-0",
+                    "h-10 rounded-[10px] border border-primary/25 bg-primary/10 font-semibold text-primary shadow-none transition-colors hover:bg-primary/15",
                     sidebarOpen ? "w-full justify-start gap-2.5 px-4" : "w-10 justify-center p-0"
                   )}
                   aria-label="New chat"
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <SquarePen className="h-[18px] w-[18px]" />
                   {sidebarOpen && <span className="text-[13px]">New Chat</span>}
                 </Button>
               </TooltipTrigger>
@@ -337,7 +337,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
           size="icon" 
           onClick={forceShow ? onClose : handleToggleSidebar}
           className={cn(
-            "shrink-0 text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 rounded-xl transition-all h-8 w-8",
+            "h-9 w-9 shrink-0 rounded-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
             sidebarOpen ? "" : "mt-1"
           )}
           aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
@@ -367,7 +367,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                className="pl-8 h-9 rounded-xl bg-muted/30 border-border/30 focus-visible:ring-1 focus-visible:ring-primary/40 text-[13px] placeholder:text-muted-foreground/55 transition-all"
+                className="h-10 rounded-[10px] border-border/40 bg-muted/30 pl-9 text-[13px] placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-primary/40"
                 aria-label="Search conversations"
               />
             </div>
@@ -383,7 +383,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
             <div className="flex items-center gap-1 p-1 bg-muted/30 rounded-xl border border-border/20">
               <button
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 h-7 rounded-lg text-[11.5px] font-semibold transition-all",
+                  "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition-colors",
                   activeTab === 'conversations'
                     ? "bg-background shadow-sm text-foreground border border-border/40"
                     : "text-muted-foreground/60 hover:text-muted-foreground"
@@ -398,7 +398,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
               </button>
               <button
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 h-7 rounded-lg text-[11.5px] font-semibold transition-all",
+                  "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition-colors",
                   activeTab === 'documents'
                     ? "bg-background shadow-sm text-foreground border border-border/40"
                     : "text-muted-foreground/60 hover:text-muted-foreground"
@@ -423,7 +423,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
                   transition={{ duration: 0.2 }}
                   className="h-full"
                 >
-                  <DocumentManager onUploadComplete={() => setActiveTab('documents')} />
+                  <DocumentManager onUploadComplete={() => setActiveTab('documents')} onSelectDocument={onClose} />
                 </motion.div>
               ) : (
                 <motion.div
@@ -523,7 +523,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
                 )}
                 <div className="flex-1 overflow-hidden min-w-0">
                   <p className="text-[13px] font-semibold truncate text-left">{displayName || 'User'}</p>
-                  <p className="text-[11px] text-muted-foreground/65 truncate text-left">Private workspace</p>
+                  <p className="truncate text-left text-xs text-muted-foreground/70">Personal workspace</p>
                 </div>
               </div>
             </DropdownMenuTrigger>
