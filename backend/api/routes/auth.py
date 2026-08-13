@@ -49,6 +49,15 @@ class PreferencesRequest(BaseModel):
     custom_instructions: str = Field(default="", max_length=4000)
 
 
+class PreferencesPatchRequest(BaseModel):
+    display_name: str | None = Field(default=None, max_length=80)
+    theme: Literal["light", "dark", "system"] | None = None
+    language: Literal["auto", "english", "vietnamese"] | None = None
+    character_style: Literal["warm", "enthusiastic", "professional", "concise", "friendly", "custom"] | None = None
+    nickname: str | None = Field(default=None, max_length=80)
+    custom_instructions: str | None = Field(default=None, max_length=4000)
+
+
 def _set_refresh_cookie(response: Response, user_id: str) -> None:
     refresh_token = create_refresh_token(user_id)
     payload = verify_token(refresh_token, expected_type="refresh") or {}
@@ -152,6 +161,16 @@ def update_preferences(request: Request, body: PreferencesRequest):
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return save_preferences(user_id, body.model_dump())
+
+
+@router.patch("/preferences")
+def patch_preferences(request: Request, body: PreferencesPatchRequest):
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    preferences = load_preferences(user_id)
+    preferences.update(body.model_dump(exclude_none=True))
+    return save_preferences(user_id, preferences)
 
 
 @router.post("/change-password")

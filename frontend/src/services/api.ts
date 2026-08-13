@@ -709,6 +709,16 @@ export const api = {
     return UserPreferencesSchema.parse(await response.json());
   },
 
+  async patchPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {
+    const response = await authorizedFetch('/auth/preferences', {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify(preferences),
+    });
+    if (!response.ok) throw await responseError(response, 'Failed to save preference');
+    return UserPreferencesSchema.parse(await response.json());
+  },
+
   async changePassword(currentPassword: string, newPassword: string): Promise<{ status: string; message: string }> {
     const response = await authorizedFetch('/auth/change-password', {
       method: 'POST',

@@ -184,15 +184,19 @@ def test_account_preferences_persist_and_export(isolated_users) -> None:
     }
 
     saved = client.put("/auth/preferences", headers=headers, json=preferences)
+    patched = client.patch("/auth/preferences", headers=headers, json={"theme": "light"})
     loaded = client.get("/auth/preferences", headers=headers)
     exported = client.get("/auth/export", headers=headers)
 
     assert saved.status_code == 200
-    assert loaded.json() == preferences
+    assert patched.status_code == 200
+    assert patched.json()["theme"] == "light"
+    assert patched.json()["language"] == "vietnamese"
+    assert loaded.json() == {**preferences, "theme": "light"}
     assert exported.status_code == 200
     assert exported.headers["cache-control"] == "no-store"
     assert exported.json()["account"]["username"] == "settings.user"
-    assert exported.json()["preferences"] == preferences
+    assert exported.json()["preferences"] == {**preferences, "theme": "light"}
     assert exported.json()["conversations"] == []
 
 

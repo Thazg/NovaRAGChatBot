@@ -211,7 +211,15 @@ export const useChatStore = create<ChatState>()(
       setNickname: (nickname: string) => set({ nickname }),
       setDeveloperMode: (developerMode: boolean) => set({ developerMode }),
 
-      setTheme: (theme: 'light' | 'dark' | 'system') => set({ theme }),
+      setTheme: (theme: 'light' | 'dark' | 'system') => {
+        set({ theme });
+        // Theme changes are expected to persist immediately, including the
+        // quick toggle in the sidebar. Without this, session bootstrap would
+        // restore the older server preference after a page refresh.
+        if (get().userId) {
+          void api.patchPreferences({ theme }).catch(() => undefined);
+        }
+      },
       setAvatar: (avatar: string | null) => set({ avatar }),
       setDisplayName: (displayName: string) => set({ displayName }),
       
