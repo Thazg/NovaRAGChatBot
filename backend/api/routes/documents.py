@@ -235,12 +235,14 @@ def _list_upload_files(user_id: str) -> list[dict]:
                 name = remote_path[len(f"uploads/{user_id}/"):]
                 if name in INTERNAL_METADATA_FILES:
                     continue
-                files.append({
+                item = {
                     "id": name, "name": _display_name(name, manifest), "size": 0,
                     "indexed": bool(chunk_counts.get(name)),
                     "chunks": chunk_counts.get(name, 0),
-                    "source_url": source_urls.get(name),
-                })
+                }
+                if source_url := source_urls.get(name):
+                    item["source_url"] = source_url
+                files.append(item)
             return files
         except ImportError:
             pass
@@ -251,12 +253,14 @@ def _list_upload_files(user_id: str) -> list[dict]:
             if not file_path.is_file() or file_path.name in seen_names or file_path.name in INTERNAL_METADATA_FILES:
                 continue
             seen_names.add(file_path.name)
-            files.append({
+            item = {
                 "id": file_path.name, "name": _display_name(file_path.name, manifest), "size": file_path.stat().st_size,
                 "indexed": bool(chunk_counts.get(file_path.name)),
                 "chunks": chunk_counts.get(file_path.name, 0),
-                "source_url": source_urls.get(file_path.name),
-            })
+            }
+            if source_url := source_urls.get(file_path.name):
+                item["source_url"] = source_url
+            files.append(item)
     return files
 
 

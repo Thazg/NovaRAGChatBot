@@ -69,7 +69,10 @@ const DocumentSchema = z.object({
   size: z.number().nonnegative(),
   indexed: z.boolean().optional(),
   chunks: z.number().int().nonnegative().optional(),
-  source_url: z.string().url().optional(),
+  // Older backend deployments serialize a missing source URL as null.
+  // Normalize that legacy response so one ordinary upload cannot make the
+  // entire workspace document list fail schema validation.
+  source_url: z.string().url().nullish().transform((value) => value ?? undefined),
 });
 
 const IndexJobSchema = z.object({

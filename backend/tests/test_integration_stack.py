@@ -77,6 +77,7 @@ def test_real_upload_index_retrieval_sse_and_citation(monkeypatch) -> None:
     assert listed.status_code == 200
     assert listed.json()[0]["name"] == "portfolio.txt"
     assert listed.json()[0]["indexed"] is True
+    assert "source_url" not in listed.json()[0]
 
     summary = client.post(
         "/documents/summarize",
