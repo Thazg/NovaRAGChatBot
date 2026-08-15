@@ -591,7 +591,7 @@ export const api = {
       body: JSON.stringify({ query, max_results: maxResults }),
     });
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await responseError(response, `PDF search failed (${response.status})`);
     }
     return SearchDownloadSchema.parse(await response.json());
   },

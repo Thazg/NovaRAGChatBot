@@ -12,7 +12,11 @@ import requests
 
 from config.settings import settings
 
-SEARCH_URL = "https://duckduckgo.com/html/"
+# Use DuckDuckGo's canonical HTML endpoint directly. The shorter hostname
+# responds with a body-less redirect and releases its TLS socket before
+# requests exposes the response, so the connected-peer SSRF check cannot
+# verify it and correctly fails closed.
+SEARCH_URL = "https://html.duckduckgo.com/html/"
 MAX_RESULTS_PER_QUERY = 5
 REQUEST_DELAY_SECONDS = 4
 MAX_REDIRECTS = 5

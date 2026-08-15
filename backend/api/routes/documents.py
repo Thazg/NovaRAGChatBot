@@ -596,4 +596,7 @@ def search_and_download(request: Request, req: SearchRequest):
         raise
     except Exception as exc:
         logger.exception("Search-and-download failed safely for user %s", user_id)
-        raise HTTPException(status_code=502, detail="Search download failed safely") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="PDF search service is temporarily unavailable. Please try again.",
+        ) from exc

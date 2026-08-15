@@ -119,6 +119,33 @@ def test_redirect_to_private_address_is_blocked_before_second_request(monkeypatc
     assert calls == ["https://example.com/start.pdf"]
 
 
+def test_pdf_search_uses_canonical_endpoint(monkeypatch) -> None:
+    response = SimpleNamespace(
+        text=(
+            '<a class="result__a" '
+            'href="https://example.com/scalable-rag.pdf">Scalable RAG</a>'
+        ),
+        close=lambda: None,
+    )
+    calls = []
+    monkeypatch.setattr(
+        downloader,
+        "request_with_retry",
+        lambda url, **kwargs: calls.append((url, kwargs)) or response,
+    )
+    monkeypatch.setattr(downloader, "validate_public_url", lambda url: url)
+
+    assert downloader.search_pdf_urls("scalable rag filetype:pdf", 3) == [
+        "https://example.com/scalable-rag.pdf"
+    ]
+    assert calls == [
+        (
+            "https://html.duckduckgo.com/html/",
+            {"params": {"q": "scalable rag filetype:pdf", "kl": "us-en"}},
+        )
+    ]
+
+
 class _DownloadResponse:
     def __init__(self, content_type: str, chunks: list[bytes], content_length: str = "0"):
         self.headers = {"Content-Type": content_type, "Content-Length": content_length}
