@@ -1,6 +1,6 @@
-# Session security
+# Session security architecture
 
-## Implemented flow
+## Session lifecycle
 
 1. Register/login returns a 10-minute access token in the JSON response and sets a 30-day refresh token as a cookie.
 2. The frontend keeps the access token only in module/Zustand memory. The persisted store contains preferences only.
@@ -17,7 +17,7 @@ __Host-nova_refresh=...; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Str
 
 The `__Host-` prefix requires `Secure`, `Path=/`, and no `Domain` attribute. Cookie-backed POST endpoints also reject an untrusted or missing `Origin` in production.
 
-## Why the Vercel proxy is required
+## Same-origin proxy requirement
 
 The browser calls `https://novachatbot.vercel.app/api/*`. Vercel rewrites requests to Render server-side, so cookies stay host-only for the public frontend and the app avoids cross-site cookie behavior. The production frontend must keep:
 
@@ -27,7 +27,7 @@ VITE_API_BASE_URL=/api
 
 Do not replace it with the public Render URL.
 
-## Required Render configuration
+## Production configuration
 
 ```env
 ENVIRONMENT=production
@@ -46,7 +46,7 @@ Generate a secret locally without placing it in Git:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-## Verification checklist
+## Verification procedure
 
 - DevTools → Application → Local Storage: `rag-chat-storage` must not contain `token`, `userId`, conversations, or the access-token value.
 - DevTools → Application → Cookies: production refresh cookie is named `__Host-nova_refresh` and has Secure, HttpOnly, SameSite Strict, and Path `/`.
@@ -58,6 +58,10 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Automated evidence lives in `backend/tests/test_auth.py`, `backend/tests/test_api.py`, and `frontend/e2e/portfolio-flow.spec.ts`.
 
-## Remaining scope
+## Residual risk
 
-This step does not claim protection against every XSS. The Vercel CSP and memory-only access token reduce impact, while dependency review, output sanitization, and ongoing security testing remain necessary. Upload/SSRF controls are documented separately in `UPLOAD_SECURITY.md`.
+These controls do not eliminate cross-site scripting risk. The Vercel Content
+Security Policy and memory-only access token reduce exposure, while dependency
+review, output sanitization, and continuing security testing remain required.
+Upload and SSRF controls are documented separately in
+[`UPLOAD_SECURITY.md`](./UPLOAD_SECURITY.md).

@@ -1,51 +1,78 @@
-# Nova portfolio delivery checklist
+# Release and demonstration checklist
 
-## Automated evidence already in the repository
+## Repository verification status
 
-- 79 backend tests with 64.35% production-code coverage and a 64% CI floor (test modules excluded).
-- Offline evaluation over 60 labeled queries with retrieval ablations, Recall@K, MRR, citation precision/recall, evidence support, no-answer accuracy, and latency.
-- Real-stack FastAPI test with a deterministic LLM, real upload/parsing/index/retrieval, SSE, and final citation.
-- Eight Chromium E2E scenarios covering upload/chat/citation, cookie recovery, accessibility, visual regression, and pre/mid-stream reconnect.
-- Frontend lint, TypeScript build, npm audit, Playwright trace/video support, and GitHub Actions.
-- Liveness, provider readiness, request IDs, response timings, and rate-limit headers.
+- 90 backend tests pass locally; CI enforces a 64% production-code coverage
+  floor with test modules excluded from the denominator.
+- The retrieval dataset contains 100 questions derived from 10 checksum-pinned
+  arXiv PDFs, with page-level evidence and per-query results.
+- The production-method benchmark compares BM25, neural dense retrieval, equal
+  RRF, weighted RRF, cross-encoder reranking, and deterministic multi-query
+  retrieval with P50/P95 latency.
+- BM25 is the configured production default based on the recorded
+  quality/latency comparison.
+- The integration suite covers real upload, parsing, indexing, retrieval, SSE
+  delivery, and final citations with a deterministic LLM adapter.
+- Chromium end-to-end scenarios cover authentication, upload, chat, citations,
+  session recovery, accessibility, visual regression, and reconnect behavior.
+- Operational verification includes liveness, provider readiness, request IDs,
+  response timings, rate-limit headers, frontend checks, dependency audit, and
+  GitHub Actions.
 
-## 60–90 second demo storyboard
+## Demonstration sequence (60–90 seconds)
 
-| Time | Shot | Narration |
+| Time | Visual | Technical narrative |
 |---|---|---|
-| 0–8s | Title and architecture diagram | “Nova is a private RAG workspace built with React, FastAPI, BM25/FAISS, and streamed Groq responses.” |
-| 8–22s | Register and upload `portfolio.txt` | “Each account owns an isolated document index and conversation store.” |
-| 22–42s | Ask a retrieval question and show streamed citation | “BM25 or hybrid retrieval ranks evidence, then the answer streams over SSE with source citations.” |
-| 42–56s | Developer Settings readiness panel | “Readiness verifies the provider/model; every API response carries request ID and latency headers.” |
-| 56–70s | Terminal evaluation output | “Sixty labeled questions enforce retrieval, citation, no-answer, coverage, and browser quality gates.” |
-| 70–85s | GitHub Actions and closing screen | “The same quality gates run on every pull request.” |
+| 0–8 s | Product title and architecture diagram | “Nova is a private-document RAG system built with React, FastAPI, production-default BM25 retrieval, and streamed Groq or Ollama responses.” |
+| 8–22 s | Registration and document upload | “Each account owns an isolated document namespace, index, and conversation history.” |
+| 22–42 s | Retrieval question and streamed citation | “BM25 ranks the evidence; the grounded answer is delivered over SSE with source citations.” |
+| 42–56 s | Readiness and diagnostics panel | “Readiness validates the configured provider and infrastructure; each API response carries request and latency metadata.” |
+| 56–72 s | Retrieval evaluation report | “One hundred labeled questions compare six retrieval strategies and document the production selection.” |
+| 72–85 s | GitHub Actions summary | “The CI workflow reproduces the corpus, runs evaluation gates, and verifies backend and frontend behavior.” |
 
-Generate a clean 1280×720 product-flow capture with:
+Generate the deterministic 1280×720 product-flow recording with:
 
 ```bash
 cd frontend
 npm run demo:record
 ```
 
-The WebM video, screenshots, and trace are written to `frontend/demo-artifacts/`. Use the product clip as the middle section of the storyboard, add the architecture/evaluation shots in an editor, export MP4, and place a short optimized GIF under `docs/assets/` for the README.
+Artifacts are written to `frontend/demo-artifacts/`. Use the browser recording
+for the product workflow and add architecture, evaluation, and CI views during
+editing. Export the final demonstration as MP4; include an optimized GIF only
+when repository size and rendering quality remain acceptable.
 
-## Render deployment checklist
+## Render deployment verification
 
 1. Create a Render Blueprint from `render.yaml`.
-2. Set `GROQ_API_KEY`, a unique random `JWT_SECRET` of at least 32 bytes, and optional B2 credentials.
-3. Confirm `ENVIRONMENT=production`, `COOKIE_SECURE=true`, `CORS_ORIGINS=https://novachatbot.vercel.app`, and the project-scoped `CORS_ORIGIN_REGEX` from `render.yaml`.
-4. Provision ClamAV, set `CLAMAV_HOST`, then set `MALWARE_SCAN_REQUIRED=true` before opening uploads publicly. Verify the EICAR test file is rejected.
-5. Verify `/health`, then `/health/ready?refresh=true`.
-6. Send a real chat request and inspect `X-Request-ID`, `X-Response-Time-Ms`, and rate-limit headers.
+2. Configure `GROQ_API_KEY`, a unique `JWT_SECRET` of at least 32 bytes, and the
+   required PostgreSQL, Redis, and B2 credentials.
+3. Confirm `ENVIRONMENT=production`, `RETRIEVAL_MODE=bm25`,
+   `COOKIE_SECURE=true`, `CORS_ORIGINS=https://novachatbot.vercel.app`, and the
+   project-scoped `CORS_ORIGIN_REGEX` from `render.yaml`.
+4. Provision ClamAV, set `CLAMAV_HOST`, and enable
+   `MALWARE_SCAN_REQUIRED=true` before public uploads. Verify that the EICAR
+   test file is rejected.
+5. Verify `/health` and `/health/ready?refresh=true`.
+6. Submit a real chat request and inspect `X-Request-ID`,
+   `X-Response-Time-Ms`, and rate-limit headers.
 
-## Vercel deployment checklist
+## Vercel deployment verification
 
-1. Set the project root to `frontend`.
-2. Keep `VITE_API_BASE_URL=/api` (already committed); do not point browser auth directly at Render.
-3. Deploy using `frontend/vercel.json`, then verify the `/api/*` rewrite, CSP, and SPA refresh routes.
-4. Verify login, hard refresh/session restoration, automatic access-token refresh, logout, and that localStorage contains no token.
-5. Test a valid upload plus spoofed PDF, oversized file, and unsafe remote-PDF cases; then verify streaming, citations, and a mobile viewport.
+1. Set the Vercel project root to `frontend`.
+2. Keep `VITE_API_BASE_URL=/api`; browser authentication must not call Render
+   directly.
+3. Deploy with `frontend/vercel.json`, then verify the `/api/*` rewrite, Content
+   Security Policy, and single-page application refresh routes.
+4. Verify login, hard-refresh session restoration, automatic access-token
+   refresh, logout, and absence of credentials in local storage.
+5. Test a valid upload, spoofed PDF, oversized file, and unsafe remote-PDF
+   cases; then verify streaming, citations, and a mobile viewport.
 
-## PostgreSQL/Redis rollout
+## PostgreSQL and Redis rollout
 
-The repository now contains SQLAlchemy repositories, Alembic migrations, an idempotent JSON importer, Redis rate limiting, RQ indexing, job progress, and infrastructure readiness checks. Follow `docs/PRODUCTION_PERSISTENCE.md`; managed services and any paid Render worker must still be provisioned explicitly.
+The repository includes SQLAlchemy repositories, Alembic migrations, an
+idempotent JSON importer, Redis-backed rate limiting, RQ indexing, job progress,
+and infrastructure readiness checks. Follow
+[`PRODUCTION_PERSISTENCE.md`](./PRODUCTION_PERSISTENCE.md). Managed services and
+any paid Render worker must be provisioned explicitly.

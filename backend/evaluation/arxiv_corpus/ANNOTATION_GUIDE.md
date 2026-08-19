@@ -1,4 +1,4 @@
-# arXiv benchmark annotation guide
+# arXiv benchmark annotation protocol
 
 ## Scope
 
@@ -7,7 +7,7 @@ The benchmark contains 100 English questions over 10 version-pinned arXiv PDFs:
 unanswerable question. Questions cover contributions, architecture, training,
 experimental setup, results, metrics, and limitations.
 
-## Ground-truth policy
+## Ground-truth requirements
 
 For every answerable question, the annotation must contain:
 
@@ -43,7 +43,7 @@ as `accept`, `revise`, or `reject`, then record disagreements and adjudication.
 Until that happens, the repository must not describe the benchmark as
 double-annotated or independently human-reviewed.
 
-## Reproduction
+## Dataset build and validation
 
 Run from `backend`:
 

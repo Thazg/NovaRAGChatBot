@@ -1,6 +1,6 @@
-# Upload and remote-PDF security
+# File upload and remote PDF security
 
-## Direct upload pipeline
+## Local upload validation pipeline
 
 Files are never indexed directly from the client-provided filename. The API performs this sequence:
 
@@ -12,7 +12,9 @@ Files are never indexed directly from the client-provided filename. The API perf
 6. Enforce DOCX entry, expanded-size, compression-ratio, path, active-content, embedded-content, and external-relationship limits.
 7. Reject the EICAR test signature and submit the quarantined bytes to ClamAV when configured.
 8. Atomically rename the accepted file to a server-generated UUID while retaining the original name only as display metadata.
-9. Persist the artifact to B2 when a shared worker is configured, enqueue parsing/embedding/indexing, and return a job ID for progress polling.
+9. Persist the artifact to B2 when a shared worker is configured, enqueue
+   parsing and BM25 indexing, and return a job ID for progress polling.
+   Embedding generation occurs only when hybrid retrieval is explicitly enabled.
 
 Rejected temporary files are removed. Index failures remove the stored artifact and rebuild the user's index from accepted files.
 
@@ -33,7 +35,7 @@ Remote search results are untrusted. Every initial request and redirect is valid
 
 Downloaded PDFs also receive UUID storage names. Source URLs are metadata and are never used as filesystem paths.
 
-## Production malware scanning gate
+## Malware scanning requirements
 
 Development can run with scanning optional:
 
@@ -51,7 +53,7 @@ MALWARE_SCAN_REQUIRED=true
 
 If the scanner is unavailable or returns an indeterminate result while required mode is enabled, the upload is rejected. Confirm the deployment with the standard EICAR test file; never use real malware for this check.
 
-## Default limits
+## Resource limits
 
 | Variable | Default |
 |---|---:|
@@ -65,7 +67,7 @@ If the scanner is unavailable or returns an indeterminate result while required 
 | `MAX_ARCHIVE_COMPRESSION_RATIO` | 100 |
 | `MAX_NOTEBOOK_CELLS` | 2,000 |
 
-## Verification
+## Verification commands
 
 ```bash
 python -m pytest backend/tests/test_security_controls.py -q

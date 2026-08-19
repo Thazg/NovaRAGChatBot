@@ -1,11 +1,10 @@
-# Nova RAG evaluation
+# Nova retrieval evaluation
 
-Nova is evaluated against questions derived from real, version-pinned arXiv
-PDFs. The repository commits the source manifest, SHA-256 lock, 100 annotations,
-evidence spans, review state, and per-query results—not an opaque synthetic
-corpus or an unverifiable screenshot.
+Nova is evaluated against questions derived from version-pinned arXiv PDFs.
+The repository versions the source manifest, SHA-256 lock, 100 annotations,
+evidence spans, review state, aggregate metrics, and per-query results.
 
-## Recorded offline baseline
+## Deterministic CI baseline
 
 Last recorded: **2026-08-19**
 
@@ -22,17 +21,17 @@ Configuration: **K = 5**, 10 PDFs, 160 pages, 549 chunks, and 100 questions
 | Lexical evidence-support proxy | **0.8346** | >= 0.80 | Pass |
 | Unanswerable accuracy | **0.0000** | improvement target | **Known gap** |
 
-The no-answer result is intentionally visible. The current offline retriever has
-no calibrated confidence threshold and always returns a ranking, so it fails all
-10 unanswerable questions. The CI floor remains zero until abstention is
-implemented and calibrated on a separate development split; this metric must not
-be presented as passing.
+The current offline retriever has no calibrated confidence threshold and always
+returns a ranking, so it fails all 10 unanswerable questions. The CI floor
+remains zero until abstention is implemented and calibrated on a separate
+development split. Unanswerable accuracy is therefore reported as an open
+limitation rather than a passing quality gate.
 
 The complete machine-readable report is in
 [`results.json`](./results.json), including every ranked query and per-paper
 breakdowns.
 
-## Production method comparison
+## Production retrieval comparison
 
 A separate CPU benchmark compares BM25, real BGE neural dense retrieval, equal
 and weighted RRF, MS MARCO cross-encoder reranking, and deterministic multi-query
@@ -41,11 +40,11 @@ retrieval. It measures end-to-end warm query latency for each method.
 | Method | Hit@5 | MRR | P50 | P95 | Decision |
 | --- | ---: | ---: | ---: | ---: | --- |
 | **BM25** | **0.8222** | 0.5722 | **2.36 ms** | **3.93 ms** | **Production default** |
-| BGE dense | 0.5667 | 0.3413 | 21.15 ms | 26.07 ms | Reject standalone |
-| Equal RRF | 0.7556 | 0.5119 | 23.61 ms | 29.17 ms | Reject for this corpus |
-| Weighted RRF | 0.7889 | 0.5384 | 23.62 ms | 29.19 ms | Better than equal, still reject |
-| Reranked | **0.8444** | **0.5774** | 1,312.34 ms | 1,524.19 ms | Optional quality tier |
-| Multi-query | 0.7889 | 0.5508 | 49.27 ms | 82.29 ms | Reject for default path |
+| BGE dense | 0.5667 | 0.3413 | 21.15 ms | 26.07 ms | Not selected as a standalone method |
+| Equal RRF | 0.7556 | 0.5119 | 23.61 ms | 29.17 ms | Not selected for this corpus |
+| Weighted RRF | 0.7889 | 0.5384 | 23.62 ms | 29.19 ms | Outperforms equal RRF; not selected |
+| Reranked | **0.8444** | **0.5774** | 1,312.34 ms | 1,524.19 ms | Conditional quality tier |
+| Multi-query | 0.7889 | 0.5508 | 49.27 ms | 82.29 ms | Not selected for the default path |
 
 The quality gain from reranking is too small for its roughly 555-times P50
 latency cost over BM25. Full configurations, indexing cost, limitations, and
@@ -55,7 +54,7 @@ the production decision are documented in
 therefore `RETRIEVAL_MODE=bm25`; neural hybrid retrieval requires explicit
 configuration.
 
-### Retrieval ablation
+### Deterministic proxy ablation
 
 | Retrieval mode | Hit@5 | Recall@5 | MRR | P50 | P95 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -97,7 +96,7 @@ The labels have completed one verification pass. The committed metadata says
 [`ANNOTATION_GUIDE.md`](./arxiv_corpus/ANNOTATION_GUIDE.md) for acceptance and
 adjudication rules.
 
-## Reproduce from the PDFs
+## Benchmark reproduction
 
 From `backend`:
 
@@ -119,7 +118,7 @@ overridden with `--min-hit`, `--min-recall`, `--min-mrr`,
 `--min-citation-precision`, `--min-citation-recall`, `--min-faithfulness`, and
 `--min-unanswerable-accuracy`.
 
-## Metric definitions and limits
+## Metric definitions and limitations
 
 - **Hit@K** is the fraction of answerable questions with at least one labeled
   evidence page in the first K unique pages.
@@ -141,7 +140,7 @@ split, provider-backed semantic embeddings, and human evaluation of generated
 answers. Opt-in live evaluators remain available in `live_retrieval_eval.py` and
 `live_answer_eval.py`; they require configured external providers.
 
-## Auditable files
+## Artifact inventory
 
 | File | Purpose |
 | --- | --- |

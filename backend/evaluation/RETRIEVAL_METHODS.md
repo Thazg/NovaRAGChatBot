@@ -1,10 +1,10 @@
-# Retrieval method benchmark and production decision
+# Retrieval strategy evaluation
 
 This report compares six retrieval strategies on Nova's 100-question arXiv
 PDF benchmark. It records retrieval quality and warm, steady-state online
 latency for every method instead of comparing quality in isolation.
 
-## Executive decision
+## Production selection
 
 **Select BM25 as Nova's default production retriever for this workload.** It
 delivers the best quality/latency trade-off: 82.22% Hit@5 at 2.36 ms P50. The
@@ -18,11 +18,11 @@ opt-in.
 | Method | Hit@5 | Recall@5 | MRR | Mean | P50 | P95 | P50 vs BM25 | Decision |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | **BM25** | **0.8222** | 0.8222 | 0.5722 | 2.47 ms | **2.36 ms** | **3.93 ms** | 1.0x | **Production default** |
-| Dense retrieval | 0.5667 | 0.5444 | 0.3413 | 22.24 ms | 21.15 ms | 26.07 ms | 8.9x | Reject as standalone default |
-| Equal RRF | 0.7556 | 0.7500 | 0.5119 | 24.73 ms | 23.61 ms | 29.17 ms | 10.0x | Reject for this corpus |
-| Weighted RRF | 0.7889 | 0.7833 | 0.5384 | 24.75 ms | 23.62 ms | 29.19 ms | 10.0x | Better than equal, still reject |
-| Reranked | **0.8444** | **0.8333** | **0.5774** | 1,319.81 ms | 1,312.34 ms | 1,524.19 ms | 555.2x | Optional quality tier only |
-| Multi-query | 0.7889 | 0.7889 | 0.5508 | 56.77 ms | 49.27 ms | 82.29 ms | 20.8x | Reject for default path |
+| Dense retrieval | 0.5667 | 0.5444 | 0.3413 | 22.24 ms | 21.15 ms | 26.07 ms | 8.9x | Not selected as a standalone method |
+| Equal RRF | 0.7556 | 0.7500 | 0.5119 | 24.73 ms | 23.61 ms | 29.17 ms | 10.0x | Not selected for this corpus |
+| Weighted RRF | 0.7889 | 0.7833 | 0.5384 | 24.75 ms | 23.62 ms | 29.19 ms | 10.0x | Outperforms equal RRF; not selected |
+| Reranked | **0.8444** | **0.8333** | **0.5774** | 1,319.81 ms | 1,312.34 ms | 1,524.19 ms | 555.2x | Conditional quality tier |
+| Multi-query | 0.7889 | 0.7889 | 0.5508 | 56.77 ms | 49.27 ms | 82.29 ms | 20.8x | Not selected for the default path |
 
 Quality metrics are averaged over the 90 answerable questions. All methods
 score 0% on the 10 unanswerable questions because none has a calibrated
@@ -49,7 +49,7 @@ The fixed fusion weights were selected before the run and were not tuned on the
 100-question test set. This avoids reporting a test-set-optimized production
 configuration.
 
-## Method 1 — BM25 retrieval
+## BM25 retrieval
 
 ### Configuration
 
@@ -57,7 +57,7 @@ BM25 ranks Nova's 220-word overlapping chunks using exact lexical evidence.
 The same deterministic acronym expansion used by the application is applied to
 the query. Chunk results are deduplicated into PDF pages before evaluation.
 
-### Result
+### Measurements
 
 - Hit@5: **0.8222**
 - Recall@5: **0.8222**
@@ -65,14 +65,14 @@ the query. Chunk results are deduplicated into PDF pages before evaluation.
 - Latency: **2.36 ms P50**, **3.93 ms P95**
 - One-time index build: **75.16 ms**
 
-### Interpretation
+### Assessment
 
 This dataset contains technical names, model acronyms, dataset names, metrics,
 and numeric results that benefit from exact term matching. BM25 has the second
 highest Hit@5 and is hundreds of times faster than reranking. It is the most
 defensible default under an interactive latency budget.
 
-## Method 2 — Neural dense retrieval
+## Neural dense retrieval
 
 ### Configuration
 
@@ -81,7 +81,7 @@ Dense retrieval uses `BAAI/bge-small-en-v1.5` at pinned revision
 384-dimensional normalized vectors and searched with FAISS inner product. The
 recommended English retrieval instruction is prepended to each query.
 
-### Result
+### Measurements
 
 - Hit@5: **0.5667**
 - Recall@5: **0.5444**
@@ -89,7 +89,7 @@ recommended English retrieval instruction is prepended to each query.
 - Latency: **21.15 ms P50**, **26.07 ms P95**
 - One-time corpus encoding: **67.40 seconds** on CPU
 
-### Interpretation
+### Assessment
 
 Dense retrieval is 8.9 times slower than BM25 at P50 and loses 25.56 Hit@5
 points. It should not be used alone for this technical-paper workload. The
@@ -97,7 +97,7 @@ result does not imply that dense retrieval is universally weak; a different
 domain, fine-tuned embedding model, or paraphrase-heavy dataset can change the
 trade-off and requires a new benchmark.
 
-## Method 3 — Equal RRF
+## Equal-weight RRF
 
 ### Configuration
 
@@ -105,21 +105,21 @@ Equal Reciprocal Rank Fusion gives BM25 and dense retrieval the same 0.50
 weight, with RRF constant `k = 60`. It uses the same candidates and timing
 scope as weighted RRF, making it a direct fusion-weight control.
 
-### Result
+### Measurements
 
 - Hit@5: **0.7556**
 - Recall@5: **0.7500**
 - MRR: **0.5119**
 - Latency: **23.61 ms P50**, **29.17 ms P95**
 
-### Interpretation
+### Assessment
 
 Equal RRF is 10 times slower than BM25 and loses 6.67 Hit@5 points. Giving the
 weaker dense branch equal influence displaces more correct lexical results. It
 also trails weighted RRF by 3.33 Hit@5 points at essentially identical latency.
-Equal RRF is therefore rejected for this corpus.
+Equal RRF is therefore not selected for this corpus.
 
-## Method 4 — Weighted RRF
+## Weighted RRF
 
 ### Configuration
 
@@ -127,14 +127,14 @@ Weighted Reciprocal Rank Fusion combines the BM25 page ranking with the neural
 dense ranking using fixed weights of 0.65 and 0.35 respectively, with RRF
 constant `k = 60`.
 
-### Result
+### Measurements
 
 - Hit@5: **0.7889**
 - Recall@5: **0.7833**
 - MRR: **0.5384**
 - Latency: **23.62 ms P50**, **29.19 ms P95**
 
-### Interpretation
+### Assessment
 
 The weaker dense ranking still displaces useful lexical results, but the 0.65
 BM25 weight recovers 3.33 Hit@5 points over equal RRF at no material latency
@@ -143,7 +143,7 @@ Hit@5 points and 3.38 MRR points. It is not selected for production. Further
 weight tuning must use a separate development split, not these final 100
 questions.
 
-## Method 5 — Cross-encoder reranking
+## Cross-encoder reranking
 
 ### Configuration
 
@@ -152,14 +152,14 @@ competitive chunk for each page is scored jointly with the query by
 `cross-encoder/ms-marco-MiniLM-L6-v2`, pinned at revision
 `c5ee24cb16019beea0893ab7796b1df96625c6b8`.
 
-### Result
+### Measurements
 
 - Hit@5: **0.8444** — highest tested
 - Recall@5: **0.8333** — highest tested
 - MRR: **0.5774** — highest tested
 - Latency: **1,312.34 ms P50**, **1,524.19 ms P95**
 
-### Interpretation
+### Assessment
 
 Reranking improves BM25 by 2.22 Hit@5 points but adds approximately 1.30
 seconds of median CPU latency. The MRR gain is only 0.52 points. It is therefore
@@ -167,7 +167,7 @@ not suitable as the default interactive path. It can be offered as an explicit
 high-quality mode, or reconsidered after benchmarking a smaller candidate set,
 ONNX quantization, batching, or GPU inference against a defined latency SLO.
 
-## Method 6 — Multi-query retrieval
+## Multi-query retrieval
 
 ### Configuration
 
@@ -177,21 +177,21 @@ and a keyword-focused query. Each variant runs through BM25 and dense retrieval;
 their rankings are combined with weighted RRF. This is not presented as
 LLM-generated paraphrasing.
 
-### Result
+### Measurements
 
 - Hit@5: **0.7889**
 - Recall@5: **0.7889**
 - MRR: **0.5508**
 - Latency: **49.27 ms P50**, **82.29 ms P95**
 
-### Interpretation
+### Assessment
 
 Multi-query is 20.8 times slower than BM25 and loses 3.33 Hit@5 points. The
 queries in this benchmark are already concise and rich in discriminative
 technical terms, so deterministic expansion adds little useful recall and can
 amplify noisy matches. It is not selected for the default production path.
 
-## Production rollout recommendation
+## Production recommendations
 
 1. Keep **BM25** as the default retriever and use its measured P95 of 3.93 ms as
    the local retrieval baseline, not as an end-to-end API SLO.
@@ -200,12 +200,12 @@ amplify noisy matches. It is not selected for the default production path.
 3. Keep the neural models behind an optional feature flag. Do not pay their
    memory and latency cost on every request while they underperform BM25 here.
 4. If a quality tier is required, optimize the **reranker** first and rerun the
-   same benchmark. Its quality signal is positive, unlike dense-only, weighted
+   same benchmark. Its quality signal is positive, unlike dense-only,
    equal/weighted RRF, and multi-query in this run.
 5. Revisit the decision whenever the document domain, embedding model, chunking
    policy, hardware, or latency SLO changes.
 
-## Reproduce
+## Reproduction
 
 From `backend`:
 
