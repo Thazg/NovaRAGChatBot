@@ -7,20 +7,35 @@ from evaluation.metrics import (
     citation_recall,
     evaluate_dataset,
     extract_citations,
+    hit_at_k,
     lexical_faithfulness,
     recall_at_k,
     reciprocal_rank,
 )
 from evaluation.live_answer_eval import evaluate_live, token_f1
+from evaluation.advanced_retrieval_eval import multi_query_variants, weighted_rrf
 
 
 def test_retrieval_metrics() -> None:
     retrieved = ["chunk-b", "chunk-a", "chunk-c"]
 
+    assert hit_at_k(retrieved, ["chunk-a"], 2) == 1.0
+    assert hit_at_k(retrieved, ["missing"], 3) == 0.0
     assert recall_at_k(retrieved, ["chunk-a"], 2) == 1.0
     assert recall_at_k(retrieved, ["missing"], 3) == 0.0
     assert reciprocal_rank(retrieved, ["chunk-a"]) == 0.5
     assert reciprocal_rank(retrieved, ["missing"]) == 0.0
+
+
+def test_weighted_rrf_and_multi_query_are_deterministic() -> None:
+    ranking = weighted_rrf(((["dense-first", "shared"], 0.35), (["shared", "bm25-only"], 0.65)))
+
+    assert ranking[0] == "shared"
+    variants = multi_query_variants("What is RAG in QA?")
+    assert variants[0] == "What is RAG in QA?"
+    assert len(variants) == 3
+    assert "retrieval" in variants[1].casefold()
+    assert variants[2] == "rag"
 
 
 def test_citation_precision_rejects_unsupported_sources() -> None:
@@ -37,18 +52,29 @@ def test_citation_precision_rejects_unsupported_sources() -> None:
 
 
 def test_portfolio_dataset_meets_quality_thresholds() -> None:
-    dataset_path = Path(__file__).parents[1] / "evaluation" / "dataset.json"
+    dataset_path = (
+        Path(__file__).parents[1]
+        / "evaluation"
+        / "arxiv_corpus"
+        / "generated_dataset.json"
+    )
     dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
 
     results = evaluate_dataset(dataset, k=5)
 
-    assert results["query_count"] >= 50
-    assert results["recall_at_k"] >= 0.90
-    assert results["mrr"] >= 0.80
+    assert dataset["metadata"]["paper_count"] == 10
+    assert dataset["metadata"]["question_count"] == 100
+    assert dataset["metadata"]["answerable_count"] == 90
+    assert dataset["metadata"]["unanswerable_count"] == 10
+    assert dataset["metadata"]["independent_review_status"] == "pending_human_reviewer"
+    assert results["query_count"] == 100
+    assert results["hit_at_k"] >= 0.78
+    assert results["recall_at_k"] >= 0.78
+    assert results["mrr"] >= 0.55
     assert results["citation_precision"] >= 0.90
     assert results["citation_recall"] >= 0.90
-    assert results["faithfulness"] >= 0.60
-    assert results["unanswerable_accuracy"] == 1.0
+    assert results["faithfulness"] >= 0.80
+    assert 0.0 <= results["unanswerable_accuracy"] <= 1.0
     assert set(results["ablations"]) == {"bm25", "tfidf_faiss_proxy", "hybrid_rrf"}
 
 

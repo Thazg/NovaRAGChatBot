@@ -24,6 +24,16 @@ def test_request_id_is_preserved() -> None:
     assert response.headers["Server-Timing"].startswith("app;dur=")
 
 
+def test_health_reports_bm25_even_when_embedding_endpoint_exists(monkeypatch) -> None:
+    monkeypatch.setattr(health.settings, "RETRIEVAL_MODE", "bm25")
+    monkeypatch.setattr(health.settings, "EMBEDDING_BASE_URL", "https://embedding.example/v1")
+
+    payload = client.get("/health").json()
+
+    assert payload["retrieval"] == "bm25"
+    assert payload["embedding_model"] is None
+
+
 def test_private_routes_require_authentication() -> None:
     response = client.get("/conversation")
 

@@ -1,0 +1,85 @@
+{
+  "manifest_version": "1.0.0",
+  "papers": [
+    {
+      "arxiv_id": "2005.11401",
+      "version": "v4",
+      "pdf_file": "2005.11401v4-rag.pdf",
+      "sha256": "23e3249e9a1e75418d82efecab0ea8c4d033b89c93742f63208d47ce01f21233",
+      "bytes": 885323,
+      "pages": 19
+    },
+    {
+      "arxiv_id": "2004.04906",
+      "version": "v3",
+      "pdf_file": "2004.04906v3-dpr.pdf",
+      "sha256": "3e67fc1a9977715acf722d85f0b7d124b03715e975f6310a4d6c12094190912f",
+      "bytes": 383508,
+      "pages": 13
+    },
+    {
+      "arxiv_id": "2002.08909",
+      "version": "v1",
+      "pdf_file": "2002.08909v1-realm.pdf",
+      "sha256": "0ec1a7ab3de5514c6d3baa8af0322816d4ee7cd4c14b9f2c450cbc9da9e6b363",
+      "bytes": 419037,
+      "pages": 12
+    },
+    {
+      "arxiv_id": "2004.12832",
+      "version": "v2",
+      "pdf_file": "2004.12832v2-colbert.pdf",
+      "sha256": "2e487d9b96e3c2e5e286d843e98a066adc0442faa3a6e8ddbd1771221bf9ae14",
+      "bytes": 4918165,
+      "pages": 10
+    },
+    {
+      "arxiv_id": "2212.10496",
+      "version": "v1",
+      "pdf_file": "2212.10496v1-hyde.pdf",
+      "sha256": "dc0ae3c5584ed146beee122e6a9ad9c48547dde048d53e9be8435d8f1d354531",
+      "bytes": 424964,
+      "pages": 11
+    },
+    {
+      "arxiv_id": "2309.15217",
+      "version": "v2",
+      "pdf_file": "2309.15217v2-ragas.pdf",
+      "sha256": "6c24762a3f277fd120ed1adf34b01420ecf92f18ff6d1b5435fa0a09cb804ecb",
+      "bytes": 231984,
+      "pages": 8
+    },
+    {
+      "arxiv_id": "2310.11511",
+      "version": "v1",
+      "pdf_file": "2310.11511v1-self-rag.pdf",
+      "sha256": "d9eaa1398abac0df67a9d0933a5bf8b6d9d83d2e72da2a486073cd842dd52978",
+      "bytes": 1405127,
+      "pages": 30
+    },
+    {
+      "arxiv_id": "2307.03172",
+      "version": "v3",
+      "pdf_file": "2307.03172v3-lost-middle.pdf",
+      "sha256": "653b29619eae2ae4b361d7bdcdc06db4bedcb1b0eabe31814036beca8c1af0b1",
+      "bytes": 747542,
+      "pages": 18
+    },
+    {
+      "arxiv_id": "2401.15884",
+      "version": "v3",
+      "pdf_file": "2401.15884v3-crag.pdf",
+      "sha256": "975aa1fd3c1b603126e93ff99d6504858b61301bf1d34c9df88ebe53a0b026cb",
+      "bytes": 667756,
+      "pages": 16
+    },
+    {
+      "arxiv_id": "2401.18059",
+      "version": "v1",
+      "pdf_file": "2401.18059v1-raptor.pdf",
+      "sha256": "01319e2e6e6ecfd504ee1bbda41d023f9e060bd3505ab3c161baa1d6d696cf75",
+      "bytes": 2547113,
+      "pages": 23
+    }
+  ]
+}

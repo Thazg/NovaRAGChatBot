@@ -13,6 +13,9 @@ htmlcov/
 
 # Node
 node_modules/
+backend/evaluation/arxiv_corpus/pdfs/*.pdf
+backend/evaluation/arxiv_corpus/corpus.json
+backend/evaluation/arxiv_corpus/generated_dataset.json
 frontend/dist/
 frontend/playwright-report/
 frontend/test-results/

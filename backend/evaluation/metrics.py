@@ -51,6 +51,17 @@ def reciprocal_rank(retrieved_ids: list[str], relevant_ids: Iterable[str]) -> fl
     return 0.0
 
 
+def hit_at_k(retrieved_ids: list[str], relevant_ids: Iterable[str], k: int) -> float:
+    relevant = set(relevant_ids)
+    if not relevant:
+        return 1.0
+    return float(bool(relevant.intersection(retrieved_ids[:k])))
+
+
+def _deduplicate(values: Iterable[str]) -> list[str]:
+    return list(dict.fromkeys(value for value in values if value))
+
+
 def extract_citations(answer: str) -> list[str]:
     return [match.strip() for match in _CITATION_PATTERN.findall(answer)]
 
@@ -136,7 +147,10 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
     corpus = dataset.get("corpus", [])
     documents = [{
         "content": item["content"],
-        "metadata": {**item.get("metadata", {}), "evaluation_id": item["id"]},
+        "metadata": {
+            **item.get("metadata", {}),
+            "evaluation_id": item.get("metadata", {}).get("relevance_id", item["id"]),
+        },
     } for item in corpus]
     bm25_store = HybridVectorStore(documents=documents)
     bm25_store._build_bm25()
@@ -146,17 +160,27 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
     faiss.normalize_L2(corpus_vectors)
     dense_index = faiss.IndexFlatIP(corpus_vectors.shape[1])
     dense_index.add(corpus_vectors)
-    corpus_ids = [item["id"] for item in corpus]
-    corpus_by_id = {item["id"]: item["content"] for item in corpus}
+    corpus_ids = [
+        item.get("metadata", {}).get("relevance_id", item["id"])
+        for item in corpus
+    ]
+    corpus_by_id: dict[str, str] = {}
+    for item, evaluation_id in zip(corpus, corpus_ids):
+        corpus_by_id[evaluation_id] = (
+            f"{corpus_by_id.get(evaluation_id, '')} {item['content']}"
+        ).strip()
 
     mode_results: dict[str, list[dict[str, Any]]] = {
         "bm25": [], "tfidf_faiss_proxy": [], "hybrid_rrf": [],
     }
+    candidate_k = min(max(k * 5, 25), len(corpus_ids))
     latencies: dict[str, list[float]] = {mode: [] for mode in mode_results}
     for sample in dataset.get("queries", []):
         started = time.perf_counter()
-        bm25_nodes = bm25_store.retrieve(sample["query"], top_k=max(k, 10))
-        bm25_ids = [node.get("metadata", {}).get("evaluation_id", "") for node in bm25_nodes]
+        bm25_nodes = bm25_store.retrieve(sample["query"], top_k=candidate_k)
+        bm25_ids = _deduplicate(
+            node.get("metadata", {}).get("evaluation_id", "") for node in bm25_nodes
+        )
         bm25_ids = _calibrate_lexical_ranking(expand_query(sample["query"]), bm25_ids, corpus_by_id)
         bm25_latency = (time.perf_counter() - started) * 1000
         latencies["bm25"].append(bm25_latency)
@@ -166,8 +190,12 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         dense_ids: list[str] = []
         if np.count_nonzero(query_vector):
             faiss.normalize_L2(query_vector)
-            scores, indices = dense_index.search(query_vector, min(max(k, 10), len(corpus_ids)))
-            dense_ids = [corpus_ids[index] for score, index in zip(scores[0], indices[0]) if index >= 0 and score > 0.02]
+            scores, indices = dense_index.search(query_vector, candidate_k)
+            dense_ids = _deduplicate(
+                corpus_ids[index]
+                for score, index in zip(scores[0], indices[0])
+                if index >= 0 and score > 0.02
+            )
             dense_ids = _calibrate_lexical_ranking(expand_query(sample["query"]), dense_ids, corpus_by_id)
         dense_latency = (time.perf_counter() - started) * 1000
         latencies["tfidf_faiss_proxy"].append(dense_latency)
@@ -184,10 +212,15 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         }.items():
             relevant_ids = sample.get("relevant_ids", [])
             mode_results[mode].append({
+                "id": sample.get("id", sample["query"]),
                 "query": sample["query"],
+                "question_type": sample.get("question_type", "unspecified"),
+                "paper_slug": sample.get("paper_slug", "unspecified"),
                 "answerable": bool(relevant_ids),
+                "relevant_ids": relevant_ids,
                 "retrieved_ids": retrieved_ids[:k],
-                "recall_at_k": recall_at_k(retrieved_ids, relevant_ids, k),
+                "hit_at_k": hit_at_k(retrieved_ids, relevant_ids, k) if relevant_ids else None,
+                "recall_at_k": recall_at_k(retrieved_ids, relevant_ids, k) if relevant_ids else None,
                 "reciprocal_rank": reciprocal_rank(retrieved_ids, relevant_ids),
                 "correctly_abstained": not relevant_ids and not retrieved_ids,
             })
@@ -197,6 +230,7 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         answerable = [result for result in results if result["answerable"]]
         unanswerable = [result for result in results if not result["answerable"]]
         ablations[mode] = {
+            "hit_at_k": mean(item["hit_at_k"] for item in answerable) if answerable else 0.0,
             "recall_at_k": mean(item["recall_at_k"] for item in answerable) if answerable else 0.0,
             "mrr": mean(item["reciprocal_rank"] for item in answerable) if answerable else 0.0,
             "unanswerable_accuracy": mean(item["correctly_abstained"] for item in unanswerable) if unanswerable else 0.0,
@@ -207,22 +241,29 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
     citation_samples = dataset.get("citation_samples", [])
     citation_precision_scores = [citation_precision(item["answer"], item["relevant_sources"]) for item in citation_samples]
     citation_recall_scores = [citation_recall(item["answer"], item["relevant_sources"]) for item in citation_samples]
-    corpus_by_source = {
-        item.get("metadata", {}).get("file_name", "").casefold(): item["content"]
-        for item in corpus
-    }
     faithfulness_scores = [
         lexical_faithfulness(
             item["answer"],
-            [corpus_by_source[source.casefold()] for source in item["relevant_sources"] if source.casefold() in corpus_by_source],
+            [corpus_by_id[item_id] for item_id in item.get("relevant_ids", []) if item_id in corpus_by_id],
         )
         for item in citation_samples
     ]
     primary = ablations["hybrid_rrf"]
+    hybrid_answerable = [item for item in mode_results["hybrid_rrf"] if item["answerable"]]
+    per_paper: dict[str, Any] = {}
+    for paper_slug in sorted({item["paper_slug"] for item in hybrid_answerable}):
+        paper_results = [item for item in hybrid_answerable if item["paper_slug"] == paper_slug]
+        per_paper[paper_slug] = {
+            "query_count": len(paper_results),
+            "hit_at_k": mean(item["hit_at_k"] for item in paper_results),
+            "recall_at_k": mean(item["recall_at_k"] for item in paper_results),
+            "mrr": mean(item["reciprocal_rank"] for item in paper_results),
+        }
     return {
         "k": k,
         "corpus_count": len(corpus),
         "query_count": len(mode_results["hybrid_rrf"]),
+        "hit_at_k": primary["hit_at_k"],
         "recall_at_k": primary["recall_at_k"],
         "mrr": primary["mrr"],
         "citation_precision": mean(citation_precision_scores) if citation_precision_scores else 0.0,
@@ -231,5 +272,6 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         "faithfulness_method": "lexical_evidence_support_proxy",
         "unanswerable_accuracy": primary["unanswerable_accuracy"],
         "ablations": ablations,
+        "per_paper": per_paper,
         "queries": mode_results["hybrid_rrf"],
     }

@@ -43,6 +43,11 @@ ACRONYM_MAP = {
 }
 
 
+def dense_retrieval_enabled() -> bool:
+    """Return whether the explicitly opt-in hybrid retrieval path is usable."""
+    return settings.RETRIEVAL_MODE == "hybrid" and bool(settings.EMBEDDING_BASE_URL)
+
+
 def expand_query(query: str) -> str:
     words = re.findall(r"[a-zA-Z]\w*", query)
     expanded = set(words)
@@ -155,17 +160,26 @@ class HybridVectorStore:
     def add_nodes(self, nodes: list[Dict[str, Any]]) -> int:
         if not nodes:
             return 0
-        from rag.embeddings import get_embeddings_batch
         texts = [n.get("content", "") for n in nodes]
-        new_embeddings = get_embeddings_batch(texts, prefix="search_document:")
-        if new_embeddings is not None and len(new_embeddings) == len(nodes):
-            if self.embeddings is None or len(self.embeddings) == 0:
-                self.embeddings = new_embeddings
+        if dense_retrieval_enabled():
+            from rag.embeddings import get_embeddings_batch
+            new_embeddings = get_embeddings_batch(texts, prefix="search_document:")
+            if new_embeddings is not None and len(new_embeddings) == len(nodes):
+                if self.embeddings is None or len(self.embeddings) == 0:
+                    self.embeddings = new_embeddings
+                else:
+                    self.embeddings = np.vstack([self.embeddings, new_embeddings])
+            elif self.embeddings is not None:
+                # Never keep a partial dense index whose rows no longer align
+                # with the document list. BM25 remains fully functional.
+                self.embeddings = None
+                self.faiss_index = None
             else:
-                self.embeddings = np.vstack([self.embeddings, new_embeddings])
-        elif self.embeddings is not None:
-            # Never keep a partial dense index whose rows no longer align with
-            # the document list. BM25 remains fully functional.
+                self.faiss_index = None
+        else:
+            # BM25 production mode does not pay embedding/indexing cost. Drop
+            # any previously loaded dense state before appending documents so
+            # persisted rows cannot become misaligned.
             self.embeddings = None
             self.faiss_index = None
         self.documents.extend(nodes)
@@ -247,13 +261,13 @@ class HybridVectorStore:
                 if line.strip():
                     documents.append(json.loads(line))
         embeddings = None
-        if ef.exists():
+        if dense_retrieval_enabled() and ef.exists():
             embeddings = np.load(ef)
             if len(embeddings) != len(documents):
                 logger.warning("Ignoring misaligned embeddings for user %s", user_id)
                 embeddings = None
         faiss_index = None
-        if ff.exists() and embeddings is not None:
+        if dense_retrieval_enabled() and ff.exists() and embeddings is not None:
             import faiss
             faiss_index = faiss.read_index(str(ff))
             if faiss_index.ntotal != len(documents):
@@ -301,7 +315,7 @@ class HybridVectorStore:
             bm25_scores = np.array(self.bm25.get_scores(tokenized_query), dtype=np.float64)
 
         dense_scores = np.zeros(n, dtype=np.float32)
-        if self.faiss_index is not None and self.faiss_index.ntotal > 0:
+        if dense_retrieval_enabled() and self.faiss_index is not None and self.faiss_index.ntotal > 0:
             query_emb = self._get_query_embedding(expanded)
             if query_emb is not None:
                 import faiss
@@ -426,8 +440,9 @@ def load_vector_store(user_id: str = "") -> HybridVectorStore:
         try:
             from services.remote_storage import download_file
             download_file(_b2_metadata_path(user_id), mf)
-            download_file(_b2_embeddings_path(user_id), ef)
-            download_file(_b2_faiss_path(user_id), ff)
+            if dense_retrieval_enabled():
+                download_file(_b2_embeddings_path(user_id), ef)
+                download_file(_b2_faiss_path(user_id), ff)
             download_file(_b2_bm25_path(user_id), bf)
         except ImportError:
             pass

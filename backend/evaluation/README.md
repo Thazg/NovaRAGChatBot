@@ -1,138 +1,156 @@
-# Nova RAG Evaluation
+# Nova RAG evaluation
 
-This directory keeps both reproducible CI results and opt-in provider-backed
-evaluations. Results are committed as documentation artifacts so the metrics in
-the portfolio can be audited instead of relying on screenshots or claims.
+Nova is evaluated against questions derived from real, version-pinned arXiv
+PDFs. The repository commits the source manifest, SHA-256 lock, 100 annotations,
+evidence spans, review state, and per-query results—not an opaque synthetic
+corpus or an unverifiable screenshot.
 
-## Recorded offline result
+## Recorded offline baseline
 
-Last recorded: **2026-08-12**<br>
-Configuration: **K = 5**, 14 corpus passages, 60 labeled queries (56
-answerable, 4 unanswerable), and 14 citation samples.
+Last recorded: **2026-08-19**
 
-| Quality gate | Result | Required | Status |
+Configuration: **K = 5**, 10 PDFs, 160 pages, 549 chunks, and 100 questions
+(90 answerable + 10 unanswerable).
+
+| Measurement | Result | Regression floor | Status |
 | --- | ---: | ---: | :---: |
-| Hybrid Recall@5 | **0.9821** | >= 0.90 | Pass |
-| Hybrid MRR | **0.9554** | >= 0.80 | Pass |
-| Citation precision | **1.0000** | >= 0.90 | Pass |
-| Citation recall | **1.0000** | >= 0.90 | Pass |
-| Lexical evidence support proxy | **0.6692** | >= 0.60 | Pass |
-| Unanswerable accuracy | **1.0000** | >= 1.00 | Pass |
+| Hybrid Hit@5 | **0.7889** | >= 0.78 | Pass |
+| Hybrid Recall@5 | **0.7889** | >= 0.78 | Pass |
+| Hybrid MRR | **0.5813** | >= 0.55 | Pass |
+| Citation-label precision | **1.0000** | >= 0.90 | Pass |
+| Citation-label recall | **1.0000** | >= 0.90 | Pass |
+| Lexical evidence-support proxy | **0.8346** | >= 0.80 | Pass |
+| Unanswerable accuracy | **0.0000** | improvement target | **Known gap** |
 
-The complete machine-readable report, including every ranked query result, is
-stored in [`results.json`](./results.json).
+The no-answer result is intentionally visible. The current offline retriever has
+no calibrated confidence threshold and always returns a ranking, so it fails all
+10 unanswerable questions. The CI floor remains zero until abstention is
+implemented and calibrated on a separate development split; this metric must not
+be presented as passing.
+
+The complete machine-readable report is in
+[`results.json`](./results.json), including every ranked query and per-paper
+breakdowns.
+
+## Production method comparison
+
+A separate CPU benchmark compares BM25, real BGE neural dense retrieval, equal
+and weighted RRF, MS MARCO cross-encoder reranking, and deterministic multi-query
+retrieval. It measures end-to-end warm query latency for each method.
+
+| Method | Hit@5 | MRR | P50 | P95 | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| **BM25** | **0.8222** | 0.5722 | **2.36 ms** | **3.93 ms** | **Production default** |
+| BGE dense | 0.5667 | 0.3413 | 21.15 ms | 26.07 ms | Reject standalone |
+| Equal RRF | 0.7556 | 0.5119 | 23.61 ms | 29.17 ms | Reject for this corpus |
+| Weighted RRF | 0.7889 | 0.5384 | 23.62 ms | 29.19 ms | Better than equal, still reject |
+| Reranked | **0.8444** | **0.5774** | 1,312.34 ms | 1,524.19 ms | Optional quality tier |
+| Multi-query | 0.7889 | 0.5508 | 49.27 ms | 82.29 ms | Reject for default path |
+
+The quality gain from reranking is too small for its roughly 555-times P50
+latency cost over BM25. Full configurations, indexing cost, limitations, and
+the production decision are documented in
+[`RETRIEVAL_METHODS.md`](./RETRIEVAL_METHODS.md); raw per-query results are in
+[`advanced_results.json`](./advanced_results.json). The runtime default is
+therefore `RETRIEVAL_MODE=bm25`; neural hybrid retrieval requires explicit
+configuration.
 
 ### Retrieval ablation
 
-| Retrieval mode | Recall@5 | MRR | No-answer accuracy | P50 latency | P95 latency |
+| Retrieval mode | Hit@5 | Recall@5 | MRR | P50 | P95 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| BM25 | 0.9821 | 0.9554 | 1.0000 | 0.682 ms | 0.798 ms |
-| TF-IDF + FAISS proxy | 0.9464 | 0.9196 | 1.0000 | 1.077 ms | 1.166 ms |
-| Hybrid RRF | **0.9821** | **0.9554** | 1.0000 | 1.770 ms | 1.951 ms |
+| BM25 | **0.8000** | **0.8000** | 0.5710 | 216.24 ms | 228.71 ms |
+| TF-IDF + FAISS proxy | 0.7556 | 0.7444 | 0.5688 | 221.45 ms | 239.13 ms |
+| Hybrid RRF | 0.7889 | 0.7889 | **0.5813** | 439.32 ms | 466.50 ms |
 
-Latency is a local micro-benchmark and varies by machine. Hybrid latency is
-measured end-to-end (BM25 + proxy dense search + fusion), not fusion alone.
+Latency is a local Python micro-benchmark and varies by machine. The offline
+FAISS mode uses normalized TF-IDF vectors to exercise vector indexing and
+fusion deterministically; it is not described as neural semantic retrieval.
 
-The offline FAISS mode uses normalized TF-IDF vectors. It exercises vector
-indexing and fusion deterministically, but it is **not** presented as semantic
-dense retrieval. A separate provider-backed command below measures the real
-configured embedding model.
+## Dataset provenance
 
-## Reproduce the CI benchmark
+Exactly 10 questions were authored from each paper: 9 answerable and 1
+unanswerable.
+
+| Paper | Pinned arXiv version |
+| --- | --- |
+| Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks | [2005.11401v4](https://arxiv.org/abs/2005.11401v4) |
+| Dense Passage Retrieval for Open-Domain Question Answering | [2004.04906v3](https://arxiv.org/abs/2004.04906v3) |
+| REALM: Retrieval-Augmented Language Model Pre-Training | [2002.08909v1](https://arxiv.org/abs/2002.08909v1) |
+| ColBERT | [2004.12832v2](https://arxiv.org/abs/2004.12832v2) |
+| Precise Zero-Shot Dense Retrieval without Relevance Labels (HyDE) | [2212.10496v1](https://arxiv.org/abs/2212.10496v1) |
+| Ragas | [2309.15217v2](https://arxiv.org/abs/2309.15217v2) |
+| Self-RAG | [2310.11511v1](https://arxiv.org/abs/2310.11511v1) |
+| Lost in the Middle | [2307.03172v3](https://arxiv.org/abs/2307.03172v3) |
+| Corrective Retrieval Augmented Generation | [2401.15884v3](https://arxiv.org/abs/2401.15884v3) |
+| RAPTOR | [2401.18059v1](https://arxiv.org/abs/2401.18059v1) |
+
+Each answerable annotation includes a reference answer and a verbatim evidence
+span. The builder searches only within the designated paper and resolves the
+span to a PDF page. Page-level relevance labels avoid treating overlapping
+chunks containing the same sentence as different answers. The build fails for
+missing evidence, duplicated IDs, unknown papers, or any count other than 100.
+
+The labels have completed one verification pass. The committed metadata says
+`single_reviewer_verified`; independent second-reviewer status is explicitly
+`pending_human_reviewer`. See
+[`ANNOTATION_GUIDE.md`](./arxiv_corpus/ANNOTATION_GUIDE.md) for acceptance and
+adjudication rules.
+
+## Reproduce from the PDFs
 
 From `backend`:
 
 ```bash
+python evaluation/arxiv_corpus/download_papers.py
+python evaluation/arxiv_corpus/extract_corpus.py
+python evaluation/arxiv_corpus/build_dataset.py
 python -m evaluation.run --k 5 --output evaluation/results.json
 ```
 
-The command updates the JSON report and exits non-zero when a quality gate
-regresses. CI runs the same command on pushes and pull requests.
+The downloader verifies every PDF against the committed SHA-256 and page-count
+lock. The extractor uses `pypdf`, retains PDF page metadata, and calls Nova's
+production chunker with 220-word chunks and a 40-word overlap. PDFs, extracted
+text, and the generated dataset are ignored build artifacts; this avoids
+redistributing full paper text while keeping the benchmark reproducible.
 
-Custom thresholds are available:
+CI executes the same pipeline before tests. Current regression floors can be
+overridden with `--min-hit`, `--min-recall`, `--min-mrr`,
+`--min-citation-precision`, `--min-citation-recall`, `--min-faithfulness`, and
+`--min-unanswerable-accuracy`.
 
-```bash
-python -m evaluation.run \
-  --k 5 \
-  --min-recall 0.90 \
-  --min-mrr 0.80 \
-  --min-citation-precision 0.90 \
-  --min-citation-recall 0.90 \
-  --min-faithfulness 0.60 \
-  --min-unanswerable-accuracy 1.00
-```
+## Metric definitions and limits
 
-## Real embedding ablation (opt-in)
+- **Hit@K** is the fraction of answerable questions with at least one labeled
+  evidence page in the first K unique pages.
+- **Recall@K** measures how many labeled evidence pages are retrieved. Evidence
+  usually resolves to one page, so it can equal Hit@K in this dataset.
+- **MRR** rewards the rank of the first relevant page.
+- **Citation-label precision/recall** check deterministic reference-answer
+  citations against page labels. They validate annotation and citation plumbing,
+  not live LLM citation quality.
+- **Lexical evidence support** is token overlap between reference answers and
+  their evidence. It is a deterministic proxy, not an NLI judge or human
+  faithfulness score.
+- **Unanswerable accuracy** requires the retriever to return no result for
+  intentionally absent claims.
 
-Set `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, and `EMBEDDING_MODEL`, then run:
+This is a small, domain-focused regression benchmark—not a claim of general RAG
+quality. It currently lacks independent dual annotation, a held-out calibration
+split, provider-backed semantic embeddings, and human evaluation of generated
+answers. Opt-in live evaluators remain available in `live_retrieval_eval.py` and
+`live_answer_eval.py`; they require configured external providers.
 
-```bash
-python -m evaluation.live_retrieval_eval \
-  --k 5 \
-  --min-dense-score 0.25 \
-  --output evaluation/embedding_results.json
-```
-
-This batches the labeled corpus and queries through the configured embedding
-provider, builds a real FAISS index, and records BM25 vs dense vs hybrid
-retrieval, latency, and no-answer accuracy. **No `embedding_results.json` is
-committed yet because this environment has no embedding endpoint configured.**
-The CLI exits with code 2 instead of silently substituting fake embeddings.
-
-## Real LLM answer evaluation (opt-in)
-
-The LLM evaluator records generated answers, citations, lexical evidence
-support, reference token F1, latency, estimated tokens, and estimated cost:
-
-```bash
-python -m evaluation.live_answer_eval \
-  --output evaluation/live_results.json \
-  --input-cost-per-million 0.075 \
-  --output-cost-per-million 0.30
-```
-
-Pricing arguments must be copied from the provider on the day of the run; they
-are intentionally not hardcoded. Token usage is estimated as
-`ceil(character_count / 4)` because the current streaming adapter does not
-return provider usage metadata.
-
-**No `live_results.json` is committed yet.** Running this command sends the 14
-versioned evaluation passages and questions to the configured LLM provider, so
-it requires explicit approval for that data transfer.
-
-## Metric definitions
-
-- **Recall@K** is the fraction of labeled relevant passages found in the first
-  K results, averaged over answerable questions.
-- **MRR** rewards the rank of the first relevant result.
-- **Citation precision** penalizes cited filenames outside the labeled sources.
-- **Citation recall** measures how many labeled sources were cited.
-- **Lexical evidence support** is token overlap between answer claims and the
-  supplied evidence. It is a deterministic regression proxy, not an NLI judge
-  or human faithfulness score.
-- **Unanswerable accuracy** requires retrieval to abstain on questions with no
-  labeled answer. Corpus-common terms and question boilerplate are removed
-  before a deterministic lexical-evidence gate. All four versioned adversarial
-  no-answer questions currently abstain correctly.
-- **Reference token F1** is available only in the live answer evaluation and
-  measures overlap with the human-authored reference answer.
-
-## Files
+## Auditable files
 
 | File | Purpose |
 | --- | --- |
-| [`dataset.json`](./dataset.json) | Versioned corpus, 60 relevance labels, and 14 answer samples |
-| [`metrics.py`](./metrics.py) | Offline metrics and deterministic ablation |
-| [`run.py`](./run.py) | CI CLI and threshold enforcement |
-| [`results.json`](./results.json) | Latest committed offline result |
-| [`live_retrieval_eval.py`](./live_retrieval_eval.py) | Real embedding/FAISS ablation |
-| [`live_answer_eval.py`](./live_answer_eval.py) | Real LLM grounding, latency, token, and cost evaluation |
-| [`../tests/test_evaluation.py`](../tests/test_evaluation.py) | Metric and evaluator tests |
-
-## Interpretation limits
-
-The benchmark is project-specific and suitable for regression testing, not a
-claim of general RAG quality. It has reached the requested 50–100 labeled-query
-range, but further work should add independent human labeling, more difficult
-paraphrases, adversarial no-answer questions, exact provider token accounting,
-and an NLI or human faithfulness review.
+| [`dataset.json`](./dataset.json) | Lightweight dataset registry and build instructions |
+| [`manifest.json`](./arxiv_corpus/manifest.json) | Paper titles, arXiv versions, and source URLs |
+| [`checksums.json`](./arxiv_corpus/checksums.json) | SHA-256, bytes, and page-count lock |
+| [`annotation_specs.json`](./arxiv_corpus/annotation_specs.json) | 100 questions, answers, evidence, and review states |
+| [`build_dataset.py`](./arxiv_corpus/build_dataset.py) | Evidence resolver and dataset validator |
+| [`metrics.py`](./metrics.py) | Offline metrics and retrieval ablation |
+| [`results.json`](./results.json) | Latest aggregate and per-query result |
+| [`advanced_results.json`](./advanced_results.json) | Six-method quality and latency benchmark |
+| [`RETRIEVAL_METHODS.md`](./RETRIEVAL_METHODS.md) | Per-method analysis and production selection |

@@ -1,191 +1,297 @@
-# Nova AI Agent
+<div align="center">
 
-Nova is a production-minded **Retrieval-Augmented Generation (RAG) workspace** for asking grounded questions about private documents. It combines a motion-rich React interface with a FastAPI backend, streaming responses, account-isolated indexes, hybrid retrieval, and optional cloud persistence.
+<img src="frontend/src/assets/hero.png" alt="Nova logo" width="104" />
 
-## Why this project stands out
+# Nova — Private Knowledge, Grounded Answers
 
-- **End-to-end RAG pipeline** — ingestion, parsing, overlapping chunks, retrieval, prompt construction, citations, and streamed generation.
-- **Hybrid search** — BM25 works with no embedding bill; an OpenAI-compatible embedding endpoint enables FAISS + reciprocal-rank fusion.
-- **True streaming UX** — Server-Sent Events deliver tokens and action events while supporting cancellation and regeneration.
-- **Private multi-user workspaces** — PBKDF2 password hashing, signed tokens, isolated uploads, indexes, and conversations.
-- **Production signals** — liveness/readiness probes, provider/model verification, request correlation IDs, response timing, automated tests, and CI.
-- **Measured quality** — 60 labeled queries enforce Recall@5, MRR, citation precision/recall, evidence support, and no-answer behavior; Chromium E2E covers the complete portfolio flow.
-- **Resilient persistence** — lightweight local state in development; PostgreSQL, Redis/RQ, and Backblaze B2 for multi-replica production.
-- **Polished interface** — light/dark/system themes, responsive layouts, keyboard workflows, smooth motion, and reduced-motion support.
+**A production-minded RAG workspace that turns private documents into traceable, citation-backed answers.**
 
-## Architecture
+[![Live Demo](https://img.shields.io/badge/Live_Demo-6D5DFC?style=for-the-badge&logo=vercel&logoColor=white)](https://novachatbot.vercel.app/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Thazg/NovaRAGChatBot/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](backend/requirements.txt)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=0B1020)](frontend/package.json)
+
+[Try Nova](https://novachatbot.vercel.app/) · [Explore the API](https://novaaiagent-4.onrender.com/docs) · [Read the evaluation](backend/evaluation/README.md) · [Review the security model](docs/SESSION_SECURITY.md)
+
+</div>
+
+![Nova secure workspace and retrieval journey](frontend/e2e/portfolio-flow.spec.ts-snapshots/login-dark-chromium-linux.png)
+
+## The 30-second overview
+
+Nova is an end-to-end AI engineering project—not a chat UI wrapped around an LLM. It owns the complete path from secure document ingestion to chunking, benchmark-selected BM25 retrieval, prompt grounding, cited generation, streaming delivery, evaluation, and cloud persistence.
+
+| Product signal | Evidence |
+|---|---|
+| **Grounded, inspectable answers** | Source citations and explicit insufficient-evidence behavior |
+| **Measured retrieval quality** | BM25 reaches **82.22% Hit@5 at 2.36 ms P50**; neural reranking reaches 84.44% but costs 1.31 s P50 |
+| **Auditable provenance** | Pinned paper versions, SHA-256 locks, page evidence, reference answers, and per-query results |
+| **Production engineering** | PostgreSQL, Redis/RQ, Backblaze B2, readiness probes, rate limits, Sentry hooks, Docker and CI |
+| **Verified delivery** | **90 passing backend tests**, deterministic evaluation gates, and Chromium E2E coverage |
+
+> The benchmark is project-specific and designed for regression testing. It also exposes a real limitation: the current retriever scores **0% on 10 unanswerable questions** because abstention is not yet calibrated.
+
+## Why Nova is worth a closer look
+
+- **Whole-system ownership** — React product experience, FastAPI services, RAG internals, security controls, persistence, deployment, and testing live in one coherent system.
+- **Retrieval is benchmark-selected** — BM25 is the production default because it delivers the strongest quality/latency trade-off; dense, RRF, reranking, and multi-query remain reproducible evaluation paths rather than unmeasured complexity in every request.
+- **The UX is genuinely streamed** — Server-Sent Events deliver tokens and lifecycle events incrementally, with cancellation and regeneration support.
+- **Multi-user privacy is structural** — uploads, indexes, conversations, preferences, and storage keys are namespaced by authenticated user ID.
+- **Failure paths are designed** — no-answer behavior, upload quarantine, SSRF defenses, rotating refresh sessions, health/readiness separation, shared rate limiting, and background job status are first-class concerns.
+- **Claims are reproducible** — CI runs the test suite, frontend quality gates, E2E flow, and retrieval benchmark on every pull request.
+
+## See it in action
+
+The hosted experience demonstrates the full product flow:
+
+1. Create a private workspace.
+2. Upload a PDF, DOCX, Markdown, RST, TXT, Python file, or Jupyter Notebook.
+3. Ask a document-specific question and watch the response stream in real time.
+4. Inspect the cited evidence, continue the conversation, or search across prior chats.
+
+**Live application:** [novachatbot.vercel.app](https://novachatbot.vercel.app/)
+
+**Interactive API:** [novaaiagent-4.onrender.com/docs](https://novaaiagent-4.onrender.com/docs)
+
+> The backend runs on Render and may take a moment to wake after an idle period.
+
+## System architecture
+
+```mermaid
+flowchart LR
+    U[User] --> UI[React 19 + TypeScript]
+    UI <-->|REST + SSE| API[FastAPI]
+
+    API --> AUTH[Auth + rate limiting]
+    API --> RAG[RAG orchestration]
+    API --> JOBS[Index jobs]
+
+    RAG --> BM25[BM25 production retrieval]
+    BM25 --> PROMPT[Grounded prompt + citations]
+    RAG -. hybrid opt-in .-> FAISS[FAISS vector retrieval]
+    BM25 -.-> RRF[Reciprocal Rank Fusion]
+    FAISS -.-> RRF
+    RRF -. experimental path .-> PROMPT
+    PROMPT --> LLM[Groq or Ollama]
+    LLM -->|token stream| API
+
+    AUTH --> PG[(PostgreSQL)]
+    JOBS --> REDIS[(Redis + RQ)]
+    JOBS --> B2[(Backblaze B2)]
+```
+
+### Request lifecycle
 
 ```text
-┌─────────────────────────────┐       SSE / REST       ┌─────────────────────────────┐
-│ React 19 + TypeScript       │ ─────────────────────▶ │ FastAPI                     │
-│ Zustand + Tailwind + Motion │ ◀───────────────────── │ Auth + conversations        │
-└─────────────────────────────┘                        └──────────────┬──────────────┘
-                                                                    │
-                                      ┌─────────────────────────────┼──────────────────────┐
-                                      │                             │                      │
-                              ┌───────▼────────┐           ┌────────▼────────┐    ┌────────▼────────┐
-                              │ BM25 / FAISS   │           │ Groq or Ollama  │    │ Local / B2      │
-                              │ RRF re-ranking │           │ Streaming LLM   │    │ Persistence     │
-                              └────────────────┘           └─────────────────┘    └─────────────────┘
+Upload
+  → quarantine and validate
+  → parse and normalize
+  → create overlapping chunks
+  → build a user-isolated index
+  → retrieve and rank evidence with production-default BM25
+  → construct a grounded prompt
+  → stream a cited answer over SSE
 ```
 
-### Request flow
+## Engineering highlights
 
-1. A document is parsed, normalized, chunked, and stored in the user's isolated index.
-2. A question is expanded and retrieved with BM25 or optional BM25 + FAISS fusion.
-3. Ranked chunks, source metadata, conversation history, and user preferences form the prompt.
-4. Groq or Ollama streams the grounded response to the browser over SSE.
+| Area | Implementation | Why it matters |
+|---|---|---|
+| Retrieval | Production-default BM25 with acronym-aware expansion; opt-in FAISS/RRF experiments | Uses the measured 82.22% Hit@5 / 2.36 ms P50 trade-off instead of adding neural latency by default |
+| Grounding | Ranked context, source metadata, history limits, citation parsing | Keeps answers traceable and bounds prompt growth |
+| Streaming | SSE token and action events, abort support, regeneration | Responsive UX without unnecessary WebSocket complexity |
+| Authentication | PBKDF2 password hashing, short-lived access tokens, rotating refresh tokens | Limits credential exposure and supports session revocation |
+| Persistence | PostgreSQL for relational state, B2 for artifacts, local fallback for development | Works locally while supporting stateless API replicas in production |
+| Background work | Redis + RQ indexing jobs with progress endpoints | Keeps document processing away from request latency |
+| Operations | Liveness/readiness probes, request IDs, timing headers, optional Sentry | Makes failure diagnosis and rollout checks observable |
+| Frontend | React 19, Zustand, Tailwind, shadcn/ui, Framer Motion | Polished, responsive product experience with accessible motion controls |
 
-## Technology
+## Quality is measured, not implied
 
-| Layer | Stack |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, Zustand, Tailwind CSS, shadcn/ui, Framer Motion |
-| Backend | Python 3.12, FastAPI, Pydantic, HTTPX |
-| Retrieval | rank-bm25, optional FAISS, query expansion, reciprocal-rank fusion |
-| Documents | PDF, DOCX, Markdown, RST, TXT, Python, Jupyter Notebook |
-| AI providers | Groq cloud API or local Ollama |
-| Persistence | PostgreSQL + Redis/RQ in production; Backblaze B2 for file/index artifacts |
-| Delivery | Docker Compose, Render, Vercel, GitHub Actions |
+Latest production-method evaluation: **K = 5**, 10 version-pinned arXiv PDFs, 160 pages, 549 chunks, and 100 reviewed questions (90 answerable + 10 unanswerable). Latency is warm steady-state on a 6-thread CPU with models and indexes preloaded.
 
-## Quick start
+| Method | Hit@5 | MRR | P50 latency | Production decision |
+|---|---:|---:|---:|---|
+| **BM25** | **0.8222** | 0.5722 | **2.36 ms** | **Default** |
+| BGE dense | 0.5667 | 0.3413 | 21.15 ms | Reject standalone |
+| Equal RRF | 0.7556 | 0.5119 | 23.61 ms | Reject for this corpus |
+| Weighted RRF | 0.7889 | 0.5384 | 23.62 ms | Better than equal, still reject |
+| Cross-encoder reranked | **0.8444** | **0.5774** | 1,312.34 ms | Optional quality tier |
+| Multi-query | 0.7889 | 0.5508 | 49.27 ms | Reject for default path |
 
-### 1. Configure the environment
+Every answerable label is tied to a verbatim span and PDF page. The labels have one completed verification pass; independent second-reviewer status remains explicitly pending. BM25 is selected for production because reranking's 2.22-point Hit@5 gain costs roughly 555× P50 latency, while dense, equal/weighted RRF, and multi-query underperform BM25 on this corpus. All methods still score 0% on unanswerable questions, so abstention remains a visible known gap.
+
+[Read every method and the production decision →](backend/evaluation/RETRIEVAL_METHODS.md) · [Dataset methodology and limitations →](backend/evaluation/README.md)
+
+### Automated gates
 
 ```bash
-git clone <your-repository-url>
-cd NovaRAGChatbot
-cp .env.example backend/.env
-```
+# Backend tests
+python -m pytest -q
 
-Set at least these values in `backend/.env`:
+# Backend coverage (after installing development requirements)
+python -m pytest --cov --cov-report=term-missing --cov-fail-under=64
 
-```env
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_groq_key
-JWT_SECRET=replace_with_a_long_random_secret
-```
-
-For local Ollama, set `LLM_PROVIDER=ollama`, `OLLAMA_URL`, and `MODEL_NAME` instead.
-
-### 2. Run the backend
-
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r backend/requirements.txt
+# Rebuild the checksum-pinned arXiv corpus and run the benchmark
 cd backend
-uvicorn app:app --reload --host 127.0.0.1 --port 8000
-```
-
-### 3. Run the frontend
-
-```bash
-cd frontend
-npm ci
-cp .env.example .env
-npm run dev -- --host 127.0.0.1
-```
-
-Open `http://127.0.0.1:5173`. Interactive API documentation is available at `http://127.0.0.1:8000/docs`.
-
-### Docker Compose
-
-```bash
-docker compose up --build
-```
-
-The Compose setup exposes the backend on port `8000` and the frontend on port `3000`.
-
-## Quality gates
-
-```bash
-# Backend tests and coverage
-pip install -r backend/requirements-dev.txt
-pytest --cov --cov-report=term-missing
-
-# Offline retrieval/citation evaluation
-cd backend
+python evaluation/arxiv_corpus/download_papers.py
+python evaluation/arxiv_corpus/extract_corpus.py
+python evaluation/arxiv_corpus/build_dataset.py
 python -m evaluation.run --k 5
+
+# Optional neural dense, equal/weighted RRF, reranker, and multi-query comparison
+pip install -r requirements-evaluation.txt
+python -m evaluation.advanced_retrieval_eval --allow-model-download
 
 # Frontend lint, typecheck, and production build
 cd frontend
 npm run check
 
-# Deterministic browser E2E (login → upload → chat → citation)
+# Deterministic login → upload → chat → citation browser flow
 npm run e2e
 ```
 
-GitHub Actions runs both quality gates for pushes to `main` and every pull request.
+GitHub Actions enforces a **64% production-code coverage floor**, runs the offline evaluation gates, audits production frontend dependencies, builds the application, and executes Chromium E2E tests.
 
-The committed benchmark currently records Recall@5 **0.9821**, MRR **0.9554**, citation precision/recall **1.0000**, and no-answer accuracy **1.0000**. The 79-test backend suite measures **64.35% production-code coverage** with a **64%** CI floor; test modules are excluded from the measurement. See the [evaluation report](backend/evaluation/README.md) for the ablation, provider-backed commands, exact results, and limitations. See `docs/PORTFOLIO_CHECKLIST.md` for the demo and deployment checklists.
+## Security by design
 
-## Operations
+Nova treats private-document RAG as a security-sensitive system.
 
-| Endpoint | Purpose |
+- Passwords use salted **PBKDF2-HMAC-SHA256 with 310,000 iterations** and constant-time verification.
+- Access tokens live only in JavaScript memory; rotating refresh tokens use a `Secure`, `HttpOnly`, `SameSite=Strict` host-only cookie in production, while only token hashes are stored server-side.
+- Uploads are quarantined, size-bounded, checked by extension, MIME, signature, and parser, optionally scanned by ClamAV, then stored under server-generated UUIDs.
+- PDF and DOCX controls reject encrypted or active PDFs, embedded content, unsafe relationships, malformed archives, and decompression bombs.
+- Remote document download blocks unsafe schemes and ports, private/reserved IP ranges, DNS rebinding, unsafe redirects, and invalid payload signatures.
+- Production refuses weak/default JWT secrets; origin checks protect cookie-backed endpoints; rate limits can be shared across replicas through Redis.
+- Documents, conversations, vector indexes, preferences, and artifact keys remain isolated by authenticated user ID.
+
+Deep dives: [session security](docs/SESSION_SECURITY.md) · [upload and SSRF threat model](docs/UPLOAD_SECURITY.md) · [production persistence](docs/PRODUCTION_PERSISTENCE.md)
+
+## Technology stack
+
+| Layer | Stack |
 |---|---|
-| `GET /health` | Fast liveness check with version, environment, retrieval mode, and uptime |
-| `GET /health/ready` | Provider/model plus PostgreSQL, Redis, and RQ worker readiness |
-| `GET /docs` | OpenAPI / Swagger documentation |
+| Frontend | React 19, TypeScript 6, Vite 8, Zustand, Tailwind CSS, shadcn/ui, Framer Motion |
+| Backend | Python 3.12, FastAPI, Pydantic, HTTPX |
+| Retrieval | rank-bm25 production default; optional FAISS, RRF, BGE, and cross-encoder evaluation |
+| LLM | Groq cloud API or local Ollama |
+| Data | PostgreSQL, SQLAlchemy, Alembic, Redis, RQ, Backblaze B2 |
+| Quality | Pytest, Coverage.py, Playwright, axe-core, oxlint, TypeScript |
+| Delivery | Docker Compose, Render, Vercel, GitHub Actions, optional Sentry |
 
-Every API response includes `X-Request-ID`, `X-Response-Time-Ms`, and `Server-Timing` headers for debugging and latency inspection.
+## Run locally
 
-## Security choices
+### Prerequisites
 
-- Passwords use salted PBKDF2-HMAC-SHA256 with 310,000 iterations.
-- Access tokens are signed with HMAC-SHA256, expire after 10 minutes, and exist only in JavaScript memory.
-- Refresh tokens rotate on every use and live in a `Secure; HttpOnly; SameSite=Strict` host-only cookie in production. Only their SHA-256 hashes are persisted server-side.
-- Cookie-backed auth endpoints verify the browser `Origin`; Vercel proxies `/api/*` to Render so production authentication remains same-origin.
-- Logout revokes the refresh session, expires its cookie, and clears browser cache/cookies. Legacy tokens are removed from persisted Zustand state during migration.
-- Production refuses to boot with a missing/default JWT secret or one shorter than 32 bytes.
-- Usernames are normalized and validated before becoming filesystem/storage identifiers.
-- Uploads are quarantined under a temporary name, bounded by size, checked against an extension/MIME allowlist, parsed by file signature and structure, scanned for malware, and stored under a server-generated UUID.
-- PDF/DOCX complexity limits reject encrypted or active PDFs, embedded content, zip bombs, unsafe relationships, and malformed archives before indexing.
-- Search-download blocks credentials, unsafe schemes/ports, every non-public DNS answer, DNS rebinding to a private connected peer, and unsafe redirects; downloaded bytes must still pass MIME, size, PDF signature, parser, and malware checks.
-- PostgreSQL transactions protect shared users/conversations, Redis provides replica-wide rate limiting, and RQ moves parsing/indexing to monitored jobs.
-- Optional Sentry monitoring runs with PII disabled; readiness fails closed when shared workers lack B2 or required ClamAV scanning.
-- Sliding-window limits protect authentication and API endpoints and expose standard retry/remaining headers.
-- Documents, indexes, and conversations are namespaced by authenticated user ID.
-- Secrets stay in environment variables and are excluded from Git.
+- Python 3.12+
+- Node.js 22+
+- A [Groq API key](https://console.groq.com/) **or** a local [Ollama](https://ollama.com/) model
 
-See [`docs/SESSION_SECURITY.md`](docs/SESSION_SECURITY.md) and [`docs/UPLOAD_SECURITY.md`](docs/UPLOAD_SECURITY.md) for threat models, deployment variables, and verification checklists.
+### 1. Clone and configure
 
-## Repository structure
-
-```text
-backend/
-├── api/routes/          # Auth, chat, documents, conversations, health
-├── rag/                 # Parsing, chunking, retrieval, prompts, LLM clients
-├── services/            # Auth, persistence, B2 integration
-└── tests/               # Unit and API contract tests
-
-frontend/
-└── src/
-    ├── components/      # Chat, onboarding, sidebar, settings, UI primitives
-    ├── services/        # Typed REST and SSE client
-    ├── store/           # Zustand application state
-    └── hooks/           # Shared React hooks
+```bash
+git clone https://github.com/Thazg/NovaRAGChatBot.git
+cd NovaRAGChatBot
+cp .env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-## Engineering trade-offs and roadmap
+On PowerShell, replace `cp` with `Copy-Item`.
 
-- **BM25-first** keeps local development free and predictable, but semantic retrieval needs a separately configured embedding endpoint.
-- **Dual runtime modes** keep JSON/thread-local services convenient for development; production switches users, refresh sessions, and conversations to PostgreSQL, rate limiting to Redis, and indexing to RQ workers.
-- **B2 stores artifacts, not relational state** when PostgreSQL is enabled. Separate workers require B2 because platform filesystems are ephemeral and not shared.
-- **SSE** is ideal for one-way token streaming; WebSockets would only be justified for collaborative or bidirectional realtime features.
-- Next portfolio milestone: configure a real embedding endpoint, explicitly approve the provider-backed answer run, and publish those live cost/latency artifacts beside the reproducible offline report.
+Set at least the following values in `backend/.env`:
 
-See [`docs/PRODUCTION_PERSISTENCE.md`](docs/PRODUCTION_PERSISTENCE.md) for migrations, JSON import, RQ worker startup, readiness, and rollout order.
+```env
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_your_key_here
+JWT_SECRET=replace_with_a_random_secret_of_at_least_32_characters
+RETRIEVAL_MODE=bm25
+```
+
+For a local model, use `LLM_PROVIDER=ollama` and configure `OLLAMA_URL` plus `MODEL_NAME` instead. `RETRIEVAL_MODE=bm25` is the benchmark-selected production default and does not call an embedding provider. The older hybrid path is an explicit experiment: set `RETRIEVAL_MODE=hybrid` and configure an OpenAI-compatible embedding endpoint only when deliberately retesting that trade-off.
+
+### 2. Start the API
+
+```bash
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
+
+pip install -r backend/requirements.txt
+cd backend
+uvicorn app:app --reload --host 127.0.0.1 --port 8000
+```
+
+### 3. Start the frontend
+
+In a second terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Swagger UI is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
+### Docker Compose
+
+```bash
+cp .env.example .env
+# Add GROQ_API_KEY and a strong JWT_SECRET to .env
+docker compose up --build
+```
+
+The containerized frontend is served on `http://localhost:3000`; the API is served on `http://localhost:8000`.
+
+## Repository map
+
+```text
+NovaRAGChatBot/
+├── backend/
+│   ├── api/routes/          # Auth, chat, documents, conversations, health
+│   ├── rag/                 # Parsing, chunking, retrieval, prompts, LLM clients
+│   ├── services/            # Auth, persistence, storage, jobs, rate limiting
+│   ├── evaluation/          # Versioned datasets, metrics, ablations, reports
+│   ├── alembic/             # PostgreSQL schema migrations
+│   └── tests/               # Unit, API, security, persistence, integration tests
+├── frontend/
+│   ├── src/components/      # Product UI, chat, onboarding, settings
+│   ├── src/services/        # Typed REST and SSE client
+│   ├── src/store/           # Zustand application state
+│   └── e2e/                 # Deterministic Playwright portfolio flow
+├── docs/                    # Threat models, deployment and portfolio runbooks
+├── .github/workflows/       # CI quality gates
+├── docker-compose.yml
+└── render.yaml
+```
+
+## Deliberate trade-offs
+
+- **BM25 in production:** the selected default is backed by the committed 100-question quality/latency benchmark; neural retrieval remains opt-in until it beats that baseline under an agreed latency SLO.
+- **SSE over WebSockets:** the product needs reliable one-way generation streaming, not bidirectional realtime collaboration.
+- **Local simplicity, production durability:** JSON and in-process fallbacks keep development light; PostgreSQL, Redis/RQ, and B2 support shared, multi-replica deployments.
+- **Artifacts and relational state stay separate:** B2 stores uploads and index artifacts, while PostgreSQL owns users, refresh sessions, conversations, and jobs.
+- **Honest evaluation boundaries:** offline proxies guard regressions; live embedding and LLM evaluations remain opt-in because they send versioned test data to external providers and incur variable cost.
 
 ## Deployment
 
-- Live frontend: [novachatbot.vercel.app](https://novachatbot.vercel.app/)
-- Production API: `https://novaaiagent-4.onrender.com`
-- `render.yaml` provisions the FastAPI service on Render.
-- The Vite production build calls same-origin `/api`; `frontend/vercel.json` securely rewrites that path to Render and adds browser security headers.
-- Render allows the production frontend origin plus preview URLs belonging to this Vercel project.
-- PostgreSQL stores users, refresh sessions, and conversations; Backblaze B2 stores durable upload/index artifacts used by API and worker replicas.
+| Surface | Platform | URL |
+|---|---|---|
+| Web application | Vercel | [novachatbot.vercel.app](https://novachatbot.vercel.app/) |
+| FastAPI service | Render | [novaaiagent-4.onrender.com](https://novaaiagent-4.onrender.com) |
+| API documentation | Swagger UI | [novaaiagent-4.onrender.com/docs](https://novaaiagent-4.onrender.com/docs) |
+
+Vercel rewrites same-origin `/api/*` requests to Render and applies browser security headers. Render serves the API; PostgreSQL persists relational state; Redis/RQ coordinates shared limits and indexing work; Backblaze B2 provides durable file and index storage across replicas.
+
+## Author
+
+Built by [Thazg](https://github.com/Thazg) as a portfolio project focused on production RAG, full-stack engineering, security, and measurable AI quality.
+
+If this project is useful, consider giving it a ⭐—and feel free to open an issue with feedback.
 
 ## License
 

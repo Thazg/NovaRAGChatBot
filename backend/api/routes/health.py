@@ -15,6 +15,10 @@ _READINESS_LOCK = asyncio.Lock()
 _READINESS_CACHE: tuple[float, dict, int] | None = None
 
 
+def _effective_retrieval_mode() -> str:
+    return "hybrid" if settings.RETRIEVAL_MODE == "hybrid" and settings.EMBEDDING_BASE_URL else "bm25"
+
+
 @router.get("")
 @router.get("/")
 @router.head("")
@@ -48,8 +52,8 @@ def health_check():
             "llm_provider": "groq",
             "groq_api_key_set": api_key_set,
             "groq_model": settings.GROQ_MODEL,
-            "embedding_model": settings.EMBEDDING_MODEL if settings.EMBEDDING_BASE_URL else None,
-            "retrieval": "hybrid" if settings.EMBEDDING_BASE_URL else "bm25",
+            "embedding_model": settings.EMBEDDING_MODEL if _effective_retrieval_mode() == "hybrid" else None,
+            "retrieval": _effective_retrieval_mode(),
             "infrastructure": infrastructure,
             "rag_config": rag_config,
         }
@@ -63,8 +67,8 @@ def health_check():
         "llm_provider": "ollama",
         "ollama": "configured",
         "model": settings.MODEL_NAME,
-        "embedding_model": settings.EMBEDDING_MODEL if settings.EMBEDDING_BASE_URL else None,
-        "retrieval": "hybrid" if settings.EMBEDDING_BASE_URL else "bm25",
+        "embedding_model": settings.EMBEDDING_MODEL if _effective_retrieval_mode() == "hybrid" else None,
+        "retrieval": _effective_retrieval_mode(),
         "infrastructure": infrastructure,
         "rag_config": rag_config,
     }

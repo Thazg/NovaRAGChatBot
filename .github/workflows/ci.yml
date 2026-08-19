@@ -21,6 +21,17 @@ jobs:
           cache-dependency-path: backend/requirements*.txt
       - name: Install dependencies
         run: pip install -r backend/requirements-dev.txt
+      - name: Cache checksum-pinned arXiv PDFs
+        uses: actions/cache@v4
+        with:
+          path: backend/evaluation/arxiv_corpus/pdfs
+          key: arxiv-pdfs-${{ hashFiles('backend/evaluation/arxiv_corpus/checksums.json') }}
+      - name: Rebuild checksum-pinned arXiv benchmark
+        working-directory: backend
+        run: |
+          python evaluation/arxiv_corpus/download_papers.py
+          python evaluation/arxiv_corpus/extract_corpus.py
+          python evaluation/arxiv_corpus/build_dataset.py
       - name: Run tests with coverage
         # Coverage is scoped to production modules by pyproject.toml; tests and
         # generated artifacts are intentionally excluded from the denominator.

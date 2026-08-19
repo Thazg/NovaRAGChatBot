@@ -19,6 +19,7 @@ import numpy as np
 from config.settings import settings
 from evaluation.metrics import (
     _calibrate_lexical_ranking,
+    _deduplicate,
     _percentile,
     _rrf,
     recall_at_k,
@@ -27,7 +28,7 @@ from evaluation.metrics import (
 from rag.embeddings import get_embeddings_batch
 from rag.vector_store import HybridVectorStore, expand_query
 
-DEFAULT_DATASET = Path(__file__).with_name("dataset.json")
+DEFAULT_DATASET = Path(__file__).with_name("arxiv_corpus") / "generated_dataset.json"
 
 
 def _summary(records: list[dict[str, Any]], latencies: list[float]) -> dict[str, float]:
@@ -67,33 +68,45 @@ def evaluate_live_retrieval(dataset: dict[str, Any], k: int, min_dense_score: fl
     faiss.normalize_L2(query_vectors)
     dense_index = faiss.IndexFlatIP(corpus_vectors.shape[1])
     dense_index.add(corpus_vectors)
-    corpus_ids = [item["id"] for item in corpus]
-    corpus_by_id = {item["id"]: item["content"] for item in corpus}
+    corpus_ids = [
+        item.get("metadata", {}).get("relevance_id", item["id"])
+        for item in corpus
+    ]
+    corpus_by_id: dict[str, str] = {}
+    for item, evaluation_id in zip(corpus, corpus_ids):
+        corpus_by_id[evaluation_id] = (
+            f"{corpus_by_id.get(evaluation_id, '')} {item['content']}"
+        ).strip()
 
     documents = [{
         "content": item["content"],
-        "metadata": {**item.get("metadata", {}), "evaluation_id": item["id"]},
+        "metadata": {
+            **item.get("metadata", {}),
+            "evaluation_id": item.get("metadata", {}).get("relevance_id", item["id"]),
+        },
     } for item in corpus]
     bm25_store = HybridVectorStore(documents=documents)
     bm25_store._build_bm25()
 
     modes = {"bm25": [], "dense_faiss": [], "hybrid_rrf": []}
     latencies = {mode: [] for mode in modes}
-    search_k = min(max(k, 10), len(corpus_ids))
+    search_k = min(max(k * 5, 25), len(corpus_ids))
     for query_index, sample in enumerate(queries):
         started = time.perf_counter()
         bm25_nodes = bm25_store.retrieve(sample["query"], top_k=search_k)
-        bm25_ids = [node.get("metadata", {}).get("evaluation_id", "") for node in bm25_nodes]
+        bm25_ids = _deduplicate(
+            node.get("metadata", {}).get("evaluation_id", "") for node in bm25_nodes
+        )
         bm25_ids = _calibrate_lexical_ranking(expand_query(sample["query"]), bm25_ids, corpus_by_id)
         bm25_ms = (time.perf_counter() - started) * 1000
 
         started = time.perf_counter()
         scores, indices = dense_index.search(query_vectors[query_index:query_index + 1], search_k)
-        dense_ids = [
+        dense_ids = _deduplicate(
             corpus_ids[index]
             for score, index in zip(scores[0], indices[0])
             if index >= 0 and score >= min_dense_score
-        ]
+        )
         dense_ms = (time.perf_counter() - started) * 1000
 
         started = time.perf_counter()

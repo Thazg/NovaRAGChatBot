@@ -1,0 +1,4 @@
+-r requirements-dev.txt
+sentence-transformers==5.7.0
+transformers==4.57.6
+torch==2.11.0

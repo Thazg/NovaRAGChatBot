@@ -1,636 +1,2186 @@
 {
   "k": 5,
-  "corpus_count": 14,
-  "query_count": 60,
-  "recall_at_k": 0.9821428571428571,
-  "mrr": 0.9553571428571429,
+  "corpus_count": 549,
+  "query_count": 100,
+  "hit_at_k": 0.7888888888888889,
+  "recall_at_k": 0.7888888888888889,
+  "mrr": 0.5812838704505371,
   "citation_precision": 1.0,
   "citation_recall": 1.0,
-  "faithfulness": 0.66921768707483,
+  "faithfulness": 0.8346017375265741,
   "faithfulness_method": "lexical_evidence_support_proxy",
-  "unanswerable_accuracy": 1,
+  "unanswerable_accuracy": 0,
   "ablations": {
     "bm25": {
-      "recall_at_k": 0.9821428571428571,
-      "mrr": 0.9553571428571429,
-      "unanswerable_accuracy": 1,
-      "latency_ms_p50": 0.6824500001130218,
-      "latency_ms_p95": 0.7975099998020595
+      "hit_at_k": 0.8,
+      "recall_at_k": 0.8,
+      "mrr": 0.571041366041366,
+      "unanswerable_accuracy": 0,
+      "latency_ms_p50": 216.23629999521654,
+      "latency_ms_p95": 228.70806999562774
     },
     "tfidf_faiss_proxy": {
-      "recall_at_k": 0.9464285714285714,
-      "mrr": 0.9196428571428571,
-      "unanswerable_accuracy": 1,
-      "latency_ms_p50": 1.076549999652343,
-      "latency_ms_p95": 1.1656049998236995
+      "hit_at_k": 0.7555555555555555,
+      "recall_at_k": 0.7444444444444445,
+      "mrr": 0.5688026325526325,
+      "unanswerable_accuracy": 0,
+      "latency_ms_p50": 221.45344999444205,
+      "latency_ms_p95": 239.13414499984356
     },
     "hybrid_rrf": {
-      "recall_at_k": 0.9821428571428571,
-      "mrr": 0.9553571428571429,
-      "unanswerable_accuracy": 1,
-      "latency_ms_p50": 1.7704499996398226,
-      "latency_ms_p95": 1.9512699997449088
+      "hit_at_k": 0.7888888888888889,
+      "recall_at_k": 0.7888888888888889,
+      "mrr": 0.5812838704505371,
+      "unanswerable_accuracy": 0,
+      "latency_ms_p50": 439.3236999894725,
+      "latency_ms_p95": 466.497520043049
+    }
+  },
+  "per_paper": {
+    "colbert": {
+      "query_count": 9,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "mrr": 0.45555555555555555
+    },
+    "crag": {
+      "query_count": 9,
+      "hit_at_k": 0.6666666666666666,
+      "recall_at_k": 0.6666666666666666,
+      "mrr": 0.43047138047138045
+    },
+    "dpr": {
+      "query_count": 9,
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.6962962962962963
+    },
+    "hyde": {
+      "query_count": 9,
+      "hit_at_k": 0.6666666666666666,
+      "recall_at_k": 0.6666666666666666,
+      "mrr": 0.42592592592592593
+    },
+    "lost-middle": {
+      "query_count": 9,
+      "hit_at_k": 0.7777777777777778,
+      "recall_at_k": 0.7777777777777778,
+      "mrr": 0.7888888888888889
+    },
+    "rag": {
+      "query_count": 9,
+      "hit_at_k": 0.7777777777777778,
+      "recall_at_k": 0.7777777777777778,
+      "mrr": 0.7481962481962482
+    },
+    "ragas": {
+      "query_count": 9,
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.674074074074074
+    },
+    "raptor": {
+      "query_count": 9,
+      "hit_at_k": 0.5555555555555556,
+      "recall_at_k": 0.5555555555555556,
+      "mrr": 0.34034391534391534
+    },
+    "realm": {
+      "query_count": 9,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "mrr": 0.6296296296296297
+    },
+    "self-rag": {
+      "query_count": 9,
+      "hit_at_k": 0.6666666666666666,
+      "recall_at_k": 0.6666666666666666,
+      "mrr": 0.6234567901234568
     }
   },
   "queries": [
     {
-      "query": "What stages make up the retrieval augmented generation pipeline?",
+      "id": "rag-001",
+      "query": "What two kinds of memory does the original RAG model combine?",
+      "question_type": "fact_lookup",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "architecture-1"
+      "relevant_ids": [
+        "rag--p001"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How are documents turned into grounded prompts?",
-      "answerable": true,
       "retrieved_ids": [
-        "architecture-1"
+        "crag--p003",
+        "rag--p001",
+        "rag--p002",
+        "rag--p019",
+        "self-rag--p022"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Where are overlapping chunks created?",
-      "answerable": true,
-      "retrieved_ids": [
-        "architecture-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "What happens before Nova streams an answer?",
-      "answerable": true,
-      "retrieved_ids": [
-        "architecture-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How are user passwords hashed?",
-      "answerable": true,
-      "retrieved_ids": [
-        "password-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How many PBKDF2 iterations protect a password?",
-      "answerable": true,
-      "retrieved_ids": [
-        "password-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Does password comparison run in constant time?",
-      "answerable": true,
-      "retrieved_ids": [
-        "password-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which SHA algorithm is used with PBKDF2 HMAC?",
-      "answerable": true,
-      "retrieved_ids": [
-        "password-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How long does an access token live?",
-      "answerable": true,
-      "retrieved_ids": [
-        "session-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Where does the browser keep the access token?",
-      "answerable": true,
-      "retrieved_ids": [
-        "session-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which cookie flags protect refresh tokens?",
-      "answerable": true,
-      "retrieved_ids": [
-        "session-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Are refresh credentials rotated and hashed server side?",
-      "answerable": true,
-      "retrieved_ids": [
-        "session-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How are generated tokens streamed to React?",
-      "answerable": true,
-      "retrieved_ids": [
-        "streaming-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which protocol delivers incremental LLM output?",
-      "answerable": true,
-      "retrieved_ids": [
-        "streaming-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Can users cancel an active generation?",
-      "answerable": true,
-      "retrieved_ids": [
-        "streaming-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "What happens when the initial stream connection drops?",
-      "answerable": true,
-      "retrieved_ids": [
-        "streaming-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How are BM25 and FAISS rankings combined?",
-      "answerable": true,
-      "retrieved_ids": [
-        "retrieval-1",
-        "evaluation-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which lexical ranker does hybrid retrieval use?",
-      "answerable": true,
-      "retrieved_ids": [
-        "retrieval-1",
-        "evaluation-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which vector index supports dense retrieval?",
-      "answerable": true,
-      "retrieved_ids": [
-        "storage-1",
-        "retrieval-1",
-        "evaluation-1"
-      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
-      "query": "What does reciprocal rank fusion merge?",
+      "id": "rag-002",
+      "query": "What serves as the non-parametric memory in Lewis et al.'s RAG implementation?",
+      "question_type": "fact_lookup",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "retrieval-1",
-        "evaluation-1"
+      "relevant_ids": [
+        "rag--p001",
+        "rag--p002"
       ],
+      "retrieved_ids": [
+        "rag--p002",
+        "rag--p001",
+        "crag--p001",
+        "rag--p006",
+        "rag--p009"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "What artifacts are stored in Backblaze B2?",
+      "id": "rag-003",
+      "query": "How do the two RAG formulations differ in their use of retrieved passages?",
+      "question_type": "comparison",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "storage-1"
+      "relevant_ids": [
+        "rag--p001"
       ],
+      "retrieved_ids": [
+        "rag--p001",
+        "self-rag--p001",
+        "lost-middle--p001",
+        "self-rag--p020",
+        "rag--p009"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "Should conversations remain in object storage?",
+      "id": "rag-004",
+      "query": "Which pretrained retriever supplies latent documents to RAG?",
+      "question_type": "architecture",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "storage-1"
+      "relevant_ids": [
+        "rag--p002"
       ],
+      "retrieved_ids": [
+        "rag--p002",
+        "rag--p003",
+        "crag--p002",
+        "rag--p001",
+        "rag--p005"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "Where do vector index artifacts persist?",
+      "id": "rag-005",
+      "query": "Which sequence-to-sequence model is used as RAG's generator?",
+      "question_type": "architecture",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "storage-1"
+      "relevant_ids": [
+        "rag--p003"
       ],
+      "retrieved_ids": [
+        "rag--p003",
+        "rag--p002",
+        "rag--p019",
+        "rag--p004",
+        "rag--p017"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "Which records belong in PostgreSQL instead of B2?",
+      "id": "rag-006",
+      "query": "What latent-document assumption does RAG-Sequence make?",
+      "question_type": "method",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "storage-1"
+      "relevant_ids": [
+        "rag--p003"
       ],
+      "retrieved_ids": [
+        "rag--p003",
+        "rag--p004",
+        "rag--p017",
+        "rag--p002",
+        "rag--p008"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "Which themes are available in the interface?",
+      "id": "rag-007",
+      "query": "What flexibility does RAG-Token have that RAG-Sequence lacks?",
+      "question_type": "method",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "interface-1"
+      "relevant_ids": [
+        "rag--p003"
       ],
+      "retrieved_ids": [
+        "rag--p003",
+        "rag--p008",
+        "rag--p006",
+        "rag--p004",
+        "rag--p017"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "Does the UI support reduced motion?",
+      "id": "rag-008",
+      "query": "Which RAG components remain fixed or are fine-tuned during training?",
+      "question_type": "training",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "interface-1"
+      "relevant_ids": [
+        "rag--p004"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "retrieved_ids": [
+        "rag--p002",
+        "self-rag--p007",
+        "rag--p001",
+        "crag--p015",
+        "self-rag--p002"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.09090909090909091,
       "correctly_abstained": false
     },
     {
-      "query": "How does the frontend recover from application errors?",
+      "id": "rag-009",
+      "query": "How was Wikipedia segmented for the RAG experiments?",
+      "question_type": "experimental_setup",
+      "paper_slug": "rag",
       "answerable": true,
-      "retrieved_ids": [
-        "interface-1"
+      "relevant_ids": [
+        "rag--p004"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "retrieved_ids": [
+        "crag--p015",
+        "rag--p005",
+        "crag--p006",
+        "crag--p009",
+        "lost-middle--p014"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.14285714285714285,
       "correctly_abstained": false
     },
     {
-      "query": "Are accessibility checks part of frontend quality?",
-      "answerable": true,
+      "id": "rag-010",
+      "query": "Which multilingual machine-translation benchmark was used to train RAG?",
+      "question_type": "unanswerable",
+      "paper_slug": "rag",
+      "answerable": false,
+      "relevant_ids": [],
       "retrieved_ids": [
-        "interface-1"
+        "rag--p009",
+        "ragas--p001",
+        "self-rag--p003",
+        "crag--p015",
+        "crag--p006"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
-      "query": "How does startup verify the Groq model is reachable?",
+      "id": "dpr-001",
+      "query": "What representation framework lets DPR retrieve passages without sparse vectors?",
+      "question_type": "method",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [
-        "health-1"
+      "relevant_ids": [
+        "dpr--p001"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "What does the readiness endpoint contact?",
-      "answerable": true,
       "retrieved_ids": [
-        "health-1"
+        "self-rag--p003",
+        "dpr--p001",
+        "dpr--p009",
+        "self-rag--p010",
+        "dpr--p003"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Can readiness verify an Ollama model?",
-      "answerable": true,
-      "retrieved_ids": [
-        "health-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "When does startup know the provider model is available?",
-      "answerable": true,
-      "retrieved_ids": [
-        "health-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which platforms host the backend and frontend?",
-      "answerable": true,
-      "retrieved_ids": [
-        "deployment-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How does Vercel reach the Render API?",
-      "answerable": true,
-      "retrieved_ids": [
-        "deployment-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "What supports local container development?",
-      "answerable": true,
-      "retrieved_ids": [
-        "deployment-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Why is the API path same origin in production?",
-      "answerable": true,
-      "retrieved_ids": [
-        "deployment-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which checks harden document uploads?",
-      "answerable": true,
-      "retrieved_ids": [
-        "storage-1",
-        "upload-1"
-      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
-      "query": "How are stored upload filenames generated?",
+      "id": "dpr-002",
+      "query": "By how much did DPR improve top-20 passage retrieval accuracy over Lucene BM25?",
+      "question_type": "result",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [
-        "upload-1"
+      "relevant_ids": [
+        "dpr--p001"
       ],
+      "retrieved_ids": [
+        "dpr--p012",
+        "dpr--p006",
+        "dpr--p007",
+        "dpr--p005",
+        "dpr--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "dpr-003",
+      "query": "What are the two stages of the simplified open-domain QA pipeline described by DPR?",
+      "question_type": "architecture",
+      "paper_slug": "dpr",
+      "answerable": true,
+      "relevant_ids": [
+        "dpr--p001"
+      ],
+      "retrieved_ids": [
+        "dpr--p001",
+        "dpr--p002",
+        "dpr--p004",
+        "dpr--p008",
+        "realm--p002"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "What prevents a DOCX zip bomb?",
+      "id": "dpr-004",
+      "query": "How does DPR score similarity between a question and a passage?",
+      "question_type": "method",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [
-        "upload-1"
+      "relevant_ids": [
+        "dpr--p003"
       ],
+      "retrieved_ids": [
+        "dpr--p003",
+        "dpr--p007",
+        "dpr--p008",
+        "dpr--p013",
+        "raptor--p019"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "Which malware scanner can reject uploads?",
+      "id": "dpr-005",
+      "query": "Which encoder architecture and output representation does DPR use?",
+      "question_type": "architecture",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [
-        "upload-1"
+      "relevant_ids": [
+        "dpr--p003"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "retrieved_ids": [
+        "rag--p003",
+        "colbert--p002",
+        "lost-middle--p007",
+        "self-rag--p029",
+        "dpr--p002"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.06666666666666667,
       "correctly_abstained": false
     },
     {
-      "query": "Which IP ranges does the PDF downloader block?",
+      "id": "dpr-006",
+      "query": "Which negatives are used by DPR's best training configuration?",
+      "question_type": "training",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [
-        "ssrf-1"
+      "relevant_ids": [
+        "dpr--p003"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Are HTTP redirects followed automatically?",
-      "answerable": true,
       "retrieved_ids": [
-        "ssrf-1"
+        "dpr--p009",
+        "dpr--p003",
+        "dpr--p006",
+        "raptor--p007",
+        "raptor--p019"
       ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How is DNS rebinding risk reduced?",
-      "answerable": true,
-      "retrieved_ids": [
-        "ssrf-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Does every redirect destination get validated?",
-      "answerable": true,
-      "retrieved_ids": [
-        "ssrf-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which ORM persists users and conversations?",
-      "answerable": true,
-      "retrieved_ids": [
-        "storage-1",
-        "database-1"
-      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
-      "query": "What manages PostgreSQL schema migrations?",
+      "id": "dpr-007",
+      "query": "How does in-batch negative training reuse computation?",
+      "question_type": "training",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [
-        "database-1"
+      "relevant_ids": [
+        "dpr--p003"
       ],
+      "retrieved_ids": [
+        "dpr--p003",
+        "dpr--p006",
+        "dpr--p012",
+        "dpr--p004",
+        "dpr--p005"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "How are lost updates prevented across replicas?",
+      "id": "dpr-008",
+      "query": "How large is DPR's processed Wikipedia passage collection?",
+      "question_type": "experimental_setup",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [
-        "database-1",
-        "jobs-1"
+      "relevant_ids": [
+        "dpr--p004"
       ],
+      "retrieved_ids": [
+        "dpr--p004",
+        "dpr--p002",
+        "dpr--p005",
+        "dpr--p008",
+        "dpr--p012"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
       "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
-      "query": "Which session records are stored relationally?",
+      "id": "dpr-009",
+      "query": "What sample-efficiency result did DPR report with only 1,000 examples?",
+      "question_type": "result",
+      "paper_slug": "dpr",
       "answerable": true,
-      "retrieved_ids": [],
+      "relevant_ids": [
+        "dpr--p006"
+      ],
+      "retrieved_ids": [
+        "dpr--p006",
+        "dpr--p005",
+        "rag--p017",
+        "raptor--p007",
+        "self-rag--p019"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "dpr-010",
+      "query": "What speech-recognition word error rate did DPR achieve?",
+      "question_type": "unanswerable",
+      "paper_slug": "dpr",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "crag--p014",
+        "realm--p008",
+        "raptor--p018",
+        "dpr--p005",
+        "raptor--p007"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-001",
+      "query": "What component does REALM add to language-model pretraining?",
+      "question_type": "architecture",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p001"
+      ],
+      "retrieved_ids": [
+        "realm--p003",
+        "realm--p005",
+        "realm--p001",
+        "realm--p002",
+        "realm--p006"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-002",
+      "query": "During which phases can REALM retrieve and attend over documents?",
+      "question_type": "fact_lookup",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p001"
+      ],
+      "retrieved_ids": [
+        "realm--p001",
+        "realm--p007",
+        "rag--p009",
+        "realm--p009",
+        "realm--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-003",
+      "query": "What unsupervised signal trains REALM's retriever?",
+      "question_type": "training",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p001"
+      ],
+      "retrieved_ids": [
+        "realm--p002",
+        "realm--p001",
+        "realm--p008",
+        "realm--p007",
+        "realm--p006"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-004",
+      "query": "What Open-QA accuracy improvement did REALM report over previous methods?",
+      "question_type": "result",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p001",
+        "realm--p002"
+      ],
+      "retrieved_ids": [
+        "realm--p007",
+        "realm--p002",
+        "realm--p001",
+        "realm--p006",
+        "dpr--p002"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-005",
+      "query": "How does REALM decide whether an unsupervised retrieval is useful?",
+      "question_type": "training",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p002"
+      ],
+      "retrieved_ids": [
+        "self-rag--p017",
+        "crag--p003",
+        "realm--p002",
+        "rag--p005",
+        "realm--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-006",
+      "query": "Which two engineering techniques make retrieval over millions of documents tractable in REALM?",
+      "question_type": "systems",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p002"
+      ],
+      "retrieved_ids": [
+        "realm--p003",
+        "realm--p002",
+        "realm--p001",
+        "lost-middle--p002",
+        "realm--p009"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-007",
+      "query": "What are the two probabilistic steps in REALM's generative process?",
+      "question_type": "method",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p003"
+      ],
+      "retrieved_ids": [
+        "realm--p003",
+        "realm--p012",
+        "hyde--p002",
+        "realm--p008",
+        "realm--p007"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-008",
+      "query": "How is relevance computed by REALM's knowledge retriever?",
+      "question_type": "method",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p003"
+      ],
+      "retrieved_ids": [
+        "realm--p005",
+        "realm--p003",
+        "ragas--p003",
+        "realm--p002",
+        "realm--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-009",
+      "query": "What interaction can REALM's knowledge-augmented encoder perform between the input and retrieved document?",
+      "question_type": "architecture",
+      "paper_slug": "realm",
+      "answerable": true,
+      "relevant_ids": [
+        "realm--p003"
+      ],
+      "retrieved_ids": [
+        "realm--p003",
+        "realm--p004",
+        "realm--p011",
+        "realm--p008",
+        "realm--p005"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "realm-010",
+      "query": "What BLEU score did REALM obtain on English-to-German translation?",
+      "question_type": "unanswerable",
+      "paper_slug": "realm",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "self-rag--p022",
+        "raptor--p020",
+        "raptor--p021",
+        "realm--p005",
+        "realm--p007"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-001",
+      "query": "What interaction architecture distinguishes ColBERT from cross-encoder rankers?",
+      "question_type": "architecture",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p001"
+      ],
+      "retrieved_ids": [
+        "colbert--p005",
+        "colbert--p002",
+        "colbert--p001",
+        "colbert--p004",
+        "colbert--p009"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-002",
+      "query": "Why can ColBERT precompute document representations?",
+      "question_type": "systems",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p001"
+      ],
+      "retrieved_ids": [
+        "colbert--p002",
+        "colbert--p003",
+        "colbert--p004",
+        "colbert--p005",
+        "colbert--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-003",
+      "query": "Which index type enables ColBERT to retrieve directly from a large collection?",
+      "question_type": "systems",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p001"
+      ],
+      "retrieved_ids": [
+        "colbert--p002",
+        "colbert--p005",
+        "colbert--p008",
+        "colbert--p006",
+        "colbert--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-004",
+      "query": "What speed and FLOP improvements are reported for ColBERT in the abstract?",
+      "question_type": "result",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p001"
+      ],
+      "retrieved_ids": [
+        "colbert--p007",
+        "self-rag--p007",
+        "colbert--p008",
+        "colbert--p009",
+        "colbert--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-005",
+      "query": "How does MaxSim contribute to a ColBERT relevance score?",
+      "question_type": "method",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p002"
+      ],
+      "retrieved_ids": [
+        "colbert--p006",
+        "colbert--p004",
+        "colbert--p002",
+        "colbert--p003",
+        "realm--p005"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-006",
+      "query": "How much reranking speedup and FLOP reduction does ColBERT report relative to existing BERT models?",
+      "question_type": "result",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p002"
+      ],
+      "retrieved_ids": [
+        "colbert--p002",
+        "colbert--p005",
+        "colbert--p003",
+        "colbert--p001",
+        "colbert--p009"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-007",
+      "query": "How long did ColBERT take to index the 9-million-passage MS MARCO collection?",
+      "question_type": "systems",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p002"
+      ],
+      "retrieved_ids": [
+        "colbert--p009",
+        "colbert--p006",
+        "colbert--p002",
+        "colbert--p007",
+        "colbert--p008"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-008",
+      "query": "What two neural matching benefits does late interaction combine?",
+      "question_type": "comparison",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p002"
+      ],
+      "retrieved_ids": [
+        "colbert--p002",
+        "colbert--p004",
+        "colbert--p006",
+        "colbert--p001",
+        "colbert--p009"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-009",
+      "query": "Which two passage-search datasets are used to evaluate ColBERT?",
+      "question_type": "experimental_setup",
+      "paper_slug": "colbert",
+      "answerable": true,
+      "relevant_ids": [
+        "colbert--p003"
+      ],
+      "retrieved_ids": [
+        "colbert--p001",
+        "colbert--p003",
+        "dpr--p004",
+        "dpr--p006",
+        "colbert--p002"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "colbert-010",
+      "query": "How accurate was ColBERT on spoken-document retrieval?",
+      "question_type": "unanswerable",
+      "paper_slug": "colbert",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "crag--p009",
+        "colbert--p003",
+        "colbert--p005",
+        "colbert--p009",
+        "colbert--p006"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-001",
+      "query": "What does HyDE ask an instruction-following language model to generate?",
+      "question_type": "method",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p001"
+      ],
+      "retrieved_ids": [
+        "hyde--p002",
+        "hyde--p001",
+        "self-rag--p026",
+        "hyde--p006",
+        "self-rag--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-002",
+      "query": "Why can a HyDE-generated document contain false details?",
+      "question_type": "scope_limit",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p001"
+      ],
+      "retrieved_ids": [
+        "hyde--p001",
+        "hyde--p002",
+        "lost-middle--p003",
+        "hyde--p004",
+        "rag--p006"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-003",
+      "query": "Which model type converts the hypothetical document into a retrieval vector?",
+      "question_type": "architecture",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p001"
+      ],
+      "retrieved_ids": [
+        "hyde--p002",
+        "hyde--p001",
+        "hyde--p004",
+        "hyde--p003",
+        "realm--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-004",
+      "query": "What role does HyDE assign to the encoder's dense bottleneck?",
+      "question_type": "method",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p001"
+      ],
+      "retrieved_ids": [
+        "hyde--p002",
+        "hyde--p001",
+        "hyde--p006",
+        "hyde--p007",
+        "lost-middle--p002"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-005",
+      "query": "How are real documents selected after HyDE creates the embedding?",
+      "question_type": "method",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p001"
+      ],
+      "retrieved_ids": [
+        "hyde--p002",
+        "hyde--p001",
+        "self-rag--p027",
+        "hyde--p004",
+        "raptor--p004"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-006",
+      "query": "Are any backbone models trained or fine-tuned as part of HyDE itself?",
+      "question_type": "training",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p002"
+      ],
+      "retrieved_ids": [
+        "hyde--p006",
+        "hyde--p001",
+        "hyde--p007",
+        "hyde--p005",
+        "hyde--p004"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.16666666666666666,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-007",
+      "query": "Which backbone models instantiate HyDE in the paper?",
+      "question_type": "architecture",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p002",
+        "hyde--p004"
+      ],
+      "retrieved_ids": [
+        "hyde--p006",
+        "hyde--p002",
+        "hyde--p007",
+        "lost-middle--p003",
+        "hyde--p004"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-008",
+      "query": "Across how many query sets was HyDE evaluated?",
+      "question_type": "experimental_setup",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p002"
+      ],
+      "retrieved_ids": [
+        "hyde--p001",
+        "raptor--p017",
+        "hyde--p003",
+        "hyde--p004",
+        "colbert--p002"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.16666666666666666,
+      "correctly_abstained": false
+    },
+    {
+      "id": "hyde-009",
+      "query": "Which task and language varieties are named in HyDE's evaluation?",
+      "question_type": "experimental_setup",
+      "paper_slug": "hyde",
+      "answerable": true,
+      "relevant_ids": [
+        "hyde--p002"
+      ],
+      "retrieved_ids": [
+        "self-rag--p002",
+        "crag--p015",
+        "ragas--p001",
+        "hyde--p001",
+        "crag--p007"
+      ],
+      "hit_at_k": 0.0,
       "recall_at_k": 0.0,
       "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
-      "query": "What work moves to background jobs?",
-      "answerable": true,
-      "retrieved_ids": [
-        "jobs-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "What identifier does the upload API return?",
-      "answerable": true,
-      "retrieved_ids": [
-        "jobs-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "How can the frontend track indexing progress?",
-      "answerable": true,
-      "retrieved_ids": [
-        "jobs-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which queue shares indexing across replicas?",
-      "answerable": true,
-      "retrieved_ids": [
-        "jobs-1",
-        "database-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which retrieval metrics are reported?",
-      "answerable": true,
-      "retrieved_ids": [
-        "evaluation-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Does the benchmark measure questions with no answer?",
-      "answerable": true,
-      "retrieved_ids": [
-        "evaluation-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Which three retrieval modes appear in the ablation?",
-      "answerable": true,
-      "retrieved_ids": [
-        "evaluation-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "Does evaluation report latency and citation recall?",
-      "answerable": true,
-      "retrieved_ids": [
-        "evaluation-1"
-      ],
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
-      "correctly_abstained": false
-    },
-    {
-      "query": "What is Nova's office mailing address?",
+      "id": "hyde-010",
+      "query": "How many relevance judgments were manually labeled to train HyDE?",
+      "question_type": "unanswerable",
+      "paper_slug": "hyde",
       "answerable": false,
-      "retrieved_ids": [],
-      "recall_at_k": 1.0,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "hyde--p003",
+        "hyde--p007",
+        "hyde--p002",
+        "ragas--p004",
+        "hyde--p005"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
       "reciprocal_rank": 0.0,
-      "correctly_abstained": true
+      "correctly_abstained": false
     },
     {
-      "query": "Which cryptocurrency wallet does the project own?",
-      "answerable": false,
-      "retrieved_ids": [],
+      "id": "ragas-001",
+      "query": "What kind of RAG evaluation does Ragas claim to provide?",
+      "question_type": "method",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p001"
+      ],
+      "retrieved_ids": [
+        "ragas--p001",
+        "ragas--p005",
+        "rag--p007",
+        "rag--p005",
+        "rag--p009"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.0,
-      "correctly_abstained": true
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
     },
     {
-      "query": "What was yesterday's football score?",
-      "answerable": false,
-      "retrieved_ids": [],
+      "id": "ragas-002",
+      "query": "What are the two principal modules of a RAG system according to Ragas?",
+      "question_type": "architecture",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p001"
+      ],
+      "retrieved_ids": [
+        "ragas--p001",
+        "ragas--p005",
+        "ragas--p002",
+        "crag--p006",
+        "crag--p003"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.0,
-      "correctly_abstained": true
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
     },
     {
-      "query": "Who is the chief financial officer of Nova?",
-      "answerable": false,
-      "retrieved_ids": [],
+      "id": "ragas-003",
+      "query": "Which three broad dimensions make RAG evaluation challenging?",
+      "question_type": "evaluation",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p001"
+      ],
+      "retrieved_ids": [
+        "ragas--p001",
+        "rag--p017",
+        "ragas--p005",
+        "rag--p005",
+        "self-rag--p026"
+      ],
+      "hit_at_k": 1.0,
       "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "ragas-004",
+      "query": "Which RAG development frameworks can integrate with Ragas?",
+      "question_type": "systems",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p002"
+      ],
+      "retrieved_ids": [
+        "ragas--p002",
+        "ragas--p001",
+        "ragas--p005",
+        "crag--p010",
+        "rag--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "ragas-005",
+      "query": "How does Ragas define faithfulness?",
+      "question_type": "metric_definition",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p003"
+      ],
+      "retrieved_ids": [
+        "ragas--p005",
+        "ragas--p002",
+        "realm--p002",
+        "ragas--p001",
+        "self-rag--p017"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.16666666666666666,
+      "correctly_abstained": false
+    },
+    {
+      "id": "ragas-006",
+      "query": "What does answer relevance measure in Ragas?",
+      "question_type": "metric_definition",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p003"
+      ],
+      "retrieved_ids": [
+        "ragas--p005",
+        "colbert--p006",
+        "ragas--p004",
+        "crag--p014",
+        "ragas--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "ragas-007",
+      "query": "What does context relevance prefer in retrieved passages?",
+      "question_type": "metric_definition",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p003"
+      ],
+      "retrieved_ids": [
+        "ragas--p005",
+        "colbert--p006",
+        "rag--p009",
+        "ragas--p004",
+        "ragas--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "ragas-008",
+      "query": "Which model evaluated the prompts in the Ragas experiments?",
+      "question_type": "experimental_setup",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p003"
+      ],
+      "retrieved_ids": [
+        "ragas--p003",
+        "ragas--p005",
+        "ragas--p002",
+        "crag--p015",
+        "lost-middle--p004"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "ragas-009",
+      "query": "What is the first step in Ragas's automated faithfulness estimation?",
+      "question_type": "method",
+      "paper_slug": "ragas",
+      "answerable": true,
+      "relevant_ids": [
+        "ragas--p003"
+      ],
+      "retrieved_ids": [
+        "ragas--p005",
+        "ragas--p003",
+        "ragas--p001",
+        "crag--p014",
+        "ragas--p002"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "ragas-010",
+      "query": "What retriever architecture does Ragas train from scratch?",
+      "question_type": "unanswerable",
+      "paper_slug": "ragas",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "ragas--p005",
+        "realm--p005",
+        "rag--p009",
+        "realm--p002",
+        "crag--p014"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
       "reciprocal_rank": 0.0,
-      "correctly_abstained": true
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-001",
+      "query": "What two mechanisms does Self-RAG use to improve quality and factuality?",
+      "question_type": "architecture",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p001"
+      ],
+      "retrieved_ids": [
+        "self-rag--p001",
+        "self-rag--p010",
+        "self-rag--p003",
+        "crag--p009",
+        "crag--p002"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-002",
+      "query": "When does Self-RAG retrieve passages?",
+      "question_type": "method",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p001"
+      ],
+      "retrieved_ids": [
+        "self-rag--p001",
+        "self-rag--p003",
+        "crag--p009",
+        "self-rag--p002",
+        "self-rag--p006"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-003",
+      "query": "What are reflection tokens intended to represent?",
+      "question_type": "method",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p001"
+      ],
+      "retrieved_ids": [
+        "self-rag--p004",
+        "colbert--p004",
+        "self-rag--p024",
+        "colbert--p006",
+        "self-rag--p006"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-004",
+      "query": "What happens in Self-RAG's three inference steps?",
+      "question_type": "procedure",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p001"
+      ],
+      "retrieved_ids": [
+        "self-rag--p009",
+        "self-rag--p003",
+        "crag--p016",
+        "crag--p010",
+        "crag--p009"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.16666666666666666,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-005",
+      "query": "How are reflection tokens inserted into the training corpus?",
+      "question_type": "training",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p002"
+      ],
+      "retrieved_ids": [
+        "self-rag--p002",
+        "self-rag--p004",
+        "self-rag--p005",
+        "self-rag--p006",
+        "self-rag--p010"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-006",
+      "query": "What proprietary model helped supervise the Self-RAG critic?",
+      "question_type": "training",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p002"
+      ],
+      "retrieved_ids": [
+        "crag--p009",
+        "self-rag--p003",
+        "self-rag--p009",
+        "self-rag--p008",
+        "crag--p010"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.1111111111111111,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-007",
+      "query": "What can Self-RAG customize at inference time using reflection probabilities?",
+      "question_type": "controllability",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p002"
+      ],
+      "retrieved_ids": [
+        "self-rag--p002",
+        "self-rag--p003",
+        "self-rag--p009",
+        "self-rag--p010",
+        "self-rag--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-008",
+      "query": "Which Self-RAG model sizes are reported in the abstract?",
+      "question_type": "experimental_setup",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p001"
+      ],
+      "retrieved_ids": [
+        "crag--p008",
+        "crag--p009",
+        "self-rag--p001",
+        "crag--p010",
+        "self-rag--p010"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-009",
+      "query": "On which task families did Self-RAG outperform ChatGPT and retrieval-augmented Llama2-chat?",
+      "question_type": "result",
+      "paper_slug": "self-rag",
+      "answerable": true,
+      "relevant_ids": [
+        "self-rag--p001"
+      ],
+      "retrieved_ids": [
+        "self-rag--p001",
+        "self-rag--p008",
+        "crag--p007",
+        "crag--p009",
+        "self-rag--p007"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "self-rag-010",
+      "query": "What image-generation benchmark was used to evaluate Self-RAG?",
+      "question_type": "unanswerable",
+      "paper_slug": "self-rag",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "crag--p009",
+        "crag--p015",
+        "self-rag--p003",
+        "self-rag--p020",
+        "crag--p010"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-001",
+      "query": "Which two tasks were used to study long-context information access?",
+      "question_type": "experimental_setup",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p001"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p001",
+        "ragas--p004",
+        "lost-middle--p011",
+        "lost-middle--p010",
+        "crag--p015"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-002",
+      "query": "Where in a long context do language models usually use relevant information best?",
+      "question_type": "result",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p001"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p001",
+        "lost-middle--p010",
+        "lost-middle--p002",
+        "lost-middle--p003",
+        "ragas--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-003",
+      "query": "What shape describes performance as the relevant document moves through context positions?",
+      "question_type": "result",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p001"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p005",
+        "lost-middle--p002",
+        "lost-middle--p007",
+        "crag--p014",
+        "raptor--p019"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-004",
+      "query": "Which open and closed language models were included in the controlled experiments?",
+      "question_type": "experimental_setup",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p002"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p002",
+        "lost-middle--p004",
+        "lost-middle--p011",
+        "lost-middle--p005",
+        "self-rag--p020"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-005",
+      "query": "How did the experiments manipulate context to test robustness?",
+      "question_type": "method",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p002"
+      ],
+      "retrieved_ids": [
+        "rag--p017",
+        "raptor--p001",
+        "dpr--p006",
+        "raptor--p007",
+        "crag--p008"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.1,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-006",
+      "query": "How is the synthetic key-value retrieval task formatted?",
+      "question_type": "method",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p002"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p002",
+        "lost-middle--p006",
+        "lost-middle--p007",
+        "lost-middle--p008",
+        "lost-middle--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-007",
+      "query": "Which dataset instantiates the paper's multi-document QA task?",
+      "question_type": "experimental_setup",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p003"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p003",
+        "raptor--p018",
+        "raptor--p006"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-008",
+      "query": "What is the difference between closed-book and oracle evaluation settings?",
+      "question_type": "comparison",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p005"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p005",
+        "lost-middle--p017",
+        "realm--p011",
+        "lost-middle--p007",
+        "rag--p005"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-009",
+      "query": "What happened when open-domain QA used 50 rather than 20 retrieved documents?",
+      "question_type": "result",
+      "paper_slug": "lost-middle",
+      "answerable": true,
+      "relevant_ids": [
+        "lost-middle--p003"
+      ],
+      "retrieved_ids": [
+        "lost-middle--p003",
+        "rag--p005",
+        "rag--p018",
+        "lost-middle--p015",
+        "lost-middle--p010"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "lost-middle-010",
+      "query": "Which new retriever loss function was trained in Lost in the Middle?",
+      "question_type": "unanswerable",
+      "paper_slug": "lost-middle",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "dpr--p012",
+        "rag--p007",
+        "lost-middle--p001",
+        "dpr--p003",
+        "rag--p003"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-001",
+      "query": "Why can standard RAG still fail according to the CRAG paper?",
+      "question_type": "motivation",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p001"
+      ],
+      "retrieved_ids": [
+        "crag--p002",
+        "crag--p008",
+        "crag--p007",
+        "crag--p009",
+        "crag--p006"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.125,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-002",
+      "query": "What component estimates the quality of CRAG's retrieved documents?",
+      "question_type": "architecture",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p001",
+        "crag--p002"
+      ],
+      "retrieved_ids": [
+        "crag--p002",
+        "crag--p001",
+        "crag--p009",
+        "colbert--p006",
+        "crag--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-003",
+      "query": "What does the retrieval evaluator output to control CRAG's next action?",
+      "question_type": "method",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p001"
+      ],
+      "retrieved_ids": [
+        "crag--p005",
+        "crag--p008",
+        "crag--p004",
+        "crag--p009",
+        "crag--p003"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.09090909090909091,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-004",
+      "query": "Why does CRAG add large-scale web search?",
+      "question_type": "method",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p001"
+      ],
+      "retrieved_ids": [
+        "crag--p006",
+        "crag--p010",
+        "crag--p002",
+        "crag--p009",
+        "crag--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-005",
+      "query": "What is the purpose of CRAG's decompose-then-recompose algorithm?",
+      "question_type": "method",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p002"
+      ],
+      "retrieved_ids": [
+        "crag--p002",
+        "crag--p001",
+        "crag--p003",
+        "raptor--p019",
+        "raptor--p004"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-006",
+      "query": "Can CRAG be attached to other RAG approaches?",
+      "question_type": "systems",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p001",
+        "crag--p002"
+      ],
+      "retrieved_ids": [
+        "crag--p015",
+        "crag--p009",
+        "crag--p001",
+        "crag--p002",
+        "crag--p007"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-007",
+      "query": "What three confidence actions can CRAG trigger?",
+      "question_type": "method",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p003"
+      ],
+      "retrieved_ids": [
+        "crag--p005",
+        "crag--p003",
+        "crag--p010",
+        "crag--p002",
+        "crag--p001"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-008",
+      "query": "Which four datasets are named in CRAG's main evaluation?",
+      "question_type": "experimental_setup",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p006"
+      ],
+      "retrieved_ids": [
+        "crag--p007",
+        "crag--p006",
+        "crag--p015",
+        "self-rag--p002",
+        "colbert--p006"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-009",
+      "query": "Which two RAG baselines does CRAG report improving?",
+      "question_type": "result",
+      "paper_slug": "crag",
+      "answerable": true,
+      "relevant_ids": [
+        "crag--p002"
+      ],
+      "retrieved_ids": [
+        "crag--p006",
+        "crag--p009",
+        "crag--p007",
+        "crag--p015",
+        "self-rag--p007"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.125,
+      "correctly_abstained": false
+    },
+    {
+      "id": "crag-010",
+      "query": "What production GPU memory is required to serve CRAG?",
+      "question_type": "unanswerable",
+      "paper_slug": "crag",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "crag--p007",
+        "crag--p015",
+        "colbert--p005",
+        "colbert--p006",
+        "colbert--p004"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-001",
+      "query": "Which three recursive operations build a RAPTOR tree?",
+      "question_type": "method",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p001"
+      ],
+      "retrieved_ids": [
+        "raptor--p016",
+        "raptor--p009",
+        "raptor--p003",
+        "raptor--p022",
+        "raptor--p006"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.125,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-002",
+      "query": "What information hierarchy does the RAPTOR tree represent?",
+      "question_type": "architecture",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p001"
+      ],
+      "retrieved_ids": [
+        "raptor--p009",
+        "raptor--p006",
+        "raptor--p018",
+        "raptor--p004",
+        "raptor--p022"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.07142857142857142,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-003",
+      "query": "How does RAPTOR retrieve from lengthy documents at inference time?",
+      "question_type": "method",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p001"
+      ],
+      "retrieved_ids": [
+        "raptor--p001",
+        "self-rag--p009",
+        "self-rag--p004",
+        "raptor--p019",
+        "raptor--p021"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-004",
+      "query": "What weakness of ordinary contiguous-chunk retrieval motivates RAPTOR?",
+      "question_type": "motivation",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p001"
+      ],
+      "retrieved_ids": [
+        "raptor--p003",
+        "raptor--p016",
+        "raptor--p001",
+        "raptor--p009",
+        "raptor--p007"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-005",
+      "query": "What absolute QuALITY improvement is reported for RAPTOR with GPT-4?",
+      "question_type": "result",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p001"
+      ],
+      "retrieved_ids": [
+        "raptor--p008",
+        "raptor--p007",
+        "raptor--p010",
+        "raptor--p016",
+        "raptor--p020"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.16666666666666666,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-006",
+      "query": "Which three question-answering datasets are used in RAPTOR's main experiments?",
+      "question_type": "experimental_setup",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p006"
+      ],
+      "retrieved_ids": [
+        "raptor--p010",
+        "raptor--p006",
+        "raptor--p007",
+        "dpr--p004",
+        "raptor--p002"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-007",
+      "query": "How are RAPTOR's initial leaf chunks constructed and encoded?",
+      "question_type": "method",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p003"
+      ],
+      "retrieved_ids": [
+        "raptor--p019",
+        "raptor--p007",
+        "raptor--p002",
+        "raptor--p001",
+        "raptor--p003"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-008",
+      "query": "What does a parent node contain in the RAPTOR tree?",
+      "question_type": "architecture",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p002"
+      ],
+      "retrieved_ids": [
+        "raptor--p018",
+        "raptor--p002",
+        "raptor--p019",
+        "raptor--p004",
+        "raptor--p006"
+      ],
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.5,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-009",
+      "query": "Which language models were used in RAPTOR's controlled experiments?",
+      "question_type": "experimental_setup",
+      "paper_slug": "raptor",
+      "answerable": true,
+      "relevant_ids": [
+        "raptor--p002"
+      ],
+      "retrieved_ids": [
+        "raptor--p009",
+        "lost-middle--p002",
+        "crag--p015",
+        "raptor--p007",
+        "raptor--p006"
+      ],
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.16666666666666666,
+      "correctly_abstained": false
+    },
+    {
+      "id": "raptor-010",
+      "query": "How does RAPTOR update its tree continuously as source documents change online?",
+      "question_type": "unanswerable",
+      "paper_slug": "raptor",
+      "answerable": false,
+      "relevant_ids": [],
+      "retrieved_ids": [
+        "raptor--p001",
+        "raptor--p006",
+        "raptor--p018",
+        "raptor--p002",
+        "raptor--p019"
+      ],
+      "hit_at_k": null,
+      "recall_at_k": null,
+      "reciprocal_rank": 0.0,
+      "correctly_abstained": false
     }
   ]
 }

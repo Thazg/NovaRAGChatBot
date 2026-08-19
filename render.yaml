@@ -47,6 +47,8 @@ services:
         value: 10
       - key: TOP_K
         value: 5
+      - key: RETRIEVAL_MODE
+        value: bm25
       - key: MIN_SIMILARITY_SCORE
         value: 0.12
       - key: PYTHONPATH

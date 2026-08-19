@@ -1,5 +1,7 @@
 from rag import rag_chain
+from rag import embeddings
 from rag.vector_store import HybridVectorStore
+from config.settings import settings
 
 
 def _store_with_chunks(chunks: list[str]) -> HybridVectorStore:
@@ -79,3 +81,39 @@ def test_document_scope_limits_overview_to_selected_file(monkeypatch) -> None:
 
     assert nodes
     assert {node["metadata"]["file_name"] for node in nodes} == {"beta.pdf"}
+
+
+def test_bm25_production_mode_skips_document_embeddings(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "RETRIEVAL_MODE", "bm25")
+    monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", "https://embedding.example/v1")
+
+    def unexpected_embedding_call(*_args, **_kwargs):
+        raise AssertionError("BM25 mode must not call the embedding provider")
+
+    monkeypatch.setattr(embeddings, "get_embeddings_batch", unexpected_embedding_call)
+    store = HybridVectorStore(user_id="bm25-production-test")
+
+    assert store.add_nodes([{"content": "BM25 production retrieval", "metadata": {}}]) == 1
+    assert store.bm25 is not None
+    assert store.embeddings is None
+    assert store.faiss_index is None
+
+
+def test_bm25_production_mode_ignores_loaded_dense_index(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "RETRIEVAL_MODE", "bm25")
+    monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", "https://embedding.example/v1")
+    store = _store_with_chunks([
+        "BM25 is the production retrieval method.",
+        "Dense retrieval is an experimental method.",
+    ])
+    store.faiss_index = type("ExistingDenseIndex", (), {"ntotal": 2})()
+    monkeypatch.setattr(
+        store,
+        "_get_query_embedding",
+        lambda _query: (_ for _ in ()).throw(AssertionError("dense query must not run")),
+    )
+
+    nodes = store.retrieve("production BM25 retrieval", top_k=1)
+
+    assert nodes
+    assert nodes[0]["content"] == "BM25 is the production retrieval method."

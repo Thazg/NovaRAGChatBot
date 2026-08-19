@@ -28,6 +28,9 @@ class Settings:
     EMBEDDING_API_KEY: str = os.getenv("EMBEDDING_API_KEY", "")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text-v1.5")
     EMBEDDING_DIM: int = int(os.getenv("EMBEDDING_DIM", "768"))
+    # BM25 is the benchmark-selected production default. Set "hybrid"
+    # explicitly to enable embedding generation, FAISS search, and RRF.
+    RETRIEVAL_MODE: str = os.getenv("RETRIEVAL_MODE", "bm25").strip().lower()
     RRF_K: int = int(os.getenv("RRF_K", "60"))
     TOP_K: int = int(os.getenv("TOP_K", "5"))
     BROAD_TOP_K: int = int(os.getenv("BROAD_TOP_K", "20"))

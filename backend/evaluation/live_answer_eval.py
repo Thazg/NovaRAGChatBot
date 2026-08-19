@@ -22,7 +22,7 @@ from config.settings import settings
 from evaluation.metrics import citation_precision, citation_recall, lexical_faithfulness
 from rag.llm_client import stream_tokens
 
-DEFAULT_DATASET = Path(__file__).with_name("dataset.json")
+DEFAULT_DATASET = Path(__file__).with_name("arxiv_corpus") / "generated_dataset.json"
 _CITATION_PATTERN = re.compile(r"\(Source:\s*([^)]+?)\s*\)", re.IGNORECASE)
 _WORD_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
@@ -73,18 +73,36 @@ async def _generate(prompt: str) -> str:
 async def evaluate_live(dataset: dict, limit: int | None, delay_seconds: float,
                         input_cost_per_million: float, output_cost_per_million: float) -> dict:
     corpus = dataset["corpus"]
-    corpus_by_source = {
-        item["metadata"]["file_name"]: item for item in corpus
-    }
+    corpus_by_relevance_id: dict[str, list[dict]] = {}
+    for item in corpus:
+        relevance_id = item.get("metadata", {}).get("relevance_id", item["id"])
+        corpus_by_relevance_id.setdefault(relevance_id, []).append(item)
+    queries_by_id = {sample.get("id"): sample for sample in dataset["queries"]}
     samples = dataset.get("citation_samples", [])[:limit]
     records: list[dict] = []
     for index, sample in enumerate(samples):
         sources = sample["relevant_sources"]
-        evidence_items = [corpus_by_source[source] for source in sources]
-        source_id = evidence_items[0]["id"]
-        question = _question_for(source_id, dataset["queries"])
+        evidence_items = [
+            item
+            for relevance_id in sample.get("relevant_ids", [])
+            for item in corpus_by_relevance_id.get(relevance_id, [])
+        ]
+        if not evidence_items:
+            source_files = {source.split("#", 1)[0] for source in sources}
+            evidence_items = [
+                item for item in corpus
+                if item.get("metadata", {}).get("file_name") in source_files
+            ]
+        if not evidence_items:
+            raise ValueError(f"No evidence chunks found for {sample.get('query_id', 'sample')}")
+        query_sample = queries_by_id.get(sample.get("query_id"))
+        source_id = next(iter(sample.get("relevant_ids", [])), evidence_items[0]["id"])
+        question = query_sample["query"] if query_sample else _question_for(
+            source_id, dataset["queries"]
+        )
+        source_label = sources[0]
         evidence = "\n\n".join(
-            f"[Source: {item['metadata']['file_name']}]\n{item['content']}"
+            f"[Source: {source_label}]\n{item['content']}"
             for item in evidence_items
         )
         prompt = (

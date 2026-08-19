@@ -1,0 +1,17 @@
+{
+  "name": "Foundational Retrieval and RAG Papers",
+  "version": "1.0.0",
+  "selection_policy": "Ten primary arXiv papers spanning retrieval, retrieval-augmented generation, evaluation, corrective retrieval, and long-context behavior. Exactly ten questions are labeled per paper.",
+  "papers": [
+    {"arxiv_id":"2005.11401","version":"v4","slug":"rag","title":"Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks","abs_url":"https://arxiv.org/abs/2005.11401v4","pdf_url":"https://arxiv.org/pdf/2005.11401v4","pdf_file":"2005.11401v4-rag.pdf"},
+    {"arxiv_id":"2004.04906","version":"v3","slug":"dpr","title":"Dense Passage Retrieval for Open-Domain Question Answering","abs_url":"https://arxiv.org/abs/2004.04906v3","pdf_url":"https://arxiv.org/pdf/2004.04906v3","pdf_file":"2004.04906v3-dpr.pdf"},
+    {"arxiv_id":"2002.08909","version":"v1","slug":"realm","title":"REALM: Retrieval-Augmented Language Model Pre-Training","abs_url":"https://arxiv.org/abs/2002.08909v1","pdf_url":"https://arxiv.org/pdf/2002.08909v1","pdf_file":"2002.08909v1-realm.pdf"},
+    {"arxiv_id":"2004.12832","version":"v2","slug":"colbert","title":"ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT","abs_url":"https://arxiv.org/abs/2004.12832v2","pdf_url":"https://arxiv.org/pdf/2004.12832v2","pdf_file":"2004.12832v2-colbert.pdf"},
+    {"arxiv_id":"2212.10496","version":"v1","slug":"hyde","title":"Precise Zero-Shot Dense Retrieval without Relevance Labels","abs_url":"https://arxiv.org/abs/2212.10496v1","pdf_url":"https://arxiv.org/pdf/2212.10496v1","pdf_file":"2212.10496v1-hyde.pdf"},
+    {"arxiv_id":"2309.15217","version":"v2","slug":"ragas","title":"Ragas: Automated Evaluation of Retrieval Augmented Generation","abs_url":"https://arxiv.org/abs/2309.15217v2","pdf_url":"https://arxiv.org/pdf/2309.15217v2","pdf_file":"2309.15217v2-ragas.pdf"},
+    {"arxiv_id":"2310.11511","version":"v1","slug":"self-rag","title":"Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection","abs_url":"https://arxiv.org/abs/2310.11511v1","pdf_url":"https://arxiv.org/pdf/2310.11511v1","pdf_file":"2310.11511v1-self-rag.pdf"},
+    {"arxiv_id":"2307.03172","version":"v3","slug":"lost-middle","title":"Lost in the Middle: How Language Models Use Long Contexts","abs_url":"https://arxiv.org/abs/2307.03172v3","pdf_url":"https://arxiv.org/pdf/2307.03172v3","pdf_file":"2307.03172v3-lost-middle.pdf"},
+    {"arxiv_id":"2401.15884","version":"v3","slug":"crag","title":"Corrective Retrieval Augmented Generation","abs_url":"https://arxiv.org/abs/2401.15884v3","pdf_url":"https://arxiv.org/pdf/2401.15884v3","pdf_file":"2401.15884v3-crag.pdf"},
+    {"arxiv_id":"2401.18059","version":"v1","slug":"raptor","title":"RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval","abs_url":"https://arxiv.org/abs/2401.18059v1","pdf_url":"https://arxiv.org/pdf/2401.18059v1","pdf_file":"2401.18059v1-raptor.pdf"}
+  ]
+}
