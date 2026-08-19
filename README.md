@@ -189,4 +189,4 @@ See [`docs/PRODUCTION_PERSISTENCE.md`](docs/PRODUCTION_PERSISTENCE.md) for migra
 
 ## License
 
-MIT
+This project is currently shared as part of my portfolio. I haven't added a formal open-source license yet, so please contact me before reusing substantial parts of the repository.
