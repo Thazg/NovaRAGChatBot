@@ -1,4 +1,17 @@
 import { z } from 'zod';
+import { readEventStream } from './eventStream';
+
+const EvidenceSchema = z.object({
+  id: z.string().regex(/^E\d+$/),
+  document_id: z.string(),
+  file_name: z.string(),
+  chunk_index: z.number().int().nonnegative(),
+  page: z.number().int().positive().nullable(),
+  line_start: z.number().int().positive().nullable().default(null),
+  line_end: z.number().int().positive().nullable().default(null),
+  content: z.string(),
+});
+export type Evidence = z.infer<typeof EvidenceSchema>;
 
 // Production authentication must stay same-origin so the host-only refresh
 // cookie is sent through the Vercel/nginx `/api` proxy. Ignore stale hosting
@@ -52,6 +65,8 @@ const MessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system']),
   content: z.string(),
   createdAt: z.number().optional(),
+  retrievedDocs: z.array(EvidenceSchema).optional(),
+  interrupted: z.boolean().optional(),
 });
 
 const ConversationSchema = z.object({
@@ -178,6 +193,8 @@ const AccountExportSchema = z.object({
 const StreamEventSchema = z.union([
   z.object({ token: z.string() }),
   z.object({ action: z.literal('search_offer'), query: z.string().optional() }),
+  z.object({ evidence: z.array(EvidenceSchema) }),
+  z.object({ error: z.string() }),
 ]);
 
 async function performRefresh(): Promise<AuthResponse> {
@@ -315,6 +332,8 @@ export interface Conversation {
     role: 'user' | 'assistant' | 'system';
     content: string;
     createdAt?: number;
+    retrievedDocs?: Evidence[];
+    interrupted?: boolean;
   }>;
   createdAt?: number;
   updatedAt?: number;
@@ -381,113 +400,27 @@ export const api = {
     language?: string,
     regenerate = false,
     documentName?: string,
-    reconnectAttempt = 0,
-    replayPrefix = '',
+    onEvidence?: (evidence: Evidence[]) => void,
   ): Promise<void> {
     const body: Record<string, string | boolean> = { session_id: sessionId, question, stream: true };
     if (instructions) body.instructions = instructions;
     if (language && language !== 'auto') body.language = language;
     if (regenerate) body.regenerate = true;
     if (documentName) body.document_name = documentName;
-    let response: Response;
-    try {
-      response = await authorizedFetch('/chat/stream', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(body),
-        signal: abortSignal,
-      });
-    } catch (error) {
-      if (reconnectAttempt < 1 && !abortSignal?.aborted) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        return api.streamMessage(
-          sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, documentName, reconnectAttempt + 1, replayPrefix,
-        );
-      }
-      throw error;
-    }
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('ReadableStream not supported by this browser.');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-    let attemptText = '';
-    let emittedText = replayPrefix;
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-      
-      // Attempt to split by lines or SSE data format
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep the incomplete line in buffer
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        
-        let jsonStr = trimmed;
-        // Handle SSE format "data: {...}"
-        if (trimmed.startsWith('data:')) {
-          jsonStr = trimmed.substring(5).trim();
-          if (jsonStr === '[DONE]') continue; // common SSE end signal
-        }
-
-        try {
-          const parsed = StreamEventSchema.safeParse(JSON.parse(jsonStr));
-          if (!parsed.success) continue;
-          if ('token' in parsed.data) {
-            const previousAttemptLength = attemptText.length;
-            attemptText += parsed.data.token;
-            if (!replayPrefix) {
-              onToken(parsed.data.token);
-              emittedText += parsed.data.token;
-            } else if (replayPrefix.startsWith(attemptText)) {
-              // Suppress the deterministic replay that was already rendered.
-            } else if (attemptText.startsWith(replayPrefix)) {
-              const delta = attemptText.slice(Math.max(previousAttemptLength, replayPrefix.length));
-              if (delta) {
-                onToken(delta);
-                emittedText += delta;
-              }
-            } else {
-              throw new Error('The regenerated stream changed after reconnecting. Please regenerate the answer.');
-            }
-          } else if (parsed.data.action === 'search_offer') {
-            onAction?.({ type: 'search_offer', query: parsed.data.query || '' });
-          }
-          } catch {
-            // Incomplete JSON or other format, ignore for now
-          }
-        }
-      }
-    } catch (streamError: unknown) {
-      // StreamClosed / AbortError — expected when user cancels or connection drops
-      const errorName = streamError instanceof DOMException ? streamError.name : '';
-      const errorMessage = streamError instanceof Error ? streamError.message : '';
-      if (errorName === 'AbortError' || errorMessage.includes('StreamClosed')) {
-        return;
-      }
-      if (reconnectAttempt < 1 && !abortSignal?.aborted) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        return api.streamMessage(
-          sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, documentName, reconnectAttempt + 1, emittedText,
-        );
-      }
-      throw streamError;
-    }
+    // A failed POST may already have created a server-side turn. Never replay it
+    // automatically: explicit regeneration keeps the existing user turn.
+    const response = await authorizedFetch('/chat/stream', {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(body), signal: abortSignal,
+    });
+    if (!response.ok) throw await responseError(response, `API error: ${response.statusText}`);
+    if (!response.body) throw new Error('Streaming is unavailable in this browser.');
+    await readEventStream(response.body, (event) => {
+      const parsed = StreamEventSchema.parse(event);
+      if ('error' in parsed) throw new Error(parsed.error);
+      if ('token' in parsed) onToken(parsed.token);
+      else if ('evidence' in parsed) onEvidence?.(parsed.evidence);
+      else onAction?.({ type: 'search_offer', query: parsed.query || '' });
+    });
   },
 
   // Documents API

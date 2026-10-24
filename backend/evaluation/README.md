@@ -6,20 +6,27 @@ evidence spans, review state, aggregate metrics, and per-query results.
 
 ## Deterministic CI baseline
 
-Last recorded: **2026-08-19**
+Last production-path run: **2026-10-23**
 
 Configuration: **K = 5**, 10 PDFs, 160 pages, 549 chunks, and 100 questions
 (90 answerable + 10 unanswerable).
 
 | Measurement | Result | Regression floor | Status |
 | --- | ---: | ---: | :---: |
-| Hybrid Hit@5 | **0.7889** | >= 0.78 | Pass |
-| Hybrid Recall@5 | **0.7889** | >= 0.78 | Pass |
-| Hybrid MRR | **0.5813** | >= 0.55 | Pass |
+| Production BM25 Hit@5 | **0.8222** | >= 0.78 | Pass |
+| Production BM25 Recall@5 | **0.8222** | >= 0.78 | Pass |
+| Production BM25 MRR@5 | **0.5544** | >= 0.55 | Pass |
+| Context evidence retention | **58/58 (1.0000)** | >= 1.00 | Pass |
 | Citation-label precision | **1.0000** | >= 0.90 | Pass |
 | Citation-label recall | **1.0000** | >= 0.90 | Pass |
 | Lexical evidence-support proxy | **0.8346** | >= 0.80 | Pass |
 | Unanswerable accuracy | **0.0000** | improvement target | **Known gap** |
+
+The primary gate uses `rag.rag_chain.retrieve_from_store`, the same query entry point as runtime `retrieve_context`. Corpus construction calls production `rag.load.load_pdf` and `rag.chunking.split_documents` directly. The runtime parser preserves PDF page and extracted-line metadata and uses the same 220-word / 40-word chunk window. PDF evidence is diversified by page before selecting K passages.
+
+The context gate calls production `build_context_and_evidence(nodes, query)`. Of the 90 answerable questions, 58 have their verbatim annotated span in the retrieved chunks; all 58 survive packing with the default 2,400-character passage / 10,000-character total budgets. The previous 1,000-character prefix policy kept 40/58. Matching normalizes case/whitespace only. Annotations are used to score the result, never to select runtime excerpts. This is evidence retention conditional on retrieval, **not answer accuracy**, and does not count the other 32 questions as correct. Custom smaller budgets must pass the same gate (`--min-context-retention`, default 1.0).
+
+Current production-path latency: **3.53 ms P50 / 6.43 ms P95** on the local audit machine, with a warm store and no query cache. This excludes HTTP, B2 revision synchronization, history rewriting and LLM generation. `results.json` records the corpus SHA-256, pipeline names and primary method. The historical proxy ablations below are diagnostic alternatives, not the CI primary.
 
 The current offline retriever has no calibrated confidence threshold and always
 returns a ranking, so it fails all 10 unanswerable questions. The CI floor
@@ -33,7 +40,7 @@ breakdowns.
 
 ## Production retrieval comparison
 
-A separate CPU benchmark compares BM25, real BGE neural dense retrieval, equal
+The historical candidate benchmark (not rerun on 2026-10-23) compares BM25, real BGE neural dense retrieval, equal
 and weighted RRF, MS MARCO cross-encoder reranking, and deterministic multi-query
 retrieval. It measures end-to-end warm query latency for each method.
 
@@ -54,7 +61,7 @@ the production decision are documented in
 therefore `RETRIEVAL_MODE=bm25`; neural hybrid retrieval requires explicit
 configuration.
 
-### Deterministic proxy ablation
+### Deterministic proxy ablation (historical timing)
 
 | Retrieval mode | Hit@5 | Recall@5 | MRR | P50 | P95 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -62,7 +69,7 @@ configuration.
 | TF-IDF + FAISS proxy | 0.7556 | 0.7444 | 0.5688 | 221.45 ms | 239.13 ms |
 | Hybrid RRF | 0.7889 | 0.7889 | **0.5813** | 439.32 ms | 466.50 ms |
 
-Latency is a local Python micro-benchmark and varies by machine. The offline
+The proxy table retains the historical comparison timing; the current run is in `results.json`. Latency is a local Python micro-benchmark and varies by machine. The offline
 FAISS mode uses normalized TF-IDF vectors to exercise vector indexing and
 fusion deterministically; it is not described as neural semantic retrieval.
 
@@ -108,8 +115,7 @@ python -m evaluation.run --k 5 --output evaluation/results.json
 ```
 
 The downloader verifies every PDF against the committed SHA-256 and page-count
-lock. The extractor uses `pypdf`, retains PDF page metadata, and calls Nova's
-production chunker with 220-word chunks and a 40-word overlap. PDFs, extracted
+lock. The extractor calls the same `load_pdf` and `split_documents` functions as uploads, retaining PDF page metadata and using 220-word chunks with a 40-word overlap. PDFs, extracted
 text, and the generated dataset are ignored build artifacts; this avoids
 redistributing full paper text while keeping the benchmark reproducible.
 

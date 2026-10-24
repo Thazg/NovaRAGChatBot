@@ -2,10 +2,14 @@
 
 ## Repository verification status
 
-- 90 backend tests pass locally; CI enforces a 64% production-code coverage
+- Backend regression tests cover the production path; CI enforces a 64% production-code coverage
   floor with test modules excluded from the denominator.
 - The retrieval dataset contains 100 questions derived from 10 checksum-pinned
   arXiv PDFs, with page-level evidence and per-query results.
+- Production context packing also gates retention of the verbatim annotated
+  spans found by retrieval (58/58 on the 2026-10-23 run); this is not answer accuracy.
+- Lifecycle regression tests cover non-destructive upload migration, pending
+  deletion/retry, cross-replica listing and efficient extracted-line mapping.
 - The production-method benchmark compares BM25, neural dense retrieval, equal
   RRF, weighted RRF, cross-encoder reranking, and deterministic multi-query
   retrieval with P50/P95 latency.
@@ -14,7 +18,7 @@
 - The integration suite covers real upload, parsing, indexing, retrieval, SSE
   delivery, and final citations with a deterministic LLM adapter.
 - Chromium end-to-end scenarios cover authentication, upload, chat, citations,
-  session recovery, accessibility, visual regression, and reconnect behavior.
+  session recovery, accessibility, visual regression, and interrupted-stream regeneration.
 - Operational verification includes liveness, provider readiness, request IDs,
   response timings, rate-limit headers, frontend checks, dependency audit, and
   GitHub Actions.

@@ -12,6 +12,7 @@ import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
 import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
 import { User, Copy, Check, ThumbsUp, ThumbsDown, RotateCcw, Sparkles, Share2 } from 'lucide-react';
 import type { Message } from '../../types';
+import { formatAnswerWithSources } from '../../services/sources';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { motion } from 'framer-motion';
@@ -39,6 +40,9 @@ interface ChatBubbleProps {
 
 export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubbleProps) => {
   const [copied, setCopied] = useState(false);
+  const evidence = message.retrievedDocs || [];
+  const plainContent = formatAnswerWithSources(message.content, evidence);
+  const citedContent = formatAnswerWithSources(message.content, evidence, true);
   const { avatar, setMessageFeedback, currentConversationId } = useChatStore();
   const isUser = message.role === 'user';
 
@@ -62,9 +66,9 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
   const handleShare = async () => {
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Nova AI response', text: message.content });
+        await navigator.share({ title: 'Nova AI response', text: plainContent });
       } else {
-        await handleCopy(message.content);
+        await handleCopy(plainContent);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -218,11 +222,11 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                   hr: () => <hr className="my-4 border-border/40" />,
                 }}
               >
-                {message.content || (isStreaming ? '\u200b' : '')}
+                {citedContent || (isStreaming ? '\u200b' : '')}
               </ReactMarkdown>
             ) : (
               <p className="leading-[1.8] text-[14.5px] text-foreground/92 whitespace-pre-wrap">
-                {message.content || '\u200b'}
+                {plainContent || '\u200b'}
               </p>
             )}
 
@@ -249,7 +253,11 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
             )}
           </div>
 
-          {/* Knowledge panel - removed */}
+          {message.interrupted && <div role="status" className="mt-2 rounded-lg bg-destructive/10 p-3 text-sm text-foreground">
+            Response interrupted. This answer may be incomplete.
+            {onRegenerate && <button type="button" onClick={onRegenerate} className="ml-2 min-h-11 font-semibold underline focus-visible:outline focus-visible:outline-2">Regenerate answer</button>}
+          </div>}
+
 
           {/* Action buttons (always visible on mobile, on hover on desktop) */}
           <div className={cn(
@@ -262,7 +270,7 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
             {!isUser && !isStreaming && (
               <>
                 <ActionButton
-                  onClick={() => handleCopy(message.content)}
+                  onClick={() => handleCopy(plainContent)}
                   label="Copy"
                   icon={copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                   active={copied}

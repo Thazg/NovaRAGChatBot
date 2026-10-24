@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pytest
 
 from rag import llm_client
 
@@ -70,7 +71,8 @@ def test_groq_stream_parses_tokens_and_sends_deterministic_seed(monkeypatch) -> 
 
 def test_groq_stream_returns_public_errors_for_missing_key_and_http_failures(monkeypatch) -> None:
     monkeypatch.setattr(llm_client.settings, "GROQ_API_KEY", "")
-    assert "GROQ_API_KEY not set" in asyncio.run(_collect(llm_client._stream_groq("q")))
+    with pytest.raises(llm_client.LLMStreamError, match="GROQ_API_KEY not set"):
+        asyncio.run(_collect(llm_client._stream_groq("q")))
 
     monkeypatch.setattr(llm_client.settings, "GROQ_API_KEY", "test-key")
     for status, expected in [(401, "Invalid Groq API key"), (429, "too many requests"), (503, "HTTP 503")]:
@@ -80,9 +82,9 @@ def test_groq_stream_returns_public_errors_for_missing_key_and_http_failures(mon
             "AsyncClient",
             lambda response=response, **_kwargs: FakeAsyncClient(response, {}),
         )
-        output = asyncio.run(_collect(llm_client._stream_groq("q")))
-        assert expected in output
-        assert "provider-internal-detail" not in output
+        with pytest.raises(llm_client.LLMStreamError, match=expected) as exc:
+            asyncio.run(_collect(llm_client._stream_groq("q")))
+        assert "provider-internal-detail" not in str(exc.value)
 
 
 def test_stream_tokens_routes_to_configured_provider(monkeypatch) -> None:
@@ -98,3 +100,11 @@ def test_stream_tokens_routes_to_configured_provider(monkeypatch) -> None:
     assert asyncio.run(_collect(llm_client.stream_tokens("q"))) == "groq"
     monkeypatch.setattr(llm_client.settings, "LLM_PROVIDER", "ollama")
     assert asyncio.run(_collect(llm_client.stream_tokens("q"))) == "ollama"
+
+
+def test_provider_eof_without_completion_is_not_a_successful_answer(monkeypatch):
+    monkeypatch.setattr(llm_client.settings, "GROQ_API_KEY", "test-key")
+    response = FakeStreamResponse(200, [b'data: {"choices":[{"delta":{"content":"partial answer"}}]}\n\n'])
+    monkeypatch.setattr(llm_client.httpx, "AsyncClient", lambda **kwargs: FakeAsyncClient(response, {}))
+    with pytest.raises(llm_client.LLMStreamError, match="before completion"):
+        asyncio.run(_collect(llm_client._stream_groq("question")))

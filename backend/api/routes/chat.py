@@ -3,13 +3,13 @@ import json
 import logging
 import re
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config.settings import settings
 from rag.llm_client import stream_tokens
-from rag.prompts import build_prompt, no_context_template, empty_db_template
+from rag.prompts import build_prompt, build_context_and_evidence, no_context_template, empty_db_template
 from rag.rag_chain import retrieve_context, get_retriever
 from services.conversation_store import (
     append_session_message,
@@ -66,19 +66,23 @@ async def _retrieve_nodes(
         nodes = []
     except Exception as exc:
         logger.error("Retrieval error: %s", exc)
-        nodes = []
+        raise HTTPException(status_code=503, detail="Document index is temporarily unavailable") from exc
     return nodes
 
 
 async def generate_stream(prompt: str, extra_events: list[dict] | None = None):
     batch: list[str] = []
+    has_tokens = False
     async for token in stream_tokens(prompt):
+        has_tokens = has_tokens or bool(token)
         batch.append(token)
         if len(batch) >= 3:
             yield f"data: {json.dumps({'token': ''.join(batch)})}\n\n"
             batch.clear()
     if batch:
         yield f"data: {json.dumps({'token': ''.join(batch)})}\n\n"
+    if not has_tokens:
+        raise RuntimeError("The provider returned an empty response")
     if extra_events:
         for event in extra_events:
             yield f"data: {json.dumps(event)}\n\n"
@@ -106,7 +110,12 @@ async def chat_stream(http_request: Request, request: ChatRequest):
         )
 
     if request.regenerate:
-        prepare_regeneration(session_id, user_id)
+        prepare_regeneration(session_id, user_id, question=question)
+        # A request may have failed before the original user turn reached the
+        # server. Regenerate reuses a matching last turn, or creates it once.
+        prior = get_session_history(session_id, user_id)
+        if not prior or prior[-1] != {"role": "user", "content": question}:
+            append_session_message(session_id, "user", question, user_id)
 
     question_lower = question.lower().strip()
     greetings = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
@@ -187,21 +196,27 @@ async def chat_stream(http_request: Request, request: ChatRequest):
 
     async def sse_generator():
         full_response = ""
+        evidence = build_context_and_evidence(nodes, question)[1]
+        yield f"data: {json.dumps({'evidence': evidence})}\n\n"
         extra = [{"action": "search_offer", "query": question}] if no_context_found else None
-        async for chunk in generate_stream(prompt, extra_events=extra):
-            if chunk.startswith("data: ") and not chunk.startswith("data: [DONE]"):
-                try:
+        completed = False
+        try:
+            async for chunk in generate_stream(prompt, extra_events=extra):
+                if chunk == "data: [DONE]\n\n":
+                    # Commit the answer and its evidence before acknowledging
+                    # completion to the browser.
+                    append_session_message(session_id, "assistant", full_response, user_id, evidence=evidence)
+                    completed = True
+                elif chunk.startswith("data: "):
                     data = json.loads(chunk[6:])
-                    if "token" in data:
-                        full_response += data["token"]
-                except Exception:
-                    pass
-            yield chunk
-
-        fallback = "I apologize, but I couldn't generate a response. Please try again."
-        final_response = full_response or fallback
-        history.append({"role": "assistant", "content": final_response})
-        append_session_message(session_id, "assistant", final_response, user_id)
+                    full_response += data.get("token", "")
+                yield chunk
+        except Exception:
+            logger.exception("Chat stream failed")
+            yield f"data: {json.dumps({'error': 'Response interrupted. Regenerate the answer to try again.'})}\n\n"
+        finally:
+            if not completed:
+                append_session_message(session_id, "assistant", full_response, user_id, evidence=evidence, interrupted=True)
 
     return StreamingResponse(
         sse_generator(),

@@ -68,6 +68,8 @@ def test_portfolio_dataset_meets_quality_thresholds() -> None:
     assert dataset["metadata"]["unanswerable_count"] == 10
     assert dataset["metadata"]["independent_review_status"] == "pending_human_reviewer"
     assert results["query_count"] == 100
+    assert results["context_packing"]["retrieved_spans"] > 0
+    assert results["context_packing"]["retention"] == 1.0
     assert results["hit_at_k"] >= 0.78
     assert results["recall_at_k"] >= 0.78
     assert results["mrr"] >= 0.55
@@ -75,7 +77,11 @@ def test_portfolio_dataset_meets_quality_thresholds() -> None:
     assert results["citation_recall"] >= 0.90
     assert results["faithfulness"] >= 0.80
     assert 0.0 <= results["unanswerable_accuracy"] <= 1.0
-    assert set(results["ablations"]) == {"bm25", "tfidf_faiss_proxy", "hybrid_rrf"}
+    assert results["primary_method"] == "production_bm25"
+    assert results["hit_at_k"] == results["ablations"]["production"]["hit_at_k"]
+    assert results["pipeline"]["retrieval"] == "rag.rag_chain.retrieve_from_store"
+    assert len(results["pipeline"]["corpus_sha256"]) == 64
+    assert set(results["ablations"]) == {"production", "bm25", "tfidf_faiss_proxy", "hybrid_rrf"}
 
 
 def test_live_answer_evaluator_records_grounding_and_usage(monkeypatch) -> None:

@@ -25,6 +25,8 @@ class ConversationMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str = Field(max_length=200_000)
     createdAt: int | None = None
+    retrievedDocs: list[dict] = Field(default_factory=list, max_length=15)
+    interrupted: bool = False
 
 
 class ConversationCreate(BaseModel):

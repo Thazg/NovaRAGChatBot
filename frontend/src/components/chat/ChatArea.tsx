@@ -19,6 +19,7 @@ export const ChatArea = () => {
     currentConversationId,
     addMessage,
     appendStreamToMessage,
+    updateMessage,
     setIsStreaming,
     setIsLoading,
     createConversation,
@@ -217,13 +218,14 @@ export const ChatArea = () => {
         },
         language,
         false,
-        selectedDocument?.name,
+        selectedDocument?.id,
+        (retrievedDocs) => updateMessage(targetConvId, assistantMessageId, { retrievedDocs }),
       );
     } catch (error: unknown) {
       if (errorName(error) === 'AbortError') {
         toast.info('Generation stopped');
       } else {
-        appendStreamToMessage(targetConvId, assistantMessageId, 'Unable to reach Nova right now. Please try again.');
+        updateMessage(targetConvId, assistantMessageId, { interrupted: true });
         toast.error('Failed to send message. Please try again.');
         console.error(error);
       }
@@ -266,13 +268,14 @@ export const ChatArea = () => {
         undefined,
         language,
         true,
-        selectedDocument?.name,
+        selectedDocument?.id,
+        (retrievedDocs) => updateMessage(currentConversationId, assistantMessageId, { retrievedDocs }),
       );
     } catch (error: unknown) {
       if (errorName(error) === 'AbortError') {
         toast.info('Generation stopped');
       } else {
-        appendStreamToMessage(currentConversationId, assistantMessageId, 'Unable to regenerate this response. Please try again.');
+        updateMessage(currentConversationId, assistantMessageId, { interrupted: true });
         toast.error('Failed to regenerate message. Please try again.');
         console.error(error);
       }

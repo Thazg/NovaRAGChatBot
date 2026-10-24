@@ -1,8 +1,10 @@
 from typing import Any
+import re
+from bisect import bisect_right
 from tqdm import tqdm
 
-MAX_CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+MAX_CHUNK_SIZE = 220
+CHUNK_OVERLAP = 40
 
 
 def chunk_text(
@@ -50,13 +52,37 @@ def split_documents(documents: list[Any], show_progress: bool = False) -> list[d
     for document in iterator:
         metadata = document.metadata or {}
         chunks = split_text(document.text, file_path=metadata.get("file_path"))
+        words = list(re.finditer(r"\S+", document.text))
+        source_lines = sorted(metadata.get("_line_spans", []), key=lambda line: line["start"])
+        line_ends = [line["end"] for line in source_lines]
 
         for idx, chunk in enumerate(chunks):
             chunk_metadata = {
-                **metadata,
+                **{key: value for key, value in metadata.items() if key != "_line_spans"},
                 "chunk_index": idx + 1,
                 "chunk_size": len(chunk),
             }
+            start_word = idx * (MAX_CHUNK_SIZE - CHUNK_OVERLAP)
+            window = words[start_word:start_word + MAX_CHUNK_SIZE]
+            rendered_offset = 0
+            line_locations: dict[int, dict] = {}
+            for word in window:
+                # Jump to the first overlapping interval, including words
+                # joined across PDF line breaks by dehyphenation.
+                line_index = bisect_right(line_ends, word.start())
+                while line_index < len(source_lines) and source_lines[line_index]["start"] < word.end():
+                    line = source_lines[line_index]
+                    start, end = max(word.start(), line["start"]), min(word.end(), line["end"])
+                    if start < end:
+                        number = line["line"]
+                        location = line_locations.setdefault(number, {"line": number, "start": rendered_offset + start - word.start(), "end": 0})
+                        location["end"] = rendered_offset + end - word.start()
+                    line_index += 1
+                rendered_offset += len(word.group()) + 1
+            if line_locations:
+                chunk_metadata["line_spans"] = list(line_locations.values())
+                chunk_metadata["line_start"] = min(line_locations)
+                chunk_metadata["line_end"] = max(line_locations)
             nodes.append({
                 "content": chunk,
                 "metadata": chunk_metadata,

@@ -14,7 +14,8 @@
     "e2e:ui": "playwright test --ui",
     "e2e:install": "playwright install chromium",
     "demo:record": "playwright test --config=playwright.demo.config.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.2.2",

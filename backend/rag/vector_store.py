@@ -1,8 +1,9 @@
 import json
 import logging
-import pickle
+import hashlib
+import os
+import uuid
 import re
-import shutil
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -66,54 +67,96 @@ def _index_dir(user_id: str) -> Path:
     return d
 
 
+def _remote_enabled() -> bool:
+    return bool(settings.REDIS_URL or (settings.B2_KEY_ID and settings.B2_APP_KEY))
+
+
+def _pointer_file(user_id: str) -> Path:
+    return _index_dir(user_id) / "current.json"
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _read_manifest(user_id: str) -> dict | None:
+    if _remote_enabled():
+        from services.remote_storage import download_bytes
+        data = download_bytes(f"index/{user_id}/current.json", required=True)
+    else:
+        path = _pointer_file(user_id)
+        data = path.read_bytes() if path.exists() else None
+    if data is None:
+        return None
+    manifest = json.loads(data)
+    if not re.fullmatch(r"[0-9a-f]{32}", manifest.get("revision", "")):
+        raise ValueError("Invalid index revision")
+    files = manifest.get("files", {})
+    if "metadata.jsonl" not in files or set(files) - {"metadata.jsonl", "embeddings.npy", "faiss.index"}:
+        raise ValueError("Invalid index snapshot")
+    if any(not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in files.values()):
+        raise ValueError("Invalid snapshot checksum")
+    return manifest
+
+
+def index_revision(user_id: str) -> str:
+    manifest = _read_manifest(user_id)
+    if manifest:
+        return manifest["revision"]
+    # Legacy indexes remain readable until an explicit reindex migrates them.
+    if _remote_enabled():
+        return "legacy-remote"
+    legacy = _index_dir(user_id) / "metadata.jsonl"
+    return f"legacy-{legacy.stat().st_mtime_ns}" if legacy.exists() else "missing"
+
+
+def _snapshot_dir(user_id: str) -> Path:
+    pointer = _pointer_file(user_id)
+    if pointer.exists():
+        revision = json.loads(pointer.read_bytes())["revision"]
+        if not re.fullmatch(r"[0-9a-f]{32}", revision):
+            raise ValueError("Invalid local index revision")
+        return _index_dir(user_id) / "revisions" / revision
+    return _index_dir(user_id)
+
+
 def _metadata_file(user_id: str) -> Path:
-    return _index_dir(user_id) / "metadata.jsonl"
+    return _snapshot_dir(user_id) / "metadata.jsonl"
 
 
 def _embeddings_file(user_id: str) -> Path:
-    return _index_dir(user_id) / "embeddings.npy"
+    return _snapshot_dir(user_id) / "embeddings.npy"
 
 
 def _faiss_file(user_id: str) -> Path:
-    return _index_dir(user_id) / "faiss.index"
+    return _snapshot_dir(user_id) / "faiss.index"
 
 
 def _bm25_file(user_id: str) -> Path:
-    return _index_dir(user_id) / "bm25.pkl"
+    return _snapshot_dir(user_id) / "bm25.pkl"
 
 
-def _b2_metadata_path(user_id: str) -> str:
-    return f"index/{user_id}/metadata.jsonl"
-
-
-def _b2_embeddings_path(user_id: str) -> str:
-    return f"index/{user_id}/embeddings.npy"
-
-
-def _b2_faiss_path(user_id: str) -> str:
-    return f"index/{user_id}/faiss.index"
-
-
-def _b2_bm25_path(user_id: str) -> str:
-    return f"index/{user_id}/bm25.pkl"
-
-
-def _b2_backup_paths(user_id: str) -> list[str]:
-    return [
-        _b2_metadata_path(user_id),
-        _b2_embeddings_path(user_id),
-        _b2_faiss_path(user_id),
-        _b2_bm25_path(user_id),
-    ]
-
-
-def _upload_to_b2(user_id: str, local_files: dict[str, Path]) -> None:
-    try:
-        from services.remote_storage import upload_file
-        for remote_key, local_path in local_files.items():
-            upload_file(remote_key, local_path)
-    except Exception:
-        pass
+def _hydrate_snapshot(user_id: str, manifest: dict) -> Path:
+    directory = _index_dir(user_id) / "revisions" / manifest["revision"]
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, digest in manifest["files"].items():
+        path = directory / name
+        if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() == digest:
+            continue
+        if not _remote_enabled():
+            raise RuntimeError("Local index snapshot is incomplete")
+        from services.remote_storage import download_bytes
+        data = download_bytes(f"index/{user_id}/revisions/{manifest['revision']}/{name}", required=True)
+        if data is None or hashlib.sha256(data).hexdigest() != digest:
+            raise RuntimeError("Index snapshot is incomplete or corrupt")
+        _atomic_write(path, data)
+    return directory
 
 
 class HybridVectorStore:
@@ -126,6 +169,7 @@ class HybridVectorStore:
         faiss_index=None,
     ):
         self.user_id = user_id
+        self.revision = ""
         self.documents = documents or []
         self.bm25 = bm25
         self.embeddings = embeddings
@@ -217,73 +261,45 @@ class HybridVectorStore:
         return removed
 
     def persist(self) -> None:
-        with _metadata_file(self.user_id).open("w", encoding="utf-8") as f:
-            for node in self.documents:
-                json.dump(node, f, ensure_ascii=False)
-                f.write("\n")
-        if self.embeddings is not None and len(self.embeddings) > 0:
-            np.save(_embeddings_file(self.user_id), self.embeddings)
-        else:
-            _embeddings_file(self.user_id).unlink(missing_ok=True)
+        # Callers serialize mutations per user. Reject an accidentally reused
+        # stale store as an additional guard against lost updates.
+        if self.revision and self.revision != index_revision(self.user_id):
+            raise RuntimeError("Index changed; reload before applying this mutation")
+        from services.document_lifecycle import deleted_documents
+        for name in deleted_documents(self.user_id):
+            self.remove_by_file_name(name)
+        revision = uuid.uuid4().hex
+        directory = _index_dir(self.user_id) / "revisions" / revision
+        directory.mkdir(parents=True)
+        metadata = directory / "metadata.jsonl"
+        metadata.write_text("".join(json.dumps(node, ensure_ascii=False) + "\n" for node in self.documents), encoding="utf-8")
+        files = {"metadata.jsonl": metadata}
+        if self.embeddings is not None and len(self.embeddings):
+            np.save(directory / "embeddings.npy", self.embeddings)
+            files["embeddings.npy"] = directory / "embeddings.npy"
         if self.faiss_index is not None:
             import faiss
-            faiss.write_index(self.faiss_index, str(_faiss_file(self.user_id)))
-        else:
-            _faiss_file(self.user_id).unlink(missing_ok=True)
-        if self.bm25 is not None:
-            with _bm25_file(self.user_id).open("wb") as f:
-                pickle.dump(self.bm25, f)
-        else:
-            _bm25_file(self.user_id).unlink(missing_ok=True)
-        b2_files = {}
-        if _metadata_file(self.user_id).exists():
-            b2_files[_b2_metadata_path(self.user_id)] = _metadata_file(self.user_id)
-        if _embeddings_file(self.user_id).exists():
-            b2_files[_b2_embeddings_path(self.user_id)] = _embeddings_file(self.user_id)
-        if _faiss_file(self.user_id).exists():
-            b2_files[_b2_faiss_path(self.user_id)] = _faiss_file(self.user_id)
-        if _bm25_file(self.user_id).exists():
-            b2_files[_b2_bm25_path(self.user_id)] = _bm25_file(self.user_id)
-        if b2_files:
-            _upload_to_b2(self.user_id, b2_files)
+            faiss.write_index(self.faiss_index, str(directory / "faiss.index"))
+            files["faiss.index"] = directory / "faiss.index"
+        manifest = {"revision": revision, "files": {
+            name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in files.items()
+        }, "ingestion_version": 2}
+        encoded = json.dumps(manifest).encode()
+        if _remote_enabled():
+            from services.remote_storage import upload_file, upload_bytes
+            for name, path in files.items():
+                if not upload_file(f"index/{self.user_id}/revisions/{revision}/{name}", path):
+                    raise RuntimeError("Could not persist the complete index snapshot")
+            # Publish only after every immutable artifact is durable. Readers
+            # resolve one manifest and never combine artifacts from revisions.
+            if not upload_bytes(f"index/{self.user_id}/current.json", encoded):
+                raise RuntimeError("Could not publish the index revision")
+        _atomic_write(_pointer_file(self.user_id), encoded)
+        self.revision = revision
 
     @classmethod
     def load(cls, user_id: str):
-        mf = _metadata_file(user_id)
-        ef = _embeddings_file(user_id)
-        ff = _faiss_file(user_id)
-        bf = _bm25_file(user_id)
-        if not mf.exists():
-            raise FileNotFoundError(f"Vector store not found for user {user_id}.")
-        documents: list[Dict[str, Any]] = []
-        with mf.open("r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    documents.append(json.loads(line))
-        embeddings = None
-        if dense_retrieval_enabled() and ef.exists():
-            embeddings = np.load(ef)
-            if len(embeddings) != len(documents):
-                logger.warning("Ignoring misaligned embeddings for user %s", user_id)
-                embeddings = None
-        faiss_index = None
-        if dense_retrieval_enabled() and ff.exists() and embeddings is not None:
-            import faiss
-            faiss_index = faiss.read_index(str(ff))
-            if faiss_index.ntotal != len(documents):
-                logger.warning("Ignoring misaligned FAISS index for user %s", user_id)
-                faiss_index = None
-        bm25 = None
-        if bf.exists():
-            with bf.open("rb") as f:
-                bm25 = pickle.load(f)
-        return cls(
-            user_id=user_id,
-            documents=documents,
-            bm25=bm25,
-            embeddings=embeddings,
-            faiss_index=faiss_index,
-        )
+        return load_vector_store(user_id)
 
     def retrieve(
         self,
@@ -360,56 +376,20 @@ class HybridVectorStore:
             if min_score <= 0 or (max_rrf > 0 and rrf_score / max_rrf >= min_score)
         ]
 
-        query_terms = {w.lower() for w in re.findall(r"[a-zA-Z]\w+", expanded) if len(w) > 3}
-        candidate_count = min(top_k * 4, len(candidates))
-        top_indices = [idx for idx, _ in candidates[:candidate_count]]
-        top_indices = top_indices[:top_k]
-        seen = set(top_indices)
-        upload_candidates = [
-            (idx, rrf_score)
-            for idx, rrf_score in candidates
-            if "uploads" in str(self.documents[idx].get("metadata", {}).get("file_path", "")).lower()
-            or "upload" in str(self.documents[idx].get("metadata", {}).get("file_path", "")).lower()
-        ]
-
-        if query_terms and candidates:
-            missing_terms = set(query_terms)
-            for idx in top_indices:
-                content = self.documents[idx].get("content", "").lower()
-                missing_terms -= {t for t in missing_terms if t in content}
-            for idx, _ in candidates[candidate_count:]:
-                if not missing_terms:
-                    break
-                if idx in seen:
-                    continue
-                content = self.documents[idx].get("content", "").lower()
-                found = {t for t in missing_terms if t in content}
-                if found:
-                    top_indices.append(idx)
-                    seen.add(idx)
-                    missing_terms -= found
-
-        seen_upload_files = set()
-        for idx in top_indices:
-            fn = self.documents[idx].get("metadata", {}).get("file_name", "")
-            if fn:
-                seen_upload_files.add(fn)
-        if upload_candidates and min_score > 0:
-            upload_candidates.sort(key=lambda item: item[1], reverse=True)
-            added = 0
-            for idx, rrf_score in upload_candidates:
-                if rrf_score < min_score:
-                    continue
-                if idx in seen:
-                    continue
-                fn = self.documents[idx].get("metadata", {}).get("file_name", "")
-                if fn and fn not in seen_upload_files:
-                    top_indices.append(idx)
-                    seen.add(idx)
-                    seen_upload_files.add(fn)
-                    added += 1
-                    if added >= 2:
-                        break
+        # Return at most K passages, diversifying PDF evidence by page. This
+        # same ranking policy runs in the application and in its evaluation.
+        top_indices = []
+        seen_pages = set()
+        for idx, _ in candidates:
+            metadata = self.documents[idx].get("metadata", {})
+            page = metadata.get("page")
+            page_key = (metadata.get("storage_name", metadata.get("file_name", "")), page) if page else (idx,)
+            if page_key in seen_pages:
+                continue
+            seen_pages.add(page_key)
+            top_indices.append(idx)
+            if len(top_indices) >= top_k:
+                break
 
         results = []
         for idx in top_indices:
@@ -432,33 +412,54 @@ def build_vector_store(nodes: list[Dict[str, Any]], user_id: str = "") -> Hybrid
 
 
 def load_vector_store(user_id: str = "") -> HybridVectorStore:
-    mf = _metadata_file(user_id)
-    ef = _embeddings_file(user_id)
-    ff = _faiss_file(user_id)
-    bf = _bm25_file(user_id)
-    if not mf.exists():
-        try:
-            from services.remote_storage import download_file
-            download_file(_b2_metadata_path(user_id), mf)
+    manifest = _read_manifest(user_id)
+    if manifest:
+        directory = _hydrate_snapshot(user_id, manifest)
+        revision = manifest["revision"]
+    else:
+        directory = _index_dir(user_id)
+        revision = index_revision(user_id)
+        if _remote_enabled():
+            # Legacy compatibility. A new reindex publishes a revisioned snapshot.
+            from services.remote_storage import download_bytes
+            data = download_bytes(f"index/{user_id}/metadata.jsonl", required=True)
+            if data is None:
+                raise FileNotFoundError(f"Vector store not found for user {user_id}")
+            _atomic_write(directory / "metadata.jsonl", data)
             if dense_retrieval_enabled():
-                download_file(_b2_embeddings_path(user_id), ef)
-                download_file(_b2_faiss_path(user_id), ff)
-            download_file(_b2_bm25_path(user_id), bf)
-        except ImportError:
-            pass
-        if not mf.exists():
-            raise FileNotFoundError(f"Vector store not found for user {user_id}.")
-    return HybridVectorStore.load(user_id)
+                for name in ("embeddings.npy", "faiss.index"):
+                    data = download_bytes(f"index/{user_id}/{name}", required=True)
+                    if data is not None:
+                        _atomic_write(directory / name, data)
+                    else:
+                        (directory / name).unlink(missing_ok=True)
+    metadata = directory / "metadata.jsonl"
+    if not metadata.exists():
+        raise FileNotFoundError(f"Vector store not found for user {user_id}")
+    documents = [json.loads(line) for line in metadata.read_text(encoding="utf-8").splitlines() if line.strip()]
+    embeddings = None
+    if dense_retrieval_enabled() and (directory / "embeddings.npy").exists():
+        embeddings = np.load(directory / "embeddings.npy", allow_pickle=False)
+        if len(embeddings) != len(documents):
+            embeddings = None
+    store = HybridVectorStore(user_id=user_id, documents=documents, embeddings=embeddings)
+    # Rebuild the inexpensive BM25 index rather than deserializing pickle.
+    store._build_bm25()
+    if embeddings is not None and len(embeddings):
+        store._build_faiss()
+    store.revision = revision
+    from services.document_lifecycle import deleted_documents
+    deleted = deleted_documents(user_id)
+    for name in deleted:
+        store.remove_by_file_name(name)
+    store.deletion_revision = tuple(sorted(deleted))
+    if manifest:
+        _atomic_write(_pointer_file(user_id), json.dumps(manifest).encode())
+    return store
 
 
 def delete_vector_store(user_id: str = "") -> None:
-    """Remove local and remote index artifacts for a user."""
-    index_dir = BASE_INDEX_DIR / user_id
-    if index_dir.exists():
-        shutil.rmtree(index_dir)
-    try:
-        from services.remote_storage import delete_file
-        for remote_path in _b2_backup_paths(user_id):
-            delete_file(remote_path)
-    except Exception:
-        pass
+    # An empty revision is a tombstone visible to other hosts; removing the
+    # pointer would allow a cached/legacy index to reappear.
+    store = HybridVectorStore(user_id=user_id)
+    store.persist()

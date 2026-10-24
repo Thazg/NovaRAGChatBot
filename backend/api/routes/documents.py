@@ -9,6 +9,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from config.settings import settings
+from services.document_lifecycle import deleted_documents, mark_deleted, storage_name
 from rag.chunking import split_documents
 from rag.load import load_file
 from rag.llm_client import stream_tokens
@@ -68,6 +69,10 @@ def _manifest_file(user_id: str) -> Path:
 
 def _load_manifest(user_id: str) -> dict[str, dict[str, str]]:
     path = _manifest_file(user_id)
+    if settings.REDIS_URL:
+        from services.remote_storage import download_bytes
+        data = download_bytes(f"uploads/{user_id}/document_manifest.json", required=True)
+        return json.loads(data) if data else {}
     if not path.exists():
         try:
             from services.remote_storage import download_file
@@ -83,11 +88,16 @@ def _load_manifest(user_id: str) -> dict[str, dict[str, str]]:
 
 def _save_manifest(manifest: dict[str, dict[str, str]], user_id: str) -> None:
     path = _manifest_file(user_id)
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    from rag.vector_store import _atomic_write
+    _atomic_write(path, json.dumps(manifest, ensure_ascii=False, indent=2).encode())
     try:
         from services.remote_storage import upload_file
-        upload_file(f"uploads/{user_id}/document_manifest.json", path)
+        persisted = upload_file(f"uploads/{user_id}/document_manifest.json", path)
+        if settings.REDIS_URL and not persisted:
+            raise RuntimeError("Could not persist document manifest")
     except Exception:
+        if settings.REDIS_URL:
+            raise
         pass
 
 
@@ -125,10 +135,16 @@ def _save_source_urls(mapping: dict[str, str], user_id: str) -> None:
 
 
 def _delete_remote_file(filename: str, user_id: str) -> bool:
+    from rag.vector_store import _remote_enabled
     try:
         from services.remote_storage import delete_file
-        return delete_file(f"uploads/{user_id}/{filename}")
+        deleted = delete_file(f"uploads/{user_id}/{filename}")
+        if _remote_enabled() and not deleted:
+            raise RuntimeError("Could not delete durable upload")
+        return deleted
     except Exception:
+        if _remote_enabled():
+            raise
         return False
 
 
@@ -191,28 +207,16 @@ async def summarize_document(request: Request, body: SummarizeRequest):
 
 
 def _load_chunk_counts(user_id: str) -> dict[str, int]:
-    from rag.vector_store import _metadata_file
-    mf = _metadata_file(user_id)
-    if not mf.exists():
-        try:
-            load_vector_store(user_id)
-        except FileNotFoundError:
-            pass
+    try:
+        store = get_retriever(user_id)
+    except FileNotFoundError:
+        return {}
     chunk_counts: dict[str, int] = {}
-    if not mf.exists():
-        return chunk_counts
-    with mf.open("r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            try:
-                item = json.loads(line)
-                metadata = item.get("metadata", {})
-                source = metadata.get("storage_name") or metadata.get("file_name") or metadata.get("source")
-                if source:
-                    chunk_counts[source] = chunk_counts.get(source, 0) + 1
-            except json.JSONDecodeError:
-                continue
+    for document in store.documents if store else []:
+        metadata = document.get("metadata", {})
+        source = metadata.get("storage_name") or metadata.get("file_name")
+        if source:
+            chunk_counts[source] = chunk_counts.get(source, 0) + 1
     return chunk_counts
 
 
@@ -221,49 +225,26 @@ def _list_upload_files(user_id: str) -> list[dict]:
     source_urls = _load_source_urls(user_id)
     manifest = _load_manifest(user_id)
     upload_dir = _user_uploads_dir(user_id)
+    deleted = deleted_documents(user_id)
+    by_name = {}
+    for path in upload_dir.iterdir():
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS and path.name not in deleted:
+            by_name[path.name] = path.stat().st_size
+    # Always merge remote objects, even when this replica already caches a file.
+    from services.remote_storage import list_file_info
+    prefix = f"uploads/{user_id}/"
+    remote_files = list_file_info(prefix, required=True) if settings.REDIS_URL else list_file_info(prefix)
+    for remote in remote_files:
+        name = str(remote["key"])[len(prefix):]
+        if "/" not in name and Path(name).suffix.lower() in SUPPORTED_EXTENSIONS and name not in deleted:
+            by_name[name] = int(remote.get("size", 0))
     files = []
-    local_files = [
-        path for path in upload_dir.iterdir()
-        if path.is_file() and path.name not in INTERNAL_METADATA_FILES
-    ] if upload_dir.exists() else []
-
-    if not local_files:
-        try:
-            from services.remote_storage import list_file_info
-            remote_files = list_file_info(f"uploads/{user_id}/")
-            for remote_file in remote_files:
-                remote_path = str(remote_file["key"])
-                name = remote_path[len(f"uploads/{user_id}/"):]
-                if name in INTERNAL_METADATA_FILES:
-                    continue
-                item = {
-                    "id": name,
-                    "name": _display_name(name, manifest),
-                    "size": int(remote_file.get("size", 0)),
-                    "indexed": bool(chunk_counts.get(name)),
-                    "chunks": chunk_counts.get(name, 0),
-                }
-                if source_url := source_urls.get(name):
-                    item["source_url"] = source_url
-                files.append(item)
-            return files
-        except ImportError:
-            pass
-
-    seen_names: set[str] = set()
-    if upload_dir.exists():
-        for file_path in sorted(local_files):
-            if not file_path.is_file() or file_path.name in seen_names or file_path.name in INTERNAL_METADATA_FILES:
-                continue
-            seen_names.add(file_path.name)
-            item = {
-                "id": file_path.name, "name": _display_name(file_path.name, manifest), "size": file_path.stat().st_size,
-                "indexed": bool(chunk_counts.get(file_path.name)),
-                "chunks": chunk_counts.get(file_path.name, 0),
-            }
-            if source_url := source_urls.get(file_path.name):
-                item["source_url"] = source_url
-            files.append(item)
+    for name, size in sorted(by_name.items()):
+        item = {"id": name, "name": _display_name(name, manifest), "size": size,
+                "indexed": bool(chunk_counts.get(name)), "chunks": chunk_counts.get(name, 0)}
+        if source_url := source_urls.get(name):
+            item["source_url"] = source_url
+        files.append(item)
     return files
 
 
@@ -273,14 +254,28 @@ def _restore_remote_uploads(user_id: str) -> None:
         from services.remote_storage import download_file, list_files
         prefix = f"uploads/{user_id}/"
         upload_dir = _user_uploads_dir(user_id)
-        for remote_path in list_files(prefix):
+        remote_paths = list_files(prefix, required=True) if settings.REDIS_URL else list_files(prefix)
+        deleted = deleted_documents(user_id)
+        remote_names = {key[len(prefix):] for key in remote_paths}
+        # Unmatched local files may be the only original copies during cutover.
+        # Never prune them or silently publish an index that omits them.
+        local_only = [path.name for path in upload_dir.iterdir()
+                      if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+                      and path.name not in remote_names and path.name not in deleted]
+        if settings.REDIS_URL and local_only:
+            raise RuntimeError("Local-only uploads require migration before distributed reindex. "
+                               "Run python -m services.migrate_uploads --user-id " + user_id)
+        for remote_path in remote_paths:
             name = remote_path[len(prefix):].replace("\\", "/").rsplit("/", 1)[-1]
-            if not name or name in INTERNAL_METADATA_FILES or Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
+            if not name or name in deleted or name in INTERNAL_METADATA_FILES or Path(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
             local_path = upload_dir / name
             if not local_path.exists():
-                download_file(remote_path, local_path)
+                if not download_file(remote_path, local_path) and settings.REDIS_URL:
+                    raise RuntimeError("Could not restore a durable upload")
     except Exception as exc:
+        if settings.REDIS_URL:
+            raise
         logger.warning("Could not restore remote uploads for %s: %s", user_id, exc)
 
 
@@ -291,6 +286,18 @@ def _apply_document_identity(documents: list, file_path: Path, display_name: str
 
 
 def _index_uploaded_file(file_path: Path, user_id: str, display_name: str | None = None) -> tuple[bool, int, str]:
+    from services.index_jobs import _user_index_lock
+    with _user_index_lock(user_id):
+        return _index_uploaded_file_locked(file_path, user_id, display_name)
+
+
+def _index_uploaded_file_locked(file_path: Path, user_id: str, display_name: str | None = None) -> tuple[bool, int, str]:
+    if file_path.name in deleted_documents(user_id):
+        raise FileNotFoundError("Document was deleted before this indexing job ran")
+    if settings.REDIS_URL:
+        from services.remote_storage import file_exists
+        if not file_exists(f"uploads/{user_id}/{file_path.name}", required=True):
+            raise FileNotFoundError("Document was deleted before this indexing job ran")
     documents = load_file(file_path)
     _apply_document_identity(documents, file_path, display_name or file_path.name)
     if not documents:
@@ -299,16 +306,11 @@ def _index_uploaded_file(file_path: Path, user_id: str, display_name: str | None
     if not nodes:
         return False, 0, "No content extracted from file"
     try:
-        store = get_retriever(user_id)
-        if store is None:
-            raise FileNotFoundError("No retriever available")
-    except (FileNotFoundError, AttributeError):
-        try:
-            store = load_vector_store(user_id)
-        except FileNotFoundError:
-            build_vector_store(nodes, user_id)
-            reload_vector_store(user_id)
-            return True, len(nodes), "Indexed successfully"
+        store = load_vector_store(user_id)
+    except FileNotFoundError:
+        build_vector_store(nodes, user_id)
+        reload_vector_store(user_id)
+        return True, len(nodes), "Indexed successfully"
     store.remove_by_file_name(file_path.name)
     store.add_nodes(nodes)
     store.persist()
@@ -317,13 +319,20 @@ def _index_uploaded_file(file_path: Path, user_id: str, display_name: str | None
 
 
 def _rebuild_full_index(user_id: str) -> tuple[int, int]:
+    from services.index_jobs import _user_index_lock
+    with _user_index_lock(user_id):
+        return _rebuild_full_index_locked(user_id)
+
+
+def _rebuild_full_index_locked(user_id: str) -> tuple[int, int]:
     _restore_remote_uploads(user_id)
     upload_dir = _user_uploads_dir(user_id)
     documents = []
     manifest = _load_manifest(user_id)
+    deleted = deleted_documents(user_id)
     if upload_dir.exists():
         for fp in upload_dir.iterdir():
-            if fp.is_file() and fp.suffix.lower() in SUPPORTED_EXTENSIONS:
+            if fp.is_file() and fp.suffix.lower() in SUPPORTED_EXTENSIONS and fp.name not in deleted:
                 loaded = load_file(fp)
                 _apply_document_identity(loaded, fp, _display_name(fp.name, manifest))
                 documents.extend(loaded)
@@ -341,6 +350,30 @@ def _rebuild_full_index(user_id: str) -> tuple[int, int]:
 def list_documents(request: Request):
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
     return _list_upload_files(user_id)
+
+
+def _accept_upload(user_id: str, temporary: Path, destination: Path, original_name: str):
+    from services.index_jobs import _user_index_lock
+    from services.remote_storage import upload_file
+    with _user_index_lock(user_id):
+        temporary.replace(destination)
+        persisted = upload_file(f"uploads/{user_id}/{destination.name}", destination)
+        if settings.REDIS_URL and not persisted:
+            raise HTTPException(status_code=503, detail="Durable upload storage is required for background indexing")
+        manifest = _load_manifest(user_id)
+        manifest[destination.name] = {"original_name": original_name}
+        _save_manifest(manifest, user_id)
+
+
+def _discard_upload(user_id: str, stored_name: str, file_location: Path, temporary: Path):
+    from services.index_jobs import _user_index_lock
+    with _user_index_lock(user_id):
+        temporary.unlink(missing_ok=True)
+        file_location.unlink(missing_ok=True)
+        _delete_remote_file(stored_name, user_id)
+        manifest = _load_manifest(user_id)
+        manifest.pop(stored_name, None)
+        _save_manifest(manifest, user_id)
 
 
 @router.post("/upload", status_code=202)
@@ -368,7 +401,6 @@ async def upload_document(request: Request, file: UploadFile = File(...)):
     try:
         from services.file_security import UnsafeUpload, validate_uploaded_file
         await asyncio.to_thread(validate_uploaded_file, temp_location, original_name, file.content_type)
-        temp_location.replace(file_location)
     except UnsafeUpload as exc:
         temp_location.unlink(missing_ok=True)
         raise HTTPException(status_code=415, detail=str(exc)) from exc
@@ -377,22 +409,7 @@ async def upload_document(request: Request, file: UploadFile = File(...)):
         raise
 
     try:
-        manifest = _load_manifest(user_id)
-        manifest[stored_name] = {"original_name": original_name}
-        _save_manifest(manifest, user_id)
-        remote_persisted = False
-        try:
-            from services.remote_storage import upload_file
-            remote_persisted = bool(await asyncio.to_thread(
-                upload_file, f"uploads/{user_id}/{stored_name}", file_location
-            ))
-        except Exception as exc:
-            logger.warning("Could not persist upload %s to remote storage: %s", stored_name, exc)
-        if settings.REDIS_URL and not remote_persisted:
-            raise HTTPException(
-                status_code=503,
-                detail="Durable upload storage is required for background indexing",
-            )
+        await asyncio.to_thread(_accept_upload, user_id, temp_location, file_location, original_name)
         from services.index_jobs import IndexQueueUnavailable, enqueue_file_index
         try:
             job_id = enqueue_file_index(user_id, str(file_location), original_name)
@@ -403,28 +420,14 @@ async def upload_document(request: Request, file: UploadFile = File(...)):
             "indexed": False, "job_id": job_id, "progress": 0,
             "message": "Upload accepted; indexing is running in the background.",
         }
-    except HTTPException:
-        manifest = _load_manifest(user_id)
-        manifest.pop(stored_name, None)
-        _save_manifest(manifest, user_id)
-        file_location.unlink(missing_ok=True)
-        _delete_remote_file(stored_name, user_id)
-        try:
-            _rebuild_full_index(user_id)
-        except Exception:
-            logger.exception("Could not restore index after rejected upload for user %s", user_id)
-        raise
     except Exception as exc:
-        logger.exception("Failed to store uploaded document for user %s", user_id)
-        manifest = _load_manifest(user_id)
-        manifest.pop(stored_name, None)
-        _save_manifest(manifest, user_id)
-        file_location.unlink(missing_ok=True)
-        _delete_remote_file(stored_name, user_id)
         try:
-            _rebuild_full_index(user_id)
+            await asyncio.to_thread(_discard_upload, user_id, stored_name, file_location, temp_location)
         except Exception:
-            logger.exception("Could not restore index after upload failure for user %s", user_id)
+            logger.exception("Could not fully roll back upload %s", stored_name)
+        if isinstance(exc, HTTPException):
+            raise
+        logger.exception("Failed to store uploaded document for user %s", user_id)
         raise HTTPException(status_code=500, detail="Failed to store and index document") from exc
 
 
@@ -446,40 +449,68 @@ def get_index_job(request: Request, job_id: str):
 @router.delete("/clear-all")
 def clear_all_documents(request: Request):
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
+    from services.index_jobs import _user_index_lock
+    with _user_index_lock(user_id):
+        return _clear_all_documents_locked(user_id)
+
+
+def _clear_all_documents_locked(user_id: str):
     upload_dir = _user_uploads_dir(user_id)
-    deleted_count = 0
-    if upload_dir.exists():
-        for file_path in upload_dir.iterdir():
-            if file_path.is_file() and file_path.name not in INTERNAL_METADATA_FILES:
-                file_path.unlink()
-                deleted_count += 1
+    from services.remote_storage import list_files
+    prefix = f"uploads/{user_id}/"
+    remote_files = list_files(prefix, required=True) if settings.REDIS_URL else list_files(prefix)
+    names = {path.name for path in upload_dir.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS}
+    names.update(key[len(prefix):] for key in remote_files
+                 if "/" not in key[len(prefix):] and Path(key).suffix.lower() in SUPPORTED_EXTENSIONS)
+    names.update(_load_manifest(user_id))
     try:
-        from services.remote_storage import list_files, delete_file
-        remote_files = list_files(f"uploads/{user_id}/")
-        for remote_path in remote_files:
-            if not remote_path.endswith("source_urls.json"):
-                delete_file(remote_path)
-    except Exception:
+        names.update(storage_name(doc) for doc in load_vector_store(user_id).documents)
+    except FileNotFoundError:
         pass
+    names.discard("")
+    mark_deleted(user_id, names)
+    unload_vector_store(user_id)
+    # Include previous barriers so a failed clear-all can finish on retry.
+    for name in names | deleted_documents(user_id):
+        (upload_dir / name).unlink(missing_ok=True)
+        _delete_remote_file(name, user_id)
     _save_source_urls({}, user_id)
     _save_manifest({}, user_id)
-    _rebuild_full_index(user_id)
-    return {"status": "success", "deleted": deleted_count}
+    delete_vector_store(user_id)
+    return {"status": "success", "deleted": len(names)}
 
 
 @router.delete("/{id}")
 def delete_document(request: Request, id: str):
     user_id = getattr(request.state, "user_id", "") or "__anonymous__"
     safe_id = _safe_document_id(id)
+    from services.index_jobs import _user_index_lock
+    with _user_index_lock(user_id):
+        return _delete_document_locked(user_id, safe_id)
+
+
+def _delete_document_locked(user_id: str, safe_id: str):
     upload_dir = _user_uploads_dir(user_id)
     file_location = upload_dir / safe_id
-    deleted = False
-    if file_location.exists():
-        file_location.unlink()
-        deleted = True
-    remote_deleted = _delete_remote_file(safe_id, user_id)
-    if not deleted and not remote_deleted:
+    manifest = _load_manifest(user_id)
+    known_deleted = deleted_documents(user_id)
+    exists = file_location.exists() or safe_id in manifest or safe_id in known_deleted
+    if not exists:
+        try:
+            exists = any(storage_name(doc) == safe_id for doc in load_vector_store(user_id).documents)
+        except FileNotFoundError:
+            pass
+    if not exists:
+        from services.remote_storage import file_exists
+        exists = file_exists(f"uploads/{user_id}/{safe_id}", required=True) if settings.REDIS_URL else file_exists(f"uploads/{user_id}/{safe_id}")
+    if not exists:
         raise HTTPException(status_code=404, detail="Document not found")
+    # Commit the barrier before any destructive side effect. Retries recognize
+    # this ID even after physical files and manifest entries have disappeared.
+    mark_deleted(user_id, {safe_id})
+    unload_vector_store(user_id)
+    file_location.unlink(missing_ok=True)
+    _delete_remote_file(safe_id, user_id)
     source_urls = _load_source_urls(user_id)
     source_urls.pop(safe_id, None)
     _save_source_urls(source_urls, user_id)
@@ -487,16 +518,16 @@ def delete_document(request: Request, id: str):
     manifest.pop(safe_id, None)
     _save_manifest(manifest, user_id)
     try:
-        store = get_retriever(user_id)
+        store = load_vector_store(user_id)
         if store is None:
             raise FileNotFoundError
         store.remove_by_file_name(safe_id)
         store.persist()
         reload_vector_store(user_id)
     except FileNotFoundError:
-        _rebuild_full_index(user_id)
+        _rebuild_full_index_locked(user_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Document deleted but reindex failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Deletion is pending; retry to finish index cleanup") from exc
     return {"status": "success"}
 
 

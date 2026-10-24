@@ -41,10 +41,12 @@ class Settings:
     LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.9"))
     LLM_SEED: int = int(os.getenv("LLM_SEED", "42"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "2048"))
-    NUM_CTX: int = int(os.getenv("NUM_CTX", "4096"))
+    NUM_CTX: int = int(os.getenv("NUM_CTX", "8192"))
     MAX_HISTORY_MESSAGES: int = int(os.getenv("MAX_HISTORY_MESSAGES", "4"))
-    MAX_CHUNK_CHARS: int = int(os.getenv("MAX_CHUNK_CHARS", "1000"))
-    MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "6000"))
+    # Keep typical top-5, 220-word passages whole. Custom smaller limits use
+    # query windows; NUM_CTX is the Ollama context setting, not a tokenizer.
+    MAX_CHUNK_CHARS: int = int(os.getenv("MAX_CHUNK_CHARS", "2400"))
+    MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "10000"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "").strip()
     SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05"))

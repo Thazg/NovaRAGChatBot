@@ -29,7 +29,7 @@ def _user_index_lock(user_id: str):
     if settings.REDIS_URL:
         from redis import Redis
         lock = Redis.from_url(settings.REDIS_URL).lock(
-            f"nova:index-lock:{user_id}", timeout=900, blocking_timeout=30
+            f"nova:index-lock:{user_id}", timeout=960, blocking_timeout=30
         )
         if not lock.acquire(blocking=True):
             raise TimeoutError("Another indexing job is still running for this user")
@@ -88,8 +88,7 @@ def process_file_index(user_id: str, file_path: str, display_name: str) -> dict[
         if not download_file(f"uploads/{user_id}/{path.name}", path):
             raise FileNotFoundError("Uploaded document is unavailable to the indexing worker")
     from api.routes.documents import _index_uploaded_file
-    with _user_index_lock(user_id):
-        indexed, chunks, message = _index_uploaded_file(path, user_id, display_name)
+    indexed, chunks, message = _index_uploaded_file(path, user_id, display_name)
     _update_rq_progress(100)
     if not indexed:
         raise ValueError(message)
@@ -99,8 +98,7 @@ def process_file_index(user_id: str, file_path: str, display_name: str) -> dict[
 def process_full_reindex(user_id: str) -> dict[str, Any]:
     _update_rq_progress(20)
     from api.routes.documents import _rebuild_full_index
-    with _user_index_lock(user_id):
-        documents, chunks = _rebuild_full_index(user_id)
+    documents, chunks = _rebuild_full_index(user_id)
     _update_rq_progress(100)
     return {"indexed": True, "documents": documents, "chunks": chunks, "message": "Reindexing completed"}
 

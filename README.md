@@ -15,7 +15,7 @@
 
 </div>
 
-![Nova authenticated document workspace](frontend/e2e/portfolio-flow.spec.ts-snapshots/login-dark-chromium-linux.png)
+![Nova sign-in screen](frontend/e2e/portfolio-flow.spec.ts-snapshots/login-dark-chromium-linux.png)
 
 ## Project overview
 
@@ -24,10 +24,10 @@ Nova implements the complete private-document RAG lifecycle: validated ingestion
 | Capability | Implementation evidence |
 |---|---|
 | **Grounded, inspectable answers** | Source citations and explicit insufficient-evidence behavior |
-| **Measured retrieval quality** | BM25 reaches **82.22% Hit@5 at 2.36 ms P50**; neural reranking reaches 84.44% but costs 1.31 s P50 |
+| **Measured retrieval quality** | The shared production BM25 path reaches **82.22% Hit@5 at 3.53 ms P50** on the local regression corpus |
 | **Auditable provenance** | Pinned paper versions, SHA-256 locks, page evidence, reference answers, and per-query results |
-| **Production infrastructure** | PostgreSQL, Redis/RQ, Backblaze B2, readiness probes, rate limits, Sentry integration, Docker, and CI |
-| **Automated verification** | **90 passing backend tests**, deterministic evaluation gates, and Chromium end-to-end coverage |
+| **Configurable infrastructure** | Local JSON/thread mode; optional PostgreSQL, Redis/RQ and B2 adapters, readiness probes, rate limits, Docker and CI |
+| **Automated verification** | Backend regression tests, deterministic evaluation gates, and Chromium end-to-end coverage |
 
 > The benchmark is project-specific and designed for regression testing. It also exposes a real limitation: the current retriever scores **0% on 10 unanswerable questions** because abstention is not yet calibrated.
 
@@ -35,7 +35,7 @@ Nova implements the complete private-document RAG lifecycle: validated ingestion
 
 - **End-to-end system design** — The repository integrates the React client, FastAPI services, retrieval pipeline, security controls, persistence, deployment, and automated verification.
 - **Retrieval is benchmark-selected** — BM25 is the production default because it delivers the strongest quality/latency trade-off; dense, RRF, reranking, and multi-query remain reproducible evaluation paths rather than unmeasured complexity in every request.
-- **Incremental response delivery** — Server-Sent Events carry tokens and lifecycle events with cancellation and regeneration support.
+- **Incremental response delivery** — Server-Sent Events carry tokens and structured evidence. An incomplete stream is marked interrupted; explicit regeneration reuses the user turn instead of automatically replaying POST requests.
 - **User-level data isolation** — Uploads, indexes, conversations, preferences, and storage keys are namespaced by authenticated user ID.
 - **Explicit failure handling** — Upload quarantine, SSRF defenses, rotating refresh sessions, health/readiness separation, shared rate limiting, and background job status are implemented as first-class flows. Retrieval abstention remains an identified limitation.
 - **Reproducible verification** — CI runs backend tests, frontend quality checks, the browser workflow, and the deterministic retrieval benchmark on every pull request.
@@ -56,6 +56,8 @@ The hosted deployment supports the following workflow:
 > The Render instance may require a cold start after an idle period.
 
 ## System architecture
+
+The diagram shows the supported distributed configuration. The hosted demo configuration last observed is documented separately under Deployment.
 
 ```mermaid
 flowchart LR
@@ -97,18 +99,22 @@ Upload
 
 | Area | Implementation | Engineering rationale |
 |---|---|---|
-| Retrieval | Production-default BM25 with acronym-aware expansion; opt-in FAISS/RRF experiments | Uses the measured 82.22% Hit@5 / 2.36 ms P50 trade-off instead of adding neural latency by default |
-| Grounding | Ranked context, source metadata, history limits, citation parsing | Keeps answers traceable and bounds prompt growth |
+| Retrieval | Production-default BM25 with acronym-aware expansion; opt-in FAISS/RRF experiments | Measured through the shared production retrieval function; neural methods remain historical candidate experiments |
+| Grounding | Page-preserving context, evidence IDs and plain file/page/line source references | Keeps answers traceable and bounds prompt growth |
 | Streaming | SSE token and action events, abort support, regeneration | Responsive UX without unnecessary WebSocket complexity |
 | Authentication | PBKDF2 password hashing, short-lived access tokens, rotating refresh tokens | Limits credential exposure and supports session revocation |
-| Persistence | PostgreSQL for relational state, B2 for artifacts, local fallback for development | Works locally while supporting stateless API replicas in production |
-| Background work | Redis + RQ indexing jobs with progress endpoints | Keeps document processing away from request latency |
+| Persistence | PostgreSQL for relational state, B2 for artifacts, local fallback for development | Adapter support; the hosted demo was last observed in local fallback mode (see below) |
+| Background work | Redis + RQ indexing jobs with progress endpoints | Optional distributed mode with immutable index revisions and per-user mutation locks |
 | Operations | Liveness/readiness probes, request IDs, timing headers, optional Sentry | Makes failure diagnosis and rollout checks observable |
 | Frontend | React 19, Zustand, Tailwind, shadcn/ui, Framer Motion | Responsive interaction model with accessible motion controls |
 
 ## Evaluation and quality assurance
 
-Latest production-method evaluation: **K = 5**, 10 version-pinned arXiv PDFs, 160 pages, 549 chunks, and 100 reviewed questions (90 answerable + 10 unanswerable). Latency is warm steady-state on a 6-thread CPU with models and indexes preloaded.
+The regression gate now calls the **same PDF parser, chunker and retrieval function as the application**: `load_pdf` → `split_documents` → `retrieve_from_store`. Configuration: **K = 5**, 10 pinned PDFs, 160 pages, 549 chunks (220 words, 40-word overlap), and 100 reviewed questions (90 answerable + 10 unanswerable).
+
+Measured locally on **2026-10-23**: **Hit@5 0.8222 (74/90)**, **MRR@5 0.5544**, **P50 3.53 ms / P95 6.43 ms**. This is uncached retrieval against a warm store, excluding HTTP, remote revision checks and LLM generation. The report records a corpus hash and the entry point used. All **58/58 verbatim annotated spans** found by retrieval survive production context packing (previously 40/58); CI now gates this retention separately. These measurements are not generated-answer accuracy. Abstention remains **0/10**, an explicitly open limitation.
+
+The following is the **historical algorithm-candidate comparison** from the separate neural benchmark. It was not rerun for this change, and its timings must not be treated as live chat latency or compared directly with the current production-path measurement above.
 
 | Method | Hit@5 | MRR | P50 latency | Production decision |
 |---|---:|---:|---:|---|
@@ -146,6 +152,9 @@ python -m evaluation.advanced_retrieval_eval --allow-model-download
 # Frontend lint, typecheck, and production build
 cd frontend
 npm run check
+
+# SSE parser and completion/error regression tests
+npm run test
 
 # Deterministic login → upload → chat → citation browser flow
 npm run e2e
@@ -274,8 +283,8 @@ NovaRAGChatBot/
 - **Production retrieval:** BM25 is backed by the committed 100-question quality/latency benchmark; neural retrieval remains opt-in until it exceeds that baseline under an agreed latency SLO.
 - **Streaming protocol:** SSE matches the one-way token-delivery requirement without introducing bidirectional WebSocket state.
 - **Environment-specific persistence:** JSON and in-process fallbacks support local development; PostgreSQL, Redis/RQ, and B2 support shared, multi-replica deployments.
-- **Data ownership boundaries:** B2 stores uploads and index artifacts, while PostgreSQL owns users, refresh sessions, conversations, and jobs.
-- **Evaluation scope:** deterministic proxies protect regression gates; provider-backed embedding and LLM evaluations remain opt-in because they transfer versioned test data and incur variable cost.
+- **Data ownership boundaries:** B2 stores uploads/index artifacts; PostgreSQL owns users, refresh sessions and conversations; Redis/RQ owns indexing jobs. Local demo mode uses JSON and in-process fallbacks.
+- **Evaluation scope:** the shared production BM25 path is the primary regression gate, with deterministic proxy ablations reported separately; provider-backed embedding and LLM evaluations remain opt-in because they transfer versioned test data and incur variable cost.
 
 ## Deployment
 
@@ -285,7 +294,11 @@ NovaRAGChatBot/
 | FastAPI service | Render | [novaaiagent-4.onrender.com](https://novaaiagent-4.onrender.com) |
 | API documentation | Swagger UI | [novaaiagent-4.onrender.com/docs](https://novaaiagent-4.onrender.com/docs) |
 
-Vercel rewrites same-origin `/api/*` requests to Render and applies browser security headers. Render serves the API; PostgreSQL persists relational state; Redis/RQ coordinates shared limits and indexing work; Backblaze B2 provides durable file and index storage across replicas.
+Vercel proxies same-origin `/api/*` requests to Render and applies browser security headers. **Last observed hosted configuration (2026-10-16):** JSON persistence, process-local rate limits and a local indexing thread pool. Readiness reported B2 and malware scanning as optional; that signal does not verify whether optional B2 credentials were present. Check `/health` and `/health/ready` for the current configuration.
+
+The repository also supports PostgreSQL, Redis/RQ and B2 when explicitly provisioned. `render.yaml` supplies web-service configuration; it does not create the worker or managed databases. See [the production runbook](docs/PRODUCTION_PERSISTENCE.md) for required migrations, provisioning and verification. These adapter capabilities are distinct from what has been observed on the hosted demo.
+
+Existing indexes require **Reindex** after upgrading to page/line-preserving ingestion. New citations display the uploaded filename, PDF page and extracted line range as plain text. Line numbers are 1-based within each extracted PDF page (or within extracted text for non-PDF files), including blank lines; they are not inferred from LLM output. Existing answers without saved evidence remain readable but cannot acquire locations retroactively.
 
 ## Project ownership
 
@@ -293,4 +306,4 @@ Developed and maintained by [Thazg](https://github.com/Thazg) as a portfolio pro
 
 ## License
 
-This project is currently shared as part of my portfolio. I haven't added a formal open-source license yet, so please contact me before reusing substantial parts of the repository.
+This project is licensed under the [MIT License](LICENSE).

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import hashlib
+import json
 import time
 from statistics import mean
 from typing import Any, Iterable
@@ -10,6 +12,9 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from rag.vector_store import HybridVectorStore, expand_query
+from rag.rag_chain import retrieve_from_store
+from rag.chunking import MAX_CHUNK_SIZE, CHUNK_OVERLAP
+from rag.prompts import build_context_and_evidence
 
 _CITATION_PATTERN = re.compile(r"\(Source:\s*([^)]+?)\s*\)", re.IGNORECASE)
 _WORD_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -171,11 +176,24 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         ).strip()
 
     mode_results: dict[str, list[dict[str, Any]]] = {
-        "bm25": [], "tfidf_faiss_proxy": [], "hybrid_rrf": [],
+        "production": [], "bm25": [], "tfidf_faiss_proxy": [], "hybrid_rrf": [],
     }
     candidate_k = min(max(k * 5, 25), len(corpus_ids))
     latencies: dict[str, list[float]] = {mode: [] for mode in mode_results}
+    packing_results = []
     for sample in dataset.get("queries", []):
+        started = time.perf_counter()
+        production_nodes = retrieve_from_store(sample["query"], bm25_store, top_k=k)
+        if sample.get("evidence"):
+            normalize = lambda text: " ".join(text.casefold().split())
+            annotated_span = normalize(sample["evidence"])
+            raw_present = any(annotated_span in normalize(node["content"]) for node in production_nodes)
+            _, packed = build_context_and_evidence(production_nodes, sample["query"])
+            packed_present = any(annotated_span in normalize(item["content"]) for item in packed)
+            packing_results.append({"id": sample.get("id"), "retrieved_span": raw_present,
+                                    "packed_span": packed_present})
+        production_ids = _deduplicate(node["metadata"]["evaluation_id"] for node in production_nodes)
+        latencies["production"].append((time.perf_counter() - started) * 1000)
         started = time.perf_counter()
         bm25_nodes = bm25_store.retrieve(sample["query"], top_k=candidate_k)
         bm25_ids = _deduplicate(
@@ -206,6 +224,7 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         latencies["hybrid_rrf"].append(bm25_latency + dense_latency + fusion_latency)
 
         for mode, retrieved_ids in {
+            "production": production_ids,
             "bm25": bm25_ids,
             "tfidf_faiss_proxy": dense_ids,
             "hybrid_rrf": hybrid_ids,
@@ -248,8 +267,8 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         )
         for item in citation_samples
     ]
-    primary = ablations["hybrid_rrf"]
-    hybrid_answerable = [item for item in mode_results["hybrid_rrf"] if item["answerable"]]
+    primary = ablations["production"]
+    hybrid_answerable = [item for item in mode_results["production"] if item["answerable"]]
     per_paper: dict[str, Any] = {}
     for paper_slug in sorted({item["paper_slug"] for item in hybrid_answerable}):
         paper_results = [item for item in hybrid_answerable if item["paper_slug"] == paper_slug]
@@ -260,9 +279,28 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
             "mrr": mean(item["reciprocal_rank"] for item in paper_results),
         }
     return {
+        "primary_method": "production_bm25",
+        "context_packing": {
+            "method": "verbatim annotated span, case/whitespace normalized; not answer accuracy",
+            "annotated_queries": len(packing_results),
+            "retrieved_spans": sum(item["retrieved_span"] for item in packing_results),
+            "packed_spans": sum(item["packed_span"] for item in packing_results),
+            "retention": (sum(item["retrieved_span"] and item["packed_span"] for item in packing_results)
+                          / sum(item["retrieved_span"] for item in packing_results)
+                          if any(item["retrieved_span"] for item in packing_results) else None),
+            "queries": packing_results,
+        },
+        "pipeline": {
+            "ingestion": "rag.load.load_pdf + rag.chunking.split_documents",
+            "retrieval": "rag.rag_chain.retrieve_from_store",
+            "chunk_size_words": MAX_CHUNK_SIZE,
+            "chunk_overlap_words": CHUNK_OVERLAP,
+            "corpus_sha256": hashlib.sha256(json.dumps(corpus, sort_keys=True).encode()).hexdigest(),
+            "latency_scope": "warm store; uncached production retrieval only; excludes HTTP and generation",
+        },
         "k": k,
         "corpus_count": len(corpus),
-        "query_count": len(mode_results["hybrid_rrf"]),
+        "query_count": len(mode_results["production"]),
         "hit_at_k": primary["hit_at_k"],
         "recall_at_k": primary["recall_at_k"],
         "mrr": primary["mrr"],
@@ -273,5 +311,5 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         "unanswerable_accuracy": primary["unanswerable_accuracy"],
         "ablations": ablations,
         "per_paper": per_paper,
-        "queries": mode_results["hybrid_rrf"],
+        "queries": mode_results["production"],
     }

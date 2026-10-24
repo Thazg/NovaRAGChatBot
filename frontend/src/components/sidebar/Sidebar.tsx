@@ -1,3 +1,4 @@
+import { formatAnswerWithSources } from '../../services/sources';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Copy, Download, Edit2, FolderOpen, LogOut, MessageSquare, Moon, MoreHorizontal, PanelLeft, PanelLeftClose, Pin, Search, Settings, Sparkles, SquarePen, Sun, Trash2, UserCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -103,6 +104,7 @@ const ConversationItem = ({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
+                aria-label={`Actions for ${conv.title}`}
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 shrink-0 rounded-[10px] text-muted-foreground opacity-100 transition-colors hover:text-foreground lg:opacity-0 lg:group-hover:opacity-100"
@@ -256,7 +258,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
   };
 
   const handleExport = (conv: Conversation) => {
-    const content = conv.messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+    const content = conv.messages.map(m => `${m.role.toUpperCase()}: ${formatAnswerWithSources(m.content, m.retrievedDocs || [])}`).join('\n\n');
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

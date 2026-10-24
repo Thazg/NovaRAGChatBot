@@ -129,7 +129,11 @@ def get_session_history(session_id: str, user_id: str) -> List[Dict[str, Any]]:
         return []
 
 
-def append_session_message(session_id: str, role: str, content: str, user_id: str) -> Dict[str, Any]:
+def append_session_message(
+    session_id: str, role: str, content: str, user_id: str,
+    *, evidence: list[dict] | None = None, interrupted: bool = False,
+) -> Dict[str, Any]:
+    extra = {"retrievedDocs": evidence or [], "interrupted": interrupted} if role == "assistant" else {}
     if DATABASE_ENABLED:
         from services.postgres_store import create_conversation as create_database_conversation, mutate_conversation
         create_database_conversation(user_id, conversation_id=session_id)
@@ -137,7 +141,7 @@ def append_session_message(session_id: str, role: str, content: str, user_id: st
         def append_message(record):
             now = int(time.time() * 1000)
             messages = list(record.messages or [])
-            messages.append({"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now})
+            messages.append({"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now, **extra})
             record.messages = messages
             if role == "user" and record.title == "New Chat":
                 record.title = _summary_title(content)
@@ -151,7 +155,7 @@ def append_session_message(session_id: str, role: str, content: str, user_id: st
             conversation = {"id": session_id, "title": "New Chat", "messages": [], "createdAt": now, "updatedAt": now, "pinned": False}
             data[session_id] = conversation
 
-        message = {"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now}
+        message = {"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now, **extra}
         conversation.setdefault("messages", []).append(message)
         conversation["updatedAt"] = now
 
@@ -162,17 +166,21 @@ def append_session_message(session_id: str, role: str, content: str, user_id: st
         return conversation
 
 
-def prepare_regeneration(session_id: str, user_id: str) -> None:
+def prepare_regeneration(session_id: str, user_id: str, question: str | None = None) -> None:
     """Remove the most recent assistant reply before regenerating it."""
+    def remove_reply(messages):
+        if not messages or messages[-1].get("role") != "assistant":
+            return
+        previous_user = next((message for message in reversed(messages[:-1]) if message.get("role") == "user"), None)
+        if question is None or (previous_user and previous_user.get("content") == question):
+            messages.pop()
+
     if DATABASE_ENABLED:
         from services.postgres_store import mutate_conversation
 
         def remove_last_assistant(record):
             messages = list(record.messages or [])
-            for index in range(len(messages) - 1, -1, -1):
-                if messages[index].get("role") == "assistant":
-                    del messages[index]
-                    break
+            remove_reply(messages)
             record.messages = messages
 
         try:
@@ -186,10 +194,7 @@ def prepare_regeneration(session_id: str, user_id: str) -> None:
         if not isinstance(conversation, dict):
             return
         messages = conversation.get("messages", [])
-        for index in range(len(messages) - 1, -1, -1):
-            if messages[index].get("role") == "assistant":
-                del messages[index]
-                break
+        remove_reply(messages)
         conversation["updatedAt"] = int(time.time() * 1000)
         _save_store(data, user_id)
 

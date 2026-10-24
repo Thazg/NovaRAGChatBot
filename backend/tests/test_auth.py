@@ -26,6 +26,7 @@ def isolated_users(monkeypatch):
     remote_storage = ModuleType("services.remote_storage")
     remote_storage.download_file = lambda *_args, **_kwargs: False
     remote_storage.upload_file = lambda *_args, **_kwargs: False
+    remote_storage.list_file_info = lambda *_args, **_kwargs: []
     monkeypatch.setitem(sys.modules, "services.remote_storage", remote_storage)
     yield
     users_file.unlink(missing_ok=True)

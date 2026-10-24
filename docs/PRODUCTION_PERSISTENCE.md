@@ -60,10 +60,15 @@ GET /documents/jobs/{job_id}
 ```
 
 Only the owning user can read a job. Public error responses do not expose worker tracebacks. RQ results live for one hour and failures for one day; local job metadata is purged after one day.
-Index mutations are serialized per user with a Redis lock (or a local lock in
-development), preventing concurrent workers from overwriting the same retrieval
-artifacts. BM25 is the production default; FAISS artifacts exist only when the
-hybrid retrieval mode is explicitly enabled.
+Index add/delete/reindex operations share a per-user mutation lock (Redis in distributed mode, an in-process lock locally). RQ jobs time out after 900 seconds; the Redis lease lasts 960 seconds. Local mode supports a single API process; use Redis/RQ and shared storage for multiple processes/hosts.
+
+Every write creates an immutable `index/<user>/revisions/<revision>/` snapshot. Each artifact has a SHA-256 in `current.json`. The writer uploads all artifacts before publishing the pointer, then atomically switches the local pointer. A failed upload/publication fails the job. API readers check the current revision **before query-cache lookup**, hydrate and verify the entire snapshot, then replace their cached store. Writers reload the latest snapshot under the same mutation lock, and a stale store cannot overwrite a newer revision.
+
+Deletion first publishes a permanent storage-ID barrier in `index/<user>/deleted_documents.json`, then removes uploads/metadata and publishes the cleaned index. Readers check both the snapshot revision and deletion set before using cached retrieval. If cleanup or index publication fails, the document stays excluded from retrieval, summaries, listing and future indexing; repeating DELETE finishes cleanup even after the physical file is gone. Clear-all retains the same barriers and publishes an empty revision. A deletion whose barrier could not be persisted fails before removing an upload. Barriers are retained because storage IDs are never reused.
+
+Distributed reindex hydrates remote uploads and excludes deletion barriers. It **never deletes unmatched local files**: those may be the only originals from local mode. If any non-deleted local document is missing remotely, reindex fails with an explicit migration instruction and leaves originals/index publication untouched. Document listing always merges local and remote IDs, even when a replica already caches some uploads, and filters deleted IDs. Storage-read failures in distributed mode fail closed rather than becoming an empty knowledge base. BM25 is the default; optional dense artifacts use the same snapshot lifecycle.
+
+Snapshot artifacts from previous revisions are retained to protect in-flight readers. Garbage collection is not automated yet: schedule retention cleanup only after old readers/jobs have drained. Account deletion removes the user's index prefix. Do not delete `current.json` as a substitute for publishing an empty index.
 
 When `REDIS_URL` is configured, uploads must be durably copied to B2 before enqueueing because a separate worker cannot rely on the API container's ephemeral filesystem. Configure the B2 variables in both services.
 
@@ -72,8 +77,8 @@ When `REDIS_URL` is configured, uploads must be durably copied to B2 before enqu
 1. Provision PostgreSQL, Redis, B2, and a worker service in staging.
 2. Run `alembic upgrade head`.
 3. Run the JSON importer with `--dry-run`, then without it.
-4. Start the RQ worker and confirm it listens on `nova-index`.
-5. Deploy the API with `DATABASE_URL` and `REDIS_URL`.
+4. If moving from local uploads, stop new writes, drain old indexing jobs, and back up the local uploads/index directories. With B2 and Redis configured, run `python -m services.migrate_uploads --user-id <account-id>` from `backend` on the host holding the originals, once per account. The command skips deleted IDs, merges display-name metadata, verifies existing objects have identical bytes, and never removes local originals. A failure can be retried; conflicting IDs fail without overwriting either copy. Keep backups until verification finishes.
+5. Start the RQ worker, confirm it listens on `nova-index`, then deploy the API with `DATABASE_URL` and `REDIS_URL`. Queue a full reindex per migrated account before resuming traffic.
 6. Call `/health/ready?refresh=true`; it must report database and Redis ready with at least one indexing worker.
 7. Upload a real document, poll the job through `finished`, and verify retrieval/citations.
 8. Keep JSON/B2 snapshots until user counts, conversation counts, and sampled message checksums match.
@@ -99,3 +104,17 @@ and the worker explicitly in Render, then follow the deployment sequence above.
 If the selected plan supports a pre-deploy command, use
 `cd backend && alembic upgrade head`; otherwise run the migration from a one-off
 shell before enabling `DATABASE_URL`.
+
+## Upgrade and verification for the portfolio fixes
+
+Rebuild existing indexes after this upgrade. Legacy indexes remain readable, but only reindexing adds page/line numbers and the shared 220-word / 40-word ingestion policy. Old conversation answers cannot gain evidence retroactively. New answers persist the evidence sent to the model. Citations show the uploaded filename, page and extracted line range as plain text, without a link or PDF-serving endpoint. PDF line numbers count the extracted lines on each page, including blank lines; whitespace/ligature normalization and dehyphenation retain those source offsets. Non-PDF text uses extracted-text line numbers without inventing a page. Context truncation also narrows the cited line range.
+
+Default prompt budgets are now `MAX_CHUNK_CHARS=2400` and `MAX_CONTEXT_CHARS=10000` to preserve typical top-5, 220-word passages. Ollama defaults to `NUM_CTX=8192`. Remove older overrides or update them explicitly during deployment. Smaller budgets select a contiguous query-relevant window and cite only overlapping extracted lines; they may retain less evidence. Character budgets are not exact model token counts, especially for multilingual text. The offline gate measures verbatim annotated evidence retention after production packing, separately from page Hit@5 and generated-answer accuracy.
+
+Copy, native Share and conversation TXT export use the same plain filename/page/line formatter as displayed answers. Structured account JSON exports retain original message IDs plus their evidence metadata for data portability.
+
+The SSE client requires `[DONE]` and never automatically replays a failed chat POST. The server saves a completed answer before emitting `[DONE]`; interrupted streams are recorded as incomplete. The UI offers explicit regeneration, which keeps the existing user turn and clears only that question's assistant reply.
+
+Local regression tests include separate Python processes and separate local index directories against a filesystem object-store adapter, fault-injected upload/read failures, stale-writer rejection and empty-index publication. This verifies the snapshot protocol, **not a real Redis/RQ/B2 deployment**. Before enabling distributed mode, complete the staging workflow above with real infrastructure and exercise upload, second upload from another worker, deletion and restart.
+
+Last hosted configuration observed during the 2026-10-16 audit was local JSON / process memory / thread-pool mode. These local changes have not been deployed. The Blueprint still requires explicit worker/database provisioning.

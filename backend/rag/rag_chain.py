@@ -1,6 +1,6 @@
 import re
 
-from rag.vector_store import load_vector_store, expand_query
+from rag.vector_store import load_vector_store, index_revision
 from config.settings import settings
 from rag.cache import SimpleCache
 
@@ -14,6 +14,13 @@ def _ensure_user_id(user_id: str) -> str:
 
 def get_retriever(user_id: str = ""):
     uid = _ensure_user_id(user_id)
+    current_revision = index_revision(uid)
+    from services.document_lifecycle import deleted_documents
+    deletion_revision = tuple(sorted(deleted_documents(uid)))
+    cached = _vector_store_instances.get(uid)
+    if cached is not None and (getattr(cached, "revision", None) != current_revision
+                              or getattr(cached, "deletion_revision", ()) != deletion_revision):
+        _vector_store_instances.pop(uid, None)
     if uid not in _vector_store_instances:
         try:
             _vector_store_instances[uid] = load_vector_store(uid)
@@ -35,38 +42,6 @@ def unload_vector_store(user_id: str = "") -> None:
     uid = _ensure_user_id(user_id)
     _vector_store_instances.pop(uid, None)
     retrieval_cache.clear()
-
-
-_STOP_WORDS = frozenset({
-    "what", "how", "why", "when", "where", "which", "who", "whom",
-    "this", "that", "these", "those", "the", "a", "an", "is", "are",
-    "was", "were", "be", "been", "being", "have", "has", "had",
-    "do", "does", "did", "will", "would", "could", "should", "may",
-    "might", "can", "shall", "not", "no", "nor", "but", "or", "and",
-    "for", "to", "of", "in", "on", "at", "by", "with", "from", "into",
-    "about", "like", "than", "then", "also", "very", "just", "its",
-    "nova", "project",
-})
-
-
-def _stem_token(token: str) -> str:
-    irregular = {
-        "recovery": "recover", "cancellation": "cancel", "lived": "live",
-        "stored": "store", "stores": "store", "reported": "report",
-    }
-    if token in irregular:
-        return irregular[token]
-    if token.endswith("ies") and len(token) > 4:
-        return token[:-3] + "y"
-    for suffix in ("ingly", "edly", "ments", "ment", "ation", "tion", "ing", "ed", "es", "ly", "s"):
-        if token.endswith(suffix) and len(token) - len(suffix) >= 4:
-            return token[:-len(suffix)]
-    return token
-
-
-def _extract_key_terms(query: str) -> set:
-    words = re.findall(r"[a-zA-Z]\w+", query.lower())
-    return {_stem_token(w) for w in words if len(w) > 3 and w not in _STOP_WORDS}
 
 
 def _is_document_overview_query(query: str) -> bool:
@@ -96,120 +71,39 @@ def _representative_nodes(documents: list[dict], top_k: int) -> list[dict]:
     return nodes
 
 
-def retrieve_context(
-    query: str,
-    user_id: str = "",
-    top_k: int | None = None,
-    allow_broad: bool = True,
-    document_name: str = "",
+def retrieve_from_store(
+    query: str, retriever, top_k: int | None = None,
+    allow_broad: bool = True, document_name: str = "",
 ):
-    normalized_query = (query or "").strip()
-    normalized_document_name = (document_name or "").strip()
-    uid = _ensure_user_id(user_id)
-    cache_key = f"{uid}::{normalized_document_name.casefold()}::{normalized_query.lower()}::{top_k or settings.TOP_K}"
-    cached = retrieval_cache.get(cache_key)
-    if cached is not None:
-        return cached
+    """The production query path, also used by offline regression evaluation."""
+    count = max(1, min(top_k or settings.TOP_K, 15))
+    scope = document_name.strip()
+    nodes = retriever.retrieve(query.strip(), top_k=count, file_name=scope or None)
+    if not nodes and allow_broad and _is_document_overview_query(query):
+        documents = [document for document in retriever.documents if not scope or scope.casefold() in {
+            str(document.get("metadata", {}).get("file_name", "")).casefold(),
+            str(document.get("metadata", {}).get("storage_name", "")).casefold(),
+        }]
+        nodes = _representative_nodes(documents, count)
+    return nodes
 
+
+def retrieve_context(
+    query: str, user_id: str = "", top_k: int | None = None,
+    allow_broad: bool = True, document_name: str = "",
+):
+    uid = _ensure_user_id(user_id)
+    # Resolve the current revision before looking up a query result: an old
+    # retrieval-cache hit must not bypass cross-process invalidation.
     retriever = get_retriever(uid)
     if retriever is None:
         return []
-
-    top_k_val = max(3, min(top_k or settings.TOP_K, 15))
-    is_overview_query = allow_broad and _is_document_overview_query(normalized_query)
-    scoped_documents = [
-        document
-        for document in getattr(retriever, "documents", [])
-        if not normalized_document_name
-        or normalized_document_name.casefold() in {
-            str(document.get("metadata", {}).get("file_name", "")).strip().casefold(),
-            str(document.get("metadata", {}).get("storage_name", "")).strip().casefold(),
-        }
-    ]
-    nodes = retriever.retrieve(
-        normalized_query,
-        top_k=top_k_val,
-        file_name=normalized_document_name or None,
-    )
-
-    if not nodes and normalized_query != query.strip():
-        nodes = retriever.retrieve(
-            query.strip(),
-            top_k=top_k_val,
-            file_name=normalized_document_name or None,
-        )
-
-    if not nodes:
-        nodes = retriever.retrieve(
-            normalized_query,
-            top_k=top_k_val,
-            min_score=0.0,
-            file_name=normalized_document_name or None,
-        )
-
-    overview_fallback = False
-    if not nodes and is_overview_query:
-        nodes = _representative_nodes(scoped_documents, top_k_val)
-        overview_fallback = bool(nodes)
-
-    expanded_query = expand_query(normalized_query)
-    query_terms = _extract_key_terms(expanded_query)
-    if query_terms and getattr(retriever, "documents", None):
-        document_token_sets = [
-            {_stem_token(token) for token in re.findall(r"[a-zA-Z]\w+", document.get("content", "").lower())}
-            for document in retriever.documents
-        ]
-        max_document_frequency = max(1, int(len(document_token_sets) * 0.4))
-        informative_terms = {
-            term for term in query_terms
-            if sum(term in tokens for tokens in document_token_sets) <= max_document_frequency
-        }
-        if informative_terms:
-            query_terms = informative_terms
-
-    if allow_broad and nodes and query_terms:
-        found_terms = set()
-        for node in nodes:
-            content_terms = {
-                _stem_token(token)
-                for token in re.findall(r"[a-zA-Z]\w+", node.get("content", "").lower())
-            }
-            for t in query_terms:
-                if t in content_terms:
-                    found_terms.add(t)
-        avg_score = sum(n.get("_score", 0) for n in nodes) / len(nodes) if nodes else 0
-        if len(found_terms) < max(1, len(query_terms) // 2) and avg_score < 0.3:
-            broad_nodes = retriever.retrieve(
-                normalized_query,
-                top_k=settings.BROAD_TOP_K,
-                min_score=settings.MIN_SIMILARITY_SCORE,
-                file_name=normalized_document_name or None,
-            )
-            if not broad_nodes:
-                broad_nodes = retriever.retrieve(
-                    normalized_query,
-                    top_k=settings.BROAD_TOP_K,
-                    min_score=0.0,
-                    file_name=normalized_document_name or None,
-                )
-            if broad_nodes:
-                broad_avg = sum(n.get("_score", 0) for n in broad_nodes) / len(broad_nodes)
-                if broad_avg > avg_score:
-                    nodes = broad_nodes
-
-    if nodes and query_terms and not overview_fallback:
-        def term_score(n):
-            content_terms = {
-                _stem_token(token)
-                for token in re.findall(r"[a-zA-Z]\w+", n.get("content", "").lower())
-            }
-            return sum(1 for t in query_terms if t in content_terms)
-        nodes.sort(key=lambda n: (term_score(n), n.get("_score", 0)), reverse=True)
-        nodes = [n for n in nodes if term_score(n) >= 1]
-
-    if not nodes and is_overview_query:
-        nodes = _representative_nodes(scoped_documents, top_k_val)
-
+    cache_key = repr((uid, getattr(retriever, "revision", ""), getattr(retriever, "deletion_revision", ()), document_name.strip().casefold(),
+                      query.strip(), top_k or settings.TOP_K, allow_broad))
+    cached = retrieval_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    nodes = retrieve_from_store(query, retriever, top_k, allow_broad, document_name)
     retrieval_cache.set(cache_key, nodes)
     return nodes
 

@@ -44,7 +44,7 @@ export const Layout = () => {
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
                 <SheetTrigger asChild>
-                  <button className="flex items-center gap-1.5 h-8 px-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+                  <button aria-label="Open conversation menu" className="flex items-center gap-1.5 h-8 px-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
                     <Menu className="h-4 w-4" />
                     <span className="text-xs font-medium hidden">Menu</span>
                   </button>

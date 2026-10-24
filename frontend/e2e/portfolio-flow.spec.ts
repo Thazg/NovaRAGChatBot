@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 import { expect, test, type Page, type Route } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -26,6 +27,8 @@ async function mockPortfolioApi(
 ) {
   let documents: Array<Record<string, unknown>> = [];
   let streamAttempts = 0;
+  let signedIn = Boolean(options.activeSession);
+  let savedConversation: Record<string, unknown> | null = null;
   let refreshAttempts = 0;
   let lastChatRequest: Record<string, unknown> | null = null;
   let preferences = {
@@ -49,6 +52,7 @@ async function mockPortfolioApi(
     }
 
     if (method === 'POST' && endpoint === '/auth/login') {
+      signedIn = true;
       await fulfillJson(route, {
         access_token: 'portfolio-e2e-access-token-that-is-memory-only',
         user_id: '6ab4ef03-50ba-4782-95db-ecc55d64c53d',
@@ -62,7 +66,7 @@ async function mockPortfolioApi(
         await route.abort('connectionfailed');
         return;
       }
-      if (options.activeSession) {
+      if (signedIn) {
         await fulfillJson(route, {
           access_token: 'restored-e2e-access-token-that-is-memory-only',
           user_id: '6ab4ef03-50ba-4782-95db-ecc55d64c53d',
@@ -123,19 +127,20 @@ async function mockPortfolioApi(
       return;
     }
     if (method === 'GET' && endpoint === '/conversation') {
-      await fulfillJson(route, []);
+      await fulfillJson(route, savedConversation ? [savedConversation] : []);
       return;
     }
     if (method === 'POST' && endpoint === '/conversation/new') {
       const body = request.postDataJSON();
-      await fulfillJson(route, {
+      savedConversation = {
         id: body.id,
         title: body.title,
         messages: body.messages,
         pinned: body.pinned,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-      });
+      };
+      await fulfillJson(route, savedConversation);
       return;
     }
     if (method === 'POST' && endpoint === '/chat/stream') {
@@ -145,11 +150,21 @@ async function mockPortfolioApi(
         await route.abort('connectionfailed');
         return;
       }
+      const evidence = [{ id: 'E1', document_id: 'portfolio.txt', file_name: 'portfolio.txt', page: null, line_start: 1, line_end: 2, chunk_index: 1,
+        content: 'Nova combines BM25 lexical retrieval with FAISS vectors. Reciprocal rank fusion merges both rankings.' }];
       const events = [
+        { evidence },
         { token: 'Nova combines BM25 lexical retrieval with FAISS vectors. ' },
         { token: 'Reciprocal rank fusion merges both rankings. ' },
-        { token: '(Source: portfolio.txt)' },
+        { token: '[E1]' },
       ];
+      savedConversation = {
+        ...(savedConversation || {}), id: lastChatRequest.session_id, title: 'Evidence question',
+        createdAt: Date.now(), updatedAt: Date.now(),
+        messages: [{ id: 'user-1', role: 'user', content: lastChatRequest.question, createdAt: Date.now() },
+          { id: 'answer-1', role: 'assistant', content: 'Nova combines BM25 lexical retrieval with FAISS vectors. Reciprocal rank fusion merges both rankings. [E1]',
+            createdAt: Date.now(), retrievedDocs: evidence }],
+      };
       await route.fulfill({
         status: 200,
         contentType: 'text/event-stream',
@@ -166,6 +181,7 @@ async function mockPortfolioApi(
     refreshAttempts: () => refreshAttempts,
     lastChatRequest: () => lastChatRequest,
     preferences: () => preferences,
+    streamAttempts: () => streamAttempts,
   };
 }
 
@@ -221,6 +237,11 @@ test('logs in, uploads a document, chats, and receives a citation', async ({ pag
   await page.getByRole('button', { name: 'Send message' }).click();
 
   await expect(page.getByText(/Reciprocal rank fusion merges both rankings/)).toBeVisible();
+  await expect(page.getByText(/Source: portfolio\.txt/)).toBeVisible();
+  await expect(page.getByText(/Source: portfolio\.txt/)).toBeVisible();
+  await expect(page.getByRole('link', { name: /portfolio\.txt/ })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByLabel('Message input')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Source: portfolio\.txt/)).toBeVisible();
   expect(consoleErrors).toEqual([]);
   expect(unexpectedHttpErrors).toEqual([]);
@@ -286,8 +307,8 @@ test('login visual regression', async ({ page }) => {
   });
 });
 
-test('reconnects when SSE disconnects before the first token', async ({ page }) => {
-  await mockPortfolioApi(page, { disconnectFirstStream: true });
+test('requires explicit regeneration when a POST fails before the first token', async ({ page }) => {
+  const apiMock = await mockPortfolioApi(page, { disconnectFirstStream: true });
   await page.goto('/');
   await page.getByPlaceholder('Enter username').fill('portfolio.user');
   await page.getByPlaceholder('Enter password').fill('strong-password');
@@ -301,10 +322,15 @@ test('reconnects when SSE disconnects before the first token', async ({ page }) 
   const messageInput = page.getByLabel('Message input');
   await messageInput.fill('How is retrieval combined?');
   await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('Response interrupted. This answer may be incomplete.')).toBeVisible();
+  expect(apiMock.streamAttempts()).toBe(1);
+  await page.getByRole('button', { name: 'Regenerate answer', exact: true }).click();
   await expect(page.getByText(/Source: portfolio\.txt/)).toBeVisible();
+  expect(apiMock.streamAttempts()).toBe(2);
+  expect(apiMock.lastChatRequest()).toMatchObject({ regenerate: true });
 });
 
-test('reconnects mid-stream without duplicating rendered tokens', async ({ page }) => {
+test('keeps a broken stream incomplete until the user regenerates', async ({ page }) => {
   await mockPortfolioApi(page);
   await page.goto('/');
   await page.getByPlaceholder('Enter username').fill('portfolio.user');
@@ -349,6 +375,9 @@ test('reconnects mid-stream without duplicating rendered tokens', async ({ page 
   await messageInput.fill('How is retrieval combined?');
   await page.getByRole('button', { name: 'Send message' }).click();
 
+  await expect(page.getByText('Response interrupted. This answer may be incomplete.')).toBeVisible();
+  await expect(page.getByText(/Reciprocal rank fusion merges both rankings/)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Regenerate answer', exact: true }).click();
   const answer = page.getByText(/Nova combines BM25 lexical retrieval/).last();
   await expect(answer).toContainText('Reciprocal rank fusion merges both rankings.');
   await expect(answer).toContainText('(Source: portfolio.txt)');
@@ -421,4 +450,48 @@ test('keeps the mobile workspace and settings navigation usable', async ({ page 
 
   const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(hasHorizontalOverflow).toBe(false);
+});
+
+test('shows plain page and line sources on mobile without document links', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (text: string) => { sessionStorage.setItem('test-clipboard', text); },
+    } });
+    Object.defineProperty(navigator, 'share', { configurable: true, value:
+      async (data: ShareData) => { sessionStorage.setItem('test-shared', data.text || ''); },
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockPortfolioApi(page, { activeSession: true });
+  const evidence = [{ id: 'E1', document_id: 'stored-paper.pdf', file_name: 'paper.pdf', page: 2, line_start: 6, line_end: 9, chunk_index: 1,
+    content: 'Beta evidence on the second page.' }];
+  await page.route('**/chat/stream', async route => {
+    await route.fulfill({ status: 200, contentType: 'text/event-stream', body:
+      `data: ${JSON.stringify({ evidence })}\n\ndata: ${JSON.stringify({ token: 'Beta evidence is on page two [E1].' })}\n\ndata: [DONE]\n\n` });
+  });
+  await page.goto('/');
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Upload a document' }).click();
+  await (await chooserPromise).setFiles(path.join(process.cwd(), 'e2e/fixtures/portfolio.txt'));
+  await page.getByLabel('Message input').fill('Where is beta evidence?');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('Beta evidence is on page two (Source: paper.pdf · Page 2 · Lines 6–9).')).toBeVisible();
+  await expect(page.getByRole('link', { name: /paper\.pdf/ })).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const expected = 'Beta evidence is on page two (Source: paper.pdf · Page 2 · Lines 6–9).';
+  await page.getByRole('button', { name: 'Copy', exact: true }).click();
+  expect(await page.evaluate(() => sessionStorage.getItem('test-clipboard'))).toBe(expected);
+  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  expect(await page.evaluate(() => sessionStorage.getItem('test-shared'))).toBe(expected);
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(accessibility.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')).toEqual([]);
+  await page.screenshot({ path: 'test-results/page-line-source-mobile.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: /^Actions for / }).click();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
+  const download = await downloadPromise;
+  const exported = await readFile((await download.path())!, 'utf-8');
+  expect(exported).toContain(`ASSISTANT: ${expected}`);
+  expect(exported).not.toContain('[E1]');
 });

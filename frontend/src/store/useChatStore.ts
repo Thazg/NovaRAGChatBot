@@ -74,6 +74,7 @@ interface ChatState {
   setIsStreaming: (isStreaming: boolean) => void;
   setIsLoading: (isLoading: boolean) => void;
   updateMessageContent: (conversationId: string, messageId: string, content: string) => void;
+  updateMessage: (conversationId: string, messageId: string, changes: Partial<Pick<Message, 'retrievedDocs' | 'interrupted'>>) => void;
   setMessageFeedback: (conversationId: string, messageId: string, feedback: 'like' | 'dislike' | null) => void;
   regenerateLastMessage: (conversationId: string) => void;
 }
@@ -129,6 +130,8 @@ export const useChatStore = create<ChatState>()(
               role: m.role || 'user',
               content: m.content || '',
               createdAt: m.createdAt || Date.now(),
+              retrievedDocs: m.retrievedDocs,
+              interrupted: m.interrupted,
             })),
             createdAt: c.createdAt || Date.now(),
             updatedAt: c.updatedAt || Date.now(),
@@ -160,6 +163,8 @@ export const useChatStore = create<ChatState>()(
             role: m.role || 'user',
             content: m.content || '',
             createdAt: m.createdAt || Date.now(),
+            retrievedDocs: m.retrievedDocs,
+            interrupted: m.interrupted,
           })),
           createdAt: c.createdAt || Date.now(),
           updatedAt: c.updatedAt || Date.now(),
@@ -374,6 +379,14 @@ export const useChatStore = create<ChatState>()(
             return c;
           })
         }));
+      },
+
+      updateMessage: (conversationId, messageId, changes) => {
+        set(state => ({ conversations: state.conversations.map(conversation =>
+          conversation.id === conversationId
+            ? { ...conversation, messages: conversation.messages.map(message =>
+                message.id === messageId ? { ...message, ...changes } : message) }
+            : conversation) }));
       },
 
       setMessageFeedback: (conversationId: string, messageId: string, feedback: 'like' | 'dislike' | null) => {

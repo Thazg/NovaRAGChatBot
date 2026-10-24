@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
@@ -51,7 +52,14 @@ def file_metadata(file_path: Path) -> Dict[str, Any]:
 
 
 def add_metadata(text: str, file_path: Path) -> Document:
-    return Document(text=clean_text(text), metadata=file_metadata(file_path))
+    text = clean_text(text)
+    spans = []
+    offset = 0
+    for number, line in enumerate(text.splitlines(keepends=True), start=1):
+        if line.strip():
+            spans.append({"line": number, "start": offset, "end": offset + len(line.rstrip("\r\n"))})
+        offset += len(line)
+    return Document(text=text, metadata={**file_metadata(file_path), "_line_spans": spans})
 
 
 def load_text(file_path: Path) -> List[Document]:
@@ -63,13 +71,42 @@ def load_pdf(file_path: Path) -> List[Document]:
     if not PDF_AVAILABLE:
         return []
     reader = PdfReader(str(file_path))
-    pages = []
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        if text.strip():
-            pages.append(text.strip())
+    documents = []
+    for page_number, page in enumerate(reader.pages, start=1):
+        text, spans = normalize_pdf_with_lines(page.extract_text() or "")
+        if text:
+            document = add_metadata(text, file_path)
+            document.metadata["page"] = page_number
+            document.metadata["_line_spans"] = spans
+            documents.append(document)
+    return documents
 
-    return [add_metadata("\n\n".join(pages), file_path)]
+
+def normalize_pdf_text(text: str) -> str:
+    return normalize_pdf_with_lines(text)[0]
+
+
+def normalize_pdf_with_lines(text: str) -> tuple[str, list[dict]]:
+    """Keep 1-based extracted line numbers while normalizing retrieval text."""
+    text = text.replace("\u00ad", "")
+    for ligature, replacement in {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl"}.items():
+        text = text.replace(ligature, replacement)
+    normalized = ""
+    spans = []
+    for number, raw_line in enumerate(text.splitlines(), start=1):
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        if re.search(r"\w-$", normalized) and re.match(r"\w", line):
+            normalized = normalized[:-1]
+            if spans:
+                spans[-1]["end"] -= 1
+        elif normalized:
+            normalized += " "
+        start = len(normalized)
+        normalized += line
+        spans.append({"line": number, "start": start, "end": len(normalized)})
+    return normalized, spans
 
 
 def load_notebook(file_path: Path) -> List[Document]:
