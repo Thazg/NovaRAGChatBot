@@ -1,10 +1,11 @@
 {
+  "evaluation_version": 2,
   "primary_method": "production_bm25",
   "context_packing": {
-    "method": "verbatim annotated span, case/whitespace normalized; not answer accuracy",
+    "method": "annotated character span, case/whitespace insensitive; not token boundaries or answer accuracy",
     "annotated_queries": 90,
-    "retrieved_spans": 58,
-    "packed_spans": 58,
+    "retrieved_spans": 57,
+    "packed_spans": 57,
     "retention": 1.0,
     "queries": [
       {
@@ -39,8 +40,8 @@
       },
       {
         "id": "rag-007",
-        "retrieved_span": true,
-        "packed_span": true
+        "retrieved_span": false,
+        "packed_span": false
       },
       {
         "id": "rag-008",
@@ -109,8 +110,8 @@
       },
       {
         "id": "realm-003",
-        "retrieved_span": false,
-        "packed_span": false
+        "retrieved_span": true,
+        "packed_span": true
       },
       {
         "id": "realm-004",
@@ -164,8 +165,8 @@
       },
       {
         "id": "colbert-005",
-        "retrieved_span": false,
-        "packed_span": false
+        "retrieved_span": true,
+        "packed_span": true
       },
       {
         "id": "colbert-006",
@@ -214,8 +215,8 @@
       },
       {
         "id": "hyde-006",
-        "retrieved_span": false,
-        "packed_span": false
+        "retrieved_span": true,
+        "packed_span": true
       },
       {
         "id": "hyde-007",
@@ -309,8 +310,8 @@
       },
       {
         "id": "self-rag-007",
-        "retrieved_span": true,
-        "packed_span": true
+        "retrieved_span": false,
+        "packed_span": false
       },
       {
         "id": "self-rag-008",
@@ -319,8 +320,8 @@
       },
       {
         "id": "self-rag-009",
-        "retrieved_span": true,
-        "packed_span": true
+        "retrieved_span": false,
+        "packed_span": false
       },
       {
         "id": "lost-middle-001",
@@ -369,8 +370,8 @@
       },
       {
         "id": "crag-001",
-        "retrieved_span": true,
-        "packed_span": true
+        "retrieved_span": false,
+        "packed_span": false
       },
       {
         "id": "crag-002",
@@ -457,121 +458,126 @@
         "retrieved_span": false,
         "packed_span": false
       }
-    ]
+    ],
+    "latency_ms_p50": 0.13795799998206348,
+    "latency_ms_p95": 0.2651391001109004,
+    "latency_scope": "packing only for annotated queries; excludes annotation matching and retrieval"
   },
   "pipeline": {
     "ingestion": "rag.load.load_pdf + rag.chunking.split_documents",
     "retrieval": "rag.rag_chain.retrieve_from_store",
     "chunk_size_words": 220,
     "chunk_overlap_words": 40,
-    "corpus_sha256": "98c9bcce4acdf911e86a49c41cbd330d8a8c750d286abb6f39d26969852e2e12",
-    "latency_scope": "warm store; uncached production retrieval only; excludes HTTP and generation"
+    "pypdf_version": "6.21.2",
+    "fonttools_version": "4.67.0",
+    "corpus_sha256": "0cf02375395db104d9bf256cbe019d0935887ead198b3a2e6463b60c87fb6201",
+    "latency_scope": "warm store; uncached production retrieval only; excludes packing, annotation matching, HTTP and generation"
   },
   "k": 5,
-  "corpus_count": 549,
+  "corpus_count": 555,
   "query_count": 100,
-  "hit_at_k": 0.8222222222222222,
-  "recall_at_k": 0.8222222222222222,
-  "mrr": 0.5544444444444444,
+  "hit_at_k": 0.8333333333333334,
+  "recall_at_k": 0.8333333333333334,
+  "mrr": 0.554074074074074,
   "citation_precision": 1.0,
   "citation_recall": 1.0,
-  "faithfulness": 0.8346017375265741,
+  "faithfulness": 0.8390461819710185,
   "faithfulness_method": "lexical_evidence_support_proxy",
   "unanswerable_accuracy": 0,
   "ablations": {
     "production": {
-      "hit_at_k": 0.8222222222222222,
-      "recall_at_k": 0.8222222222222222,
-      "mrr": 0.5544444444444444,
+      "hit_at_k": 0.8333333333333334,
+      "recall_at_k": 0.8333333333333334,
+      "mrr": 0.554074074074074,
       "unanswerable_accuracy": 0,
-      "latency_ms_p50": 3.5337499994057,
-      "latency_ms_p95": 6.431750000592729
+      "latency_ms_p50": 5.797963500072001,
+      "latency_ms_p95": 10.186081700010162
     },
     "bm25": {
-      "hit_at_k": 0.8,
-      "recall_at_k": 0.8,
-      "mrr": 0.571041366041366,
+      "hit_at_k": 0.8111111111111111,
+      "recall_at_k": 0.8111111111111111,
+      "mrr": 0.5645811287477954,
       "unanswerable_accuracy": 0,
-      "latency_ms_p50": 230.45709999996689,
-      "latency_ms_p95": 296.8971950007017
+      "latency_ms_p50": 6.31919149998339,
+      "latency_ms_p95": 10.942388599960394
     },
     "tfidf_faiss_proxy": {
       "hit_at_k": 0.7555555555555555,
-      "recall_at_k": 0.7444444444444445,
-      "mrr": 0.5688026325526325,
+      "recall_at_k": 0.75,
+      "mrr": 0.5680537518037518,
       "unanswerable_accuracy": 0,
-      "latency_ms_p50": 237.13135000025432,
-      "latency_ms_p95": 287.3912000000473
+      "latency_ms_p50": 18.106529499959834,
+      "latency_ms_p95": 30.0325946500152
     },
     "hybrid_rrf": {
-      "hit_at_k": 0.7888888888888889,
-      "recall_at_k": 0.7888888888888889,
-      "mrr": 0.5810285393618727,
+      "hit_at_k": 0.8111111111111111,
+      "recall_at_k": 0.8111111111111111,
+      "mrr": 0.583699695366362,
       "unanswerable_accuracy": 0,
-      "latency_ms_p50": 467.3142500000722,
-      "latency_ms_p95": 567.605210001193
+      "latency_ms_p50": 24.6057804999964,
+      "latency_ms_p95": 41.80517264990158
     }
   },
   "per_paper": {
     "colbert": {
       "query_count": 9,
-      "hit_at_k": 0.7777777777777778,
-      "recall_at_k": 0.7777777777777778,
-      "mrr": 0.387037037037037
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.4148148148148148
     },
     "crag": {
       "query_count": 9,
-      "hit_at_k": 0.7777777777777778,
-      "recall_at_k": 0.7777777777777778,
-      "mrr": 0.4666666666666667
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.4981481481481482
     },
     "dpr": {
       "query_count": 9,
       "hit_at_k": 0.7777777777777778,
       "recall_at_k": 0.7777777777777778,
-      "mrr": 0.6481481481481481
+      "mrr": 0.5925925925925926
     },
     "hyde": {
       "query_count": 9,
-      "hit_at_k": 0.8888888888888888,
-      "recall_at_k": 0.8888888888888888,
-      "mrr": 0.5222222222222223
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "mrr": 0.6574074074074074
     },
     "lost-middle": {
       "query_count": 9,
       "hit_at_k": 0.7777777777777778,
       "recall_at_k": 0.7777777777777778,
-      "mrr": 0.5407407407407407
+      "mrr": 0.5740740740740741
     },
     "rag": {
       "query_count": 9,
-      "hit_at_k": 0.7777777777777778,
-      "recall_at_k": 0.7777777777777778,
-      "mrr": 0.6666666666666666
+      "hit_at_k": 0.6666666666666666,
+      "recall_at_k": 0.6666666666666666,
+      "mrr": 0.5555555555555556
     },
     "ragas": {
       "query_count": 9,
       "hit_at_k": 0.7777777777777778,
       "recall_at_k": 0.7777777777777778,
-      "mrr": 0.6388888888888888
+      "mrr": 0.6944444444444444
     },
     "raptor": {
       "query_count": 9,
-      "hit_at_k": 0.7777777777777778,
-      "recall_at_k": 0.7777777777777778,
-      "mrr": 0.30925925925925923
+      "hit_at_k": 0.6666666666666666,
+      "recall_at_k": 0.6666666666666666,
+      "mrr": 0.2722222222222222
     },
     "realm": {
       "query_count": 9,
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "mrr": 0.6888888888888889
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.5777777777777777
     },
     "self-rag": {
       "query_count": 9,
-      "hit_at_k": 0.8888888888888888,
-      "recall_at_k": 0.8888888888888888,
-      "mrr": 0.6759259259259259
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "mrr": 0.7037037037037037
     }
   },
   "queries": [
@@ -587,7 +593,7 @@
       "retrieved_ids": [
         "rag--p001",
         "rag--p002",
-        "crag--p003",
+        "self-rag--p022",
         "rag--p019",
         "rag--p009"
       ],
@@ -610,8 +616,8 @@
         "crag--p001",
         "rag--p001",
         "rag--p002",
-        "self-rag--p002",
-        "rag--p006"
+        "rag--p006",
+        "rag--p009"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -630,9 +636,9 @@
       "retrieved_ids": [
         "rag--p001",
         "self-rag--p001",
+        "rag--p005",
         "self-rag--p002",
-        "ragas--p001",
-        "crag--p001"
+        "crag--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -652,8 +658,8 @@
         "rag--p002",
         "rag--p001",
         "crag--p002",
-        "rag--p003",
-        "crag--p001"
+        "crag--p001",
+        "rag--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -670,15 +676,15 @@
         "rag--p003"
       ],
       "retrieved_ids": [
-        "rag--p003",
         "rag--p002",
+        "rag--p003",
         "rag--p019",
         "rag--p004",
         "rag--p017"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -693,9 +699,9 @@
       "retrieved_ids": [
         "rag--p003",
         "rag--p002",
-        "dpr--p010",
-        "rag--p004",
-        "rag--p017"
+        "self-rag--p026",
+        "realm--p005",
+        "rag--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -713,14 +719,14 @@
       ],
       "retrieved_ids": [
         "rag--p008",
-        "rag--p003",
+        "self-rag--p002",
         "rag--p004",
-        "rag--p017",
-        "rag--p006"
+        "rag--p001",
+        "rag--p017"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -736,8 +742,8 @@
         "self-rag--p002",
         "rag--p001",
         "rag--p002",
-        "self-rag--p001",
-        "self-rag--p007"
+        "self-rag--p007",
+        "self-rag--p001"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -754,11 +760,11 @@
         "rag--p004"
       ],
       "retrieved_ids": [
-        "crag--p001",
         "crag--p006",
-        "crag--p009",
-        "rag--p005",
-        "self-rag--p002"
+        "crag--p001",
+        "crag--p015",
+        "self-rag--p005",
+        "crag--p009"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -776,8 +782,8 @@
         "ragas--p001",
         "rag--p009",
         "rag--p017",
-        "self-rag--p001",
-        "crag--p015"
+        "crag--p006",
+        "self-rag--p001"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -797,8 +803,8 @@
         "self-rag--p003",
         "dpr--p009",
         "dpr--p001",
-        "dpr--p003",
-        "dpr--p002"
+        "dpr--p002",
+        "dpr--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -816,10 +822,10 @@
       ],
       "retrieved_ids": [
         "dpr--p007",
-        "dpr--p006",
         "dpr--p012",
+        "dpr--p006",
         "dpr--p005",
-        "raptor--p007"
+        "dpr--p002"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -837,8 +843,8 @@
       ],
       "retrieved_ids": [
         "dpr--p001",
-        "realm--p002",
         "dpr--p002",
+        "realm--p002",
         "dpr--p013",
         "rag--p004"
       ],
@@ -857,15 +863,15 @@
         "dpr--p003"
       ],
       "retrieved_ids": [
-        "dpr--p003",
         "hyde--p002",
+        "dpr--p003",
         "dpr--p008",
         "dpr--p007",
         "dpr--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -880,9 +886,9 @@
       "retrieved_ids": [
         "rag--p003",
         "colbert--p002",
+        "colbert--p004",
         "lost-middle--p007",
-        "colbert--p003",
-        "colbert--p004"
+        "colbert--p003"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -924,7 +930,7 @@
         "dpr--p006",
         "dpr--p012",
         "dpr--p004",
-        "colbert--p005"
+        "colbert--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -966,7 +972,7 @@
         "dpr--p005",
         "rag--p017",
         "raptor--p007",
-        "dpr--p007"
+        "self-rag--p019"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -983,9 +989,9 @@
       "retrieved_ids": [
         "crag--p014",
         "raptor--p018",
-        "realm--p008",
         "raptor--p007",
-        "dpr--p005"
+        "dpr--p005",
+        "realm--p010"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -1003,14 +1009,14 @@
       ],
       "retrieved_ids": [
         "realm--p005",
+        "colbert--p006",
         "realm--p003",
-        "realm--p002",
-        "realm--p006",
-        "realm--p001"
+        "crag--p014",
+        "realm--p006"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -1026,8 +1032,8 @@
         "realm--p001",
         "realm--p009",
         "realm--p007",
-        "realm--p003",
-        "realm--p002"
+        "realm--p002",
+        "realm--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1048,7 +1054,7 @@
         "realm--p001",
         "realm--p008",
         "realm--p004",
-        "realm--p006"
+        "realm--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1067,10 +1073,10 @@
       ],
       "retrieved_ids": [
         "realm--p007",
-        "realm--p002",
         "realm--p001",
-        "realm--p006",
-        "rag--p017"
+        "rag--p017",
+        "realm--p002",
+        "realm--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1089,8 +1095,8 @@
       "retrieved_ids": [
         "self-rag--p017",
         "realm--p002",
-        "rag--p005",
         "crag--p003",
+        "rag--p005",
         "realm--p005"
       ],
       "hit_at_k": 1.0,
@@ -1108,15 +1114,15 @@
         "realm--p002"
       ],
       "retrieved_ids": [
+        "realm--p001",
         "realm--p002",
         "realm--p003",
-        "realm--p001",
         "realm--p009",
         "lost-middle--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -1131,8 +1137,8 @@
       "retrieved_ids": [
         "realm--p003",
         "realm--p012",
-        "realm--p008",
         "hyde--p002",
+        "realm--p008",
         "realm--p005"
       ],
       "hit_at_k": 1.0,
@@ -1151,14 +1157,14 @@
       ],
       "retrieved_ids": [
         "realm--p005",
-        "realm--p003",
         "ragas--p003",
         "realm--p002",
-        "realm--p007"
+        "realm--p007",
+        "realm--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -1172,10 +1178,10 @@
       ],
       "retrieved_ids": [
         "realm--p003",
+        "realm--p011",
         "realm--p009",
         "realm--p008",
-        "realm--p004",
-        "colbert--p004"
+        "lost-middle--p007"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1212,9 +1218,9 @@
       ],
       "retrieved_ids": [
         "colbert--p005",
-        "colbert--p002",
         "colbert--p004",
         "colbert--p009",
+        "colbert--p002",
         "colbert--p001"
       ],
       "hit_at_k": 1.0,
@@ -1234,13 +1240,13 @@
       "retrieved_ids": [
         "colbert--p002",
         "colbert--p003",
-        "colbert--p004",
         "colbert--p005",
-        "colbert--p001"
+        "colbert--p001",
+        "colbert--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1276,9 +1282,9 @@
       "retrieved_ids": [
         "colbert--p007",
         "self-rag--p007",
-        "colbert--p008",
+        "colbert--p006",
         "colbert--p001",
-        "colbert--p006"
+        "colbert--p008"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1296,14 +1302,14 @@
       ],
       "retrieved_ids": [
         "colbert--p006",
+        "colbert--p003",
         "colbert--p004",
         "colbert--p005",
-        "colbert--p003",
-        "colbert--p009"
+        "colbert--p002"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.0,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -1339,9 +1345,9 @@
       "retrieved_ids": [
         "colbert--p009",
         "colbert--p006",
-        "colbert--p007",
         "colbert--p003",
-        "colbert--p008"
+        "colbert--p008",
+        "colbert--p007"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -1382,8 +1388,8 @@
         "colbert--p001",
         "colbert--p003",
         "dpr--p004",
-        "colbert--p002",
-        "self-rag--p020"
+        "self-rag--p020",
+        "dpr--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1398,11 +1404,11 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "crag--p009",
         "colbert--p003",
+        "crag--p009",
         "colbert--p005",
         "colbert--p009",
-        "colbert--p006"
+        "crag--p001"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -1420,14 +1426,14 @@
       ],
       "retrieved_ids": [
         "hyde--p002",
-        "hyde--p001",
         "self-rag--p026",
-        "hyde--p006",
-        "crag--p014"
+        "hyde--p001",
+        "crag--p014",
+        "self-rag--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1443,8 +1449,8 @@
         "hyde--p001",
         "hyde--p002",
         "lost-middle--p003",
-        "rag--p006",
-        "hyde--p004"
+        "hyde--p007",
+        "rag--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1461,15 +1467,15 @@
         "hyde--p001"
       ],
       "retrieved_ids": [
-        "hyde--p002",
         "hyde--p001",
+        "hyde--p002",
         "hyde--p004",
         "hyde--p003",
         "realm--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1486,7 +1492,7 @@
         "hyde--p001",
         "hyde--p006",
         "hyde--p007",
-        "crag--p014"
+        "hyde--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1505,9 +1511,9 @@
       "retrieved_ids": [
         "hyde--p002",
         "hyde--p001",
-        "self-rag--p027",
-        "raptor--p004",
-        "self-rag--p028"
+        "colbert--p006",
+        "self-rag--p028",
+        "self-rag--p027"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1526,13 +1532,13 @@
       "retrieved_ids": [
         "hyde--p006",
         "hyde--p007",
+        "hyde--p002",
         "hyde--p001",
-        "hyde--p004",
-        "hyde--p005"
+        "hyde--p004"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.0,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1546,15 +1552,15 @@
         "hyde--p004"
       ],
       "retrieved_ids": [
-        "hyde--p006",
         "hyde--p002",
+        "hyde--p006",
         "hyde--p007",
         "hyde--p004",
-        "hyde--p001"
+        "hyde--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1570,12 +1576,12 @@
         "hyde--p001",
         "raptor--p017",
         "hyde--p003",
-        "colbert--p002",
-        "hyde--p002"
+        "hyde--p002",
+        "colbert--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1591,8 +1597,8 @@
         "hyde--p002",
         "hyde--p005",
         "self-rag--p002",
-        "hyde--p007",
-        "hyde--p006"
+        "hyde--p006",
+        "realm--p010"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1630,9 +1636,9 @@
       "retrieved_ids": [
         "ragas--p001",
         "ragas--p005",
-        "ragas--p002",
-        "rag--p007",
-        "colbert--p006"
+        "rag--p005",
+        "colbert--p006",
+        "ragas--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1650,9 +1656,9 @@
       ],
       "retrieved_ids": [
         "ragas--p001",
-        "ragas--p005",
-        "ragas--p002",
         "crag--p006",
+        "ragas--p002",
+        "crag--p002",
         "crag--p003"
       ],
       "hit_at_k": 1.0,
@@ -1671,10 +1677,10 @@
       ],
       "retrieved_ids": [
         "ragas--p001",
+        "self-rag--p026",
         "rag--p017",
-        "crag--p010",
-        "self-rag--p003",
-        "rag--p005"
+        "realm--p001",
+        "crag--p010"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1695,7 +1701,7 @@
         "ragas--p001",
         "ragas--p005",
         "crag--p010",
-        "rag--p001"
+        "self-rag--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1714,8 +1720,8 @@
       "retrieved_ids": [
         "ragas--p005",
         "ragas--p002",
-        "realm--p002",
         "ragas--p001",
+        "realm--p002",
         "self-rag--p017"
       ],
       "hit_at_k": 0.0,
@@ -1734,9 +1740,9 @@
       ],
       "retrieved_ids": [
         "ragas--p005",
-        "colbert--p006",
         "crag--p014",
         "ragas--p004",
+        "colbert--p006",
         "realm--p002"
       ],
       "hit_at_k": 0.0,
@@ -1778,8 +1784,8 @@
         "ragas--p003",
         "ragas--p005",
         "crag--p015",
-        "lost-middle--p004",
-        "ragas--p002"
+        "ragas--p001",
+        "lost-middle--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1796,15 +1802,15 @@
         "ragas--p003"
       ],
       "retrieved_ids": [
-        "ragas--p005",
         "ragas--p003",
+        "ragas--p005",
         "ragas--p001",
         "ragas--p002",
         "ragas--p008"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1815,11 +1821,11 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "ragas--p005",
         "realm--p005",
+        "ragas--p005",
         "crag--p014",
-        "rag--p003",
-        "realm--p002"
+        "realm--p002",
+        "rag--p003"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -1837,10 +1843,10 @@
       ],
       "retrieved_ids": [
         "self-rag--p001",
-        "self-rag--p003",
+        "self-rag--p002",
         "self-rag--p010",
-        "crag--p009",
-        "self-rag--p002"
+        "self-rag--p003",
+        "crag--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1860,8 +1866,8 @@
         "self-rag--p001",
         "self-rag--p002",
         "self-rag--p010",
-        "crag--p009",
-        "self-rag--p003"
+        "self-rag--p003",
+        "self-rag--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1882,7 +1888,7 @@
         "self-rag--p002",
         "self-rag--p010",
         "self-rag--p001",
-        "colbert--p004"
+        "self-rag--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1900,14 +1906,14 @@
       ],
       "retrieved_ids": [
         "self-rag--p003",
+        "self-rag--p002",
         "self-rag--p001",
-        "self-rag--p009",
         "crag--p010",
-        "self-rag--p002"
+        "self-rag--p009"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1941,15 +1947,15 @@
         "self-rag--p002"
       ],
       "retrieved_ids": [
+        "self-rag--p005",
         "self-rag--p003",
-        "self-rag--p009",
         "self-rag--p001",
-        "crag--p009",
-        "self-rag--p008"
+        "self-rag--p002",
+        "self-rag--p009"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.0,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1963,10 +1969,10 @@
       ],
       "retrieved_ids": [
         "self-rag--p002",
-        "self-rag--p003",
         "self-rag--p001",
+        "self-rag--p003",
         "self-rag--p010",
-        "self-rag--p009"
+        "self-rag--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1984,10 +1990,10 @@
       ],
       "retrieved_ids": [
         "self-rag--p001",
-        "self-rag--p003",
+        "ragas--p001",
         "crag--p010",
-        "crag--p009",
-        "crag--p008"
+        "crag--p001",
+        "self-rag--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2005,14 +2011,14 @@
       ],
       "retrieved_ids": [
         "self-rag--p008",
-        "crag--p009",
         "self-rag--p001",
         "crag--p007",
-        "self-rag--p002"
+        "self-rag--p002",
+        "self-rag--p007"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -2026,8 +2032,8 @@
         "crag--p009",
         "self-rag--p003",
         "self-rag--p001",
-        "crag--p015",
-        "self-rag--p010"
+        "ragas--p001",
+        "self-rag--p002"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -2047,8 +2053,8 @@
         "ragas--p004",
         "lost-middle--p011",
         "lost-middle--p001",
-        "self-rag--p022",
-        "ragas--p003"
+        "ragas--p003",
+        "self-rag--p022"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2068,8 +2074,8 @@
         "lost-middle--p001",
         "ragas--p003",
         "lost-middle--p003",
-        "lost-middle--p002",
-        "lost-middle--p010"
+        "lost-middle--p010",
+        "lost-middle--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2090,7 +2096,7 @@
         "lost-middle--p005",
         "lost-middle--p007",
         "dpr--p007",
-        "realm--p002"
+        "colbert--p004"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -2130,8 +2136,8 @@
       "retrieved_ids": [
         "rag--p017",
         "crag--p009",
-        "crag--p008",
         "raptor--p018",
+        "crag--p008",
         "raptor--p007"
       ],
       "hit_at_k": 0.0,
@@ -2171,14 +2177,14 @@
       ],
       "retrieved_ids": [
         "lost-middle--p008",
-        "dpr--p004",
+        "lost-middle--p003",
         "lost-middle--p018",
         "lost-middle--p002",
-        "lost-middle--p003"
+        "dpr--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -2194,8 +2200,8 @@
         "lost-middle--p005",
         "lost-middle--p017",
         "self-rag--p024",
-        "self-rag--p020",
-        "realm--p011"
+        "lost-middle--p007",
+        "rag--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2212,11 +2218,11 @@
         "lost-middle--p003"
       ],
       "retrieved_ids": [
-        "rag--p005",
-        "realm--p002",
+        "lost-middle--p015",
+        "rag--p008",
         "lost-middle--p003",
-        "dpr--p001",
-        "lost-middle--p015"
+        "rag--p005",
+        "dpr--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2235,7 +2241,7 @@
         "rag--p007",
         "lost-middle--p001",
         "dpr--p003",
-        "rag--p002"
+        "realm--p005"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -2253,10 +2259,10 @@
       ],
       "retrieved_ids": [
         "crag--p002",
-        "crag--p009",
         "crag--p008",
+        "crag--p009",
         "crag--p001",
-        "crag--p010"
+        "crag--p007"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2274,11 +2280,11 @@
         "crag--p002"
       ],
       "retrieved_ids": [
-        "crag--p002",
         "crag--p001",
+        "crag--p002",
         "crag--p009",
         "colbert--p006",
-        "rag--p003"
+        "crag--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2296,9 +2302,9 @@
       ],
       "retrieved_ids": [
         "crag--p005",
-        "self-rag--p004",
-        "crag--p008",
         "crag--p004",
+        "crag--p008",
+        "self-rag--p004",
         "crag--p014"
       ],
       "hit_at_k": 0.0,
@@ -2318,8 +2324,8 @@
       "retrieved_ids": [
         "crag--p006",
         "crag--p010",
-        "crag--p009",
         "crag--p002",
+        "crag--p009",
         "crag--p001"
       ],
       "hit_at_k": 1.0,
@@ -2338,10 +2344,10 @@
       ],
       "retrieved_ids": [
         "crag--p002",
-        "crag--p001",
+        "crag--p004",
         "raptor--p004",
-        "ragas--p004",
-        "crag--p005"
+        "crag--p001",
+        "crag--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2360,10 +2366,10 @@
       ],
       "retrieved_ids": [
         "crag--p001",
-        "crag--p009",
-        "crag--p015",
         "crag--p010",
-        "crag--p002"
+        "crag--p002",
+        "crag--p015",
+        "crag--p009"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2381,14 +2387,14 @@
       ],
       "retrieved_ids": [
         "crag--p005",
+        "crag--p003",
         "crag--p010",
         "crag--p002",
-        "crag--p003",
         "crag--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.25,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -2402,14 +2408,14 @@
       ],
       "retrieved_ids": [
         "crag--p007",
-        "crag--p006",
         "crag--p015",
-        "colbert--p006",
-        "raptor--p010"
+        "crag--p006",
+        "raptor--p010",
+        "crag--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -2422,15 +2428,15 @@
         "crag--p002"
       ],
       "retrieved_ids": [
-        "crag--p009",
+        "self-rag--p007",
         "crag--p006",
+        "rag--p017",
         "crag--p001",
-        "crag--p007",
-        "crag--p015"
+        "crag--p002"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.0,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -2441,11 +2447,11 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "crag--p007",
+        "colbert--p004",
         "crag--p015",
         "colbert--p006",
-        "crag--p001",
-        "colbert--p005"
+        "self-rag--p019",
+        "crag--p007"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -2486,12 +2492,12 @@
         "raptor--p009",
         "raptor--p018",
         "raptor--p006",
-        "raptor--p001",
-        "raptor--p019"
+        "raptor--p019",
+        "raptor--p004"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 0.25,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -2505,10 +2511,10 @@
       ],
       "retrieved_ids": [
         "raptor--p001",
-        "self-rag--p004",
         "self-rag--p009",
+        "raptor--p016",
         "raptor--p019",
-        "raptor--p016"
+        "self-rag--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2546,11 +2552,11 @@
         "raptor--p001"
       ],
       "retrieved_ids": [
+        "rag--p009",
+        "realm--p007",
         "raptor--p008",
         "raptor--p007",
-        "raptor--p020",
-        "raptor--p010",
-        "raptor--p009"
+        "colbert--p003"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -2611,13 +2617,13 @@
       "retrieved_ids": [
         "raptor--p018",
         "raptor--p019",
-        "raptor--p002",
         "raptor--p017",
+        "raptor--p002",
         "raptor--p008"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -2651,9 +2657,9 @@
       "retrieved_ids": [
         "raptor--p001",
         "raptor--p006",
-        "raptor--p002",
         "raptor--p016",
-        "raptor--p008"
+        "raptor--p008",
+        "raptor--p018"
       ],
       "hit_at_k": null,
       "recall_at_k": null,

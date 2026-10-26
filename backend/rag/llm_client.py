@@ -29,6 +29,36 @@ async def stream_tokens(prompt: str) -> AsyncIterator[str]:
             yield token
 
 
+async def _provider_lines(response):
+    """Decode split UTF-8 and accept a final JSON line without a newline."""
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    buffer = ""
+    try:
+        async for chunk in response.aiter_bytes():
+            buffer += decoder.decode(chunk)
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                if line.strip():
+                    yield line.strip()
+        buffer += decoder.decode(b"", final=True)
+    except UnicodeDecodeError as exc:
+        raise LLMStreamError("AI provider returned invalid UTF-8") from exc
+    if buffer.strip():
+        yield buffer.strip()
+
+
+def _provider_event(payload, provider):
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise LLMStreamError(f"{provider} returned a malformed stream event") from exc
+    if not isinstance(data, dict):
+        raise LLMStreamError(f"{provider} returned a malformed stream event")
+    if data.get("error"):
+        raise LLMStreamError(f"{provider} reported a stream error")
+    return data
+
+
 async def _stream_ollama(prompt: str) -> AsyncIterator[str]:
     payload = {
         "model": settings.MODEL_NAME,
@@ -55,27 +85,18 @@ async def _stream_ollama(prompt: str) -> AsyncIterator[str]:
                     logger.error("Ollama HTTP %s: %s", response.status_code, body[:300])
                     raise LLMStreamError(f"Ollama HTTP {response.status_code}")
 
-                buffer = ""
-                decoder = codecs.getincrementaldecoder("utf-8")()
-                async for chunk in response.aiter_bytes():
-                    buffer += decoder.decode(chunk)
-                    while True:
-                        delim = buffer.find("\n")
-                        if delim == -1:
-                            break
-                        line = buffer[:delim].strip()
-                        buffer = buffer[delim + 1:]
-                        if not line:
-                            continue
-                        try:
-                            data = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        token = data.get("message", {}).get("content")
-                        if token:
-                            yield token
-                        if data.get("done"):
-                            return
+                async for line in _provider_lines(response):
+                    data = _provider_event(line, "Ollama")
+                    message = data.get("message") or {}
+                    if not isinstance(message, dict):
+                        raise LLMStreamError("Ollama returned a malformed message")
+                    token = message.get("content")
+                    if token is not None and not isinstance(token, str):
+                        raise LLMStreamError("Ollama returned a malformed token")
+                    if token:
+                        yield token
+                    if data.get("done") is True:
+                        return
 
                 raise LLMStreamError("Ollama response ended before completion")
     except LLMStreamError:
@@ -120,29 +141,28 @@ async def _stream_groq(prompt: str) -> AsyncIterator[str]:
                     logger.error("Groq HTTP %s: %s", response.status_code, body[:300])
                     raise LLMStreamError(f"AI provider HTTP {response.status_code}")
 
-                buffer = ""
-                decoder = codecs.getincrementaldecoder("utf-8")()
-                async for chunk in response.aiter_bytes():
-                    buffer += decoder.decode(chunk)
-                    while True:
-                        delim = buffer.find("\n")
-                        if delim == -1:
-                            break
-                        line = buffer[:delim].strip()
-                        buffer = buffer[delim + 1:]
-                        if not line:
-                            continue
-                        if line.startswith("data: "):
-                            data_str = line[6:]
-                            if data_str.strip() == "[DONE]":
-                                return
-                            try:
-                                data = json.loads(data_str)
-                                token = data.get("choices", [{}])[0].get("delta", {}).get("content")
-                                if token:
-                                    yield token
-                            except json.JSONDecodeError:
-                                continue
+                async for line in _provider_lines(response):
+                    if not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].lstrip(" ")
+                    if data_str.strip() == "[DONE]":
+                        return
+                    data = _provider_event(data_str, "Groq")
+                    choices = data.get("choices", [])
+                    if not isinstance(choices, list):
+                        raise LLMStreamError("Groq returned malformed choices")
+                    # Usage-only events have an empty choices list and must not
+                    # turn a successfully generated response into an IndexError.
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    if not isinstance(choice, dict) or not isinstance(choice.get("delta", {}), dict):
+                        raise LLMStreamError("Groq returned a malformed delta")
+                    token = choice.get("delta", {}).get("content")
+                    if token is not None and not isinstance(token, str):
+                        raise LLMStreamError("Groq returned a malformed token")
+                    if token:
+                        yield token
                 raise LLMStreamError("AI provider response ended before completion")
     except LLMStreamError:
         raise

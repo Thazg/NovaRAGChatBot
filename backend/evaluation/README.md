@@ -6,27 +6,27 @@ evidence spans, review state, aggregate metrics, and per-query results.
 
 ## Deterministic CI baseline
 
-Last production-path run: **2026-10-23**
+Recorded production-path baseline: **2026-10-26**, rebuilt with pypdf 6.21.2 and its font-decoding extra under Linux/Python 3.12.15. The parser upgrade changes extraction and chunk boundaries; the previous 2026-10-25 report used 549 chunks. Case-invariant acronym expansion also removes duplicate capitalized query terms. Annotations and quality floors are unchanged. Treat this as a new pipeline baseline, not a controlled attribution of gains to one change.
 
-Configuration: **K = 5**, 10 PDFs, 160 pages, 549 chunks, and 100 questions
+Configuration: **K = 5**, 10 PDFs, 160 pages, 555 chunks, and 100 questions
 (90 answerable + 10 unanswerable).
 
 | Measurement | Result | Regression floor | Status |
 | --- | ---: | ---: | :---: |
-| Production BM25 Hit@5 | **0.8222** | >= 0.78 | Pass |
-| Production BM25 Recall@5 | **0.8222** | >= 0.78 | Pass |
-| Production BM25 MRR@5 | **0.5544** | >= 0.55 | Pass |
-| Context evidence retention | **58/58 (1.0000)** | >= 1.00 | Pass |
+| Production BM25 Hit@5 | **0.8333** | >= 0.78 | Pass |
+| Production BM25 Recall@5 | **0.8333** | >= 0.78 | Pass |
+| Production BM25 MRR@5 | **0.5541** | >= 0.55 | Pass |
+| Context evidence retention | **57/57 (1.0000)** | >= 1.00 | Pass |
 | Citation-label precision | **1.0000** | >= 0.90 | Pass |
 | Citation-label recall | **1.0000** | >= 0.90 | Pass |
-| Lexical evidence-support proxy | **0.8346** | >= 0.80 | Pass |
+| Lexical evidence-support proxy | **0.8390** | >= 0.80 | Pass |
 | Unanswerable accuracy | **0.0000** | improvement target | **Known gap** |
 
 The primary gate uses `rag.rag_chain.retrieve_from_store`, the same query entry point as runtime `retrieve_context`. Corpus construction calls production `rag.load.load_pdf` and `rag.chunking.split_documents` directly. The runtime parser preserves PDF page and extracted-line metadata and uses the same 220-word / 40-word chunk window. PDF evidence is diversified by page before selecting K passages.
 
-The context gate calls production `build_context_and_evidence(nodes, query)`. Of the 90 answerable questions, 58 have their verbatim annotated span in the retrieved chunks; all 58 survive packing with the default 2,400-character passage / 10,000-character total budgets. The previous 1,000-character prefix policy kept 40/58. Matching normalizes case/whitespace only. Annotations are used to score the result, never to select runtime excerpts. This is evidence retention conditional on retrieval, **not answer accuracy**, and does not count the other 32 questions as correct. Custom smaller budgets must pass the same gate (`--min-context-retention`, default 1.0).
+The context gate calls production `build_context_and_evidence(nodes, query)`. Of the 90 answerable questions, 57 have their annotated character span in the retrieved chunks; all 57 survive packing with the default 2,400-character passage / 10,000-character total budgets. Matching ignores case and all whitespace because parser versions can join words or insert spaces around symbols. Every other character, including punctuation and negation, must match. This can conflate word boundaries and is not semantic support verification. The same helper resolves annotations during dataset construction and scores post-packing retention. Labels never select runtime excerpts. Retention is conditional on retrieval, **not answer accuracy**, and does not count the other 33 questions as correct. Custom smaller budgets must pass the same gate (`--min-context-retention`, default 1.0).
 
-Current production-path latency: **3.53 ms P50 / 6.43 ms P95** on the local audit machine, with a warm store and no query cache. This excludes HTTP, B2 revision synchronization, history rewriting and LLM generation. `results.json` records the corpus SHA-256, pipeline names and primary method. The historical proxy ablations below are diagnostic alternatives, not the CI primary.
+Recorded production-path latency: **5.80 ms P50 / 10.19 ms P95**, with a warm store and no query cache, in the local Linux/Python 3.12 container. Report version 2 excludes context packing and annotation matching as well as HTTP, B2 revision synchronization, history rewriting and LLM generation. Context packing is reported separately: **0.138 ms P50 / 0.265 ms P95** on annotated queries. These are local diagnostics, not a deployment SLO. Proxy ablations reuse corpus tokenization performed once during setup, outside warm query latency. `results.json` records parser versions, corpus SHA-256, pipeline names and primary method. The historical neural comparison below uses a different parser/ranking scope and is not a like-for-like comparison with this baseline.
 
 The current offline retriever has no calibrated confidence threshold and always
 returns a ranking, so it fails all 10 unanswerable questions. The CI floor
@@ -40,7 +40,7 @@ breakdowns.
 
 ## Production retrieval comparison
 
-The historical candidate benchmark (not rerun on 2026-10-23) compares BM25, real BGE neural dense retrieval, equal
+The historical candidate benchmark (not rerun on 2026-10-25) compares BM25, real BGE neural dense retrieval, equal
 and weighted RRF, MS MARCO cross-encoder reranking, and deterministic multi-query
 retrieval. It measures end-to-end warm query latency for each method.
 
@@ -91,7 +91,7 @@ unanswerable.
 | Corrective Retrieval Augmented Generation | [2401.15884v3](https://arxiv.org/abs/2401.15884v3) |
 | RAPTOR | [2401.18059v1](https://arxiv.org/abs/2401.18059v1) |
 
-Each answerable annotation includes a reference answer and a verbatim evidence
+Each answerable annotation includes a reference answer and an evidence
 span. The builder searches only within the designated paper and resolves the
 span to a PDF page. Page-level relevance labels avoid treating overlapping
 chunks containing the same sentence as different answers. The build fails for
@@ -122,7 +122,7 @@ redistributing full paper text while keeping the benchmark reproducible.
 CI executes the same pipeline before tests. Current regression floors can be
 overridden with `--min-hit`, `--min-recall`, `--min-mrr`,
 `--min-citation-precision`, `--min-citation-recall`, `--min-faithfulness`, and
-`--min-unanswerable-accuracy`.
+`--min-unanswerable-accuracy`, and `--min-context-retention`. Runtime/evaluation K is constrained to 1–15.
 
 ## Metric definitions and limitations
 
@@ -144,7 +144,25 @@ This is a small, domain-focused regression benchmark—not a claim of general RA
 quality. It currently lacks independent dual annotation, a held-out calibration
 split, provider-backed semantic embeddings, and human evaluation of generated
 answers. Opt-in live evaluators remain available in `live_retrieval_eval.py` and
-`live_answer_eval.py`; they require configured external providers.
+`live_answer_eval.py`; they require configured model/embedding providers.
+
+## Opt-in generated-answer evaluation
+
+Run from `backend` after building the corpus and configuring the intended model provider:
+
+```bash
+python -m evaluation.live_answer_eval --limit 10 --k 5 --output evaluation/live_results.json
+```
+
+This command sends retrieved document text to the configured LLM and may incur cost. With Ollama it targets the configured local service; with Groq it sends text to that provider. The offline CI command above does not call either provider. `--input-cost-per-million` and `--output-cost-per-million` accept operator-supplied USD rates; token/cost figures are character-based estimates, not billing records. Partial generated text is retained on failed streams but provider billing usage is unavailable.
+
+Report version 3 builds on version 2's production BM25 `retrieve_from_store`, `build_context_and_evidence` and `build_prompt` functions. Ground-truth relevant IDs and references are consulted **after** selecting context, for scoring only. Version 3 adds a canonical dataset SHA-256, per-query prompt SHA-256, a non-secret effective configuration snapshot, retained failed partial answers, and first-token/attempt latency diagnostics. This remains a stateless query experiment: it does not include HTTP, conversation rewriting or index synchronization. Reports predating the production-path evaluator used oracle evidence and are not directly comparable.
+
+The evaluator processes queries, including unanswerable questions, rather than only citation examples. It records retrieved page IDs, packed evidence, generated answers, unknown `[E#]` IDs, provider failures and reference token F1. Citation precision/recall check the cited packed passages against annotated relevant pages; they do not establish whether each factual claim is entailed. Faithfulness remains a lexical proxy. Unanswerable outputs are retained for human review and are not assigned a fabricated automatic answer-accuracy score.
+
+A provider `LLMStreamError` becomes a failed sample and later queries continue. Partial failed answers remain diagnostic records, never successful samples; failed labeled attempts contribute zero to quality averages. The command exits unsuccessfully when any generation fails. `latency_ms_p50/p95` covers successful provider generations, while `attempt_latency_ms_p50/p95` includes failures. `first_token_ms_p50/p95` includes all attempts that emitted a non-empty token, including later failures, and is null if no token was observed. These timings exclude retrieval, packing, HTTP and index synchronization; they are not application time-to-first-byte or an availability SLO.
+
+Tests exercise this path with a mocked provider. **No real-provider answer evaluation was run during the 2026-10-25 module audit.** Claims about generated-answer quality require an actual opt-in run and review of its saved responses. See [RAG pipeline](../../docs/RAG_PIPELINE.md) for implementation contracts and the separate held-out-calibration requirement.
 
 ## Artifact inventory
 

@@ -1,10 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.openapi.utils import get_openapi
 from starlette.middleware.base import BaseHTTPMiddleware
 from api.routes import auth, chat, health, conversation, documents
 from config.settings import settings
 from services.auth import user_exists, verify_token
+from services.account_lifecycle import AccountDeletionPending
+from services.postgres_store import ConversationIdConflict
 from services.rate_limiter import create_rate_limiter
 import logging
 import re
@@ -15,6 +18,15 @@ from pathlib import Path
 
 logging.basicConfig(level=settings.LOG_LEVEL, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# Keep runtime access and the published API contract in sync. These endpoints
+# expose documentation, health metadata or cookie-backed session operations;
+# application data routes always require an access token.
+PUBLIC_PATHS = frozenset({
+    "/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json",
+    "/health", "/health/", "/health/ready",
+    "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout",
+})
 
 
 def _configure_error_monitoring() -> None:
@@ -49,9 +61,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request.state.user_id = None
         path = request.url.path
-        if request.method == "OPTIONS" or path.startswith("/health") or path in (
-            "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout"
-        ):
+        if request.method == "OPTIONS" or path in PUBLIC_PATHS:
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
@@ -184,8 +194,49 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error", "request_id": request_id}
     )
 
+
+@app.exception_handler(AccountDeletionPending)
+async def account_deletion_pending_handler(_: Request, exc: AccountDeletionPending):
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Account deletion is pending. Retry deleting the account."},
+    )
+
+
+@app.exception_handler(ConversationIdConflict)
+async def conversation_id_conflict_handler(_: Request, exc: ConversationIdConflict):
+    return JSONResponse(status_code=409, content={"detail": "Conversation ID is unavailable"})
+
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(conversation.router, prefix="/conversation", tags=["Conversation"])
 app.include_router(documents.router, prefix="/documents", tags=["Documents"])
+
+
+def custom_openapi():
+    """Describe middleware-enforced Bearer auth so Swagger can call private APIs."""
+    if app.openapi_schema is not None:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title, version=app.version, description=app.description,
+        routes=app.routes,
+    )
+    schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
+        "type": "http", "scheme": "bearer", "bearerFormat": "JWT",
+        "description": "Short-lived access token returned by login or refresh. Never use a refresh token here.",
+    }
+    for path, operations in schema["paths"].items():
+        for method, operation in operations.items():
+            if method not in {"get", "put", "post", "delete", "patch", "head", "options", "trace"}:
+                continue
+            operation["security"] = [] if path in PUBLIC_PATHS else [{"BearerAuth": []}]
+            if path not in PUBLIC_PATHS:
+                operation.setdefault("responses", {}).setdefault("401", {
+                    "description": "A valid Bearer access token for an existing account is required.",
+                })
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = custom_openapi

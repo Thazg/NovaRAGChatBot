@@ -86,7 +86,8 @@ def test_portfolio_dataset_meets_quality_thresholds() -> None:
 
 def test_live_answer_evaluator_records_grounding_and_usage(monkeypatch) -> None:
     async def fake_stream(_prompt: str):
-        yield "Passwords use PBKDF2 HMAC SHA-256. (Source: security.md)"
+        assert "Evidence ID: E1" in _prompt
+        yield "Passwords use PBKDF2 HMAC SHA-256. [E1]"
 
     monkeypatch.setattr("evaluation.live_answer_eval.stream_tokens", fake_stream)
     dataset = {

@@ -10,11 +10,14 @@ from typing import Any, Dict, List
 import numpy as np
 
 from config.settings import settings
+from services.account_lifecycle import account_mutation
 
 logger = logging.getLogger(__name__)
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 BASE_INDEX_DIR = BACKEND_DIR / "storage" / "index"
+DOCUMENT_EMBEDDING_PREFIX = "search_document:"
+QUERY_EMBEDDING_PREFIX = "search_query:"
 
 ACRONYM_MAP = {
     "rag": "retrieval augmented generation",
@@ -49,15 +52,39 @@ def dense_retrieval_enabled() -> bool:
     return settings.RETRIEVAL_MODE == "hybrid" and bool(settings.EMBEDDING_BASE_URL)
 
 
+def embedding_identity() -> dict[str, str]:
+    """Configured embedding space, without exposing URLs/credentials in artifacts.
+
+    This identifies requested model/endpoint/prefixes, not provider weight bytes.
+    A provider silently changing weights under the same ID still requires an
+    operator-managed model revision and explicit reindex.
+    """
+    return {"model": settings.EMBEDDING_MODEL,
+            "endpoint_sha256": hashlib.sha256(settings.EMBEDDING_BASE_URL.rstrip("/").encode()).hexdigest(),
+            "document_prefix": DOCUMENT_EMBEDDING_PREFIX, "query_prefix": QUERY_EMBEDDING_PREFIX}
+
+
+def document_scope_indices(documents, scope: str) -> set[int]:
+    """Prefer a storage ID to display-name fallback, including legacy filenames."""
+    normalized = (scope or "").strip().casefold()
+    if not normalized:
+        return set(range(len(documents)))
+    stored = {index for index, document in enumerate(documents)
+              if str(document.get("metadata", {}).get("storage_name")
+                     or document.get("metadata", {}).get("file_name", "")).strip().casefold() == normalized}
+    return stored or {index for index, document in enumerate(documents)
+                      if str(document.get("metadata", {}).get("file_name", "")).strip().casefold() == normalized}
+
+
 def expand_query(query: str) -> str:
-    words = re.findall(r"[a-zA-Z]\w*", query)
+    words = re.findall(r"[a-zA-Z]\w*", query.lower())
     expanded = set(words)
     for w in words:
         wl = w.lower()
         if wl in ACRONYM_MAP:
             expanded.update(ACRONYM_MAP[wl].split())
     if len(expanded) > len(words):
-        return query + " " + " ".join(sorted(expanded - set(w.lower() for w in words)))
+        return query + " " + " ".join(sorted(expanded - set(words)))
     return query
 
 
@@ -174,6 +201,7 @@ class HybridVectorStore:
         self.bm25 = bm25
         self.embeddings = embeddings
         self.faiss_index = faiss_index
+        self.embedding_profile = embedding_identity() if embeddings is not None else None
 
     def _tokenize(self, text: str) -> list[str]:
         return re.findall(r"\w+", text.lower())
@@ -181,7 +209,9 @@ class HybridVectorStore:
     def _build_bm25(self) -> None:
         from rank_bm25 import BM25Okapi
         tokenized = [self._tokenize(d.get("content", "")) for d in self.documents]
-        self.bm25 = BM25Okapi(tokenized) if tokenized else None
+        # A valid text upload can contain only punctuation. rank_bm25 divides
+        # by the average length for an all-empty token corpus.
+        self.bm25 = BM25Okapi(tokenized) if any(tokenized) else None
 
     def _build_faiss(self) -> None:
         import faiss
@@ -196,10 +226,16 @@ class HybridVectorStore:
 
     def _get_query_embedding(self, query: str) -> np.ndarray | None:
         from rag.embeddings import get_embedding
-        emb = get_embedding(query, prefix="search_query:")
+        emb = get_embedding(query, prefix=QUERY_EMBEDDING_PREFIX)
         if emb is None:
             return None
-        return np.array([emb], dtype=np.float32)
+        try:
+            vector = np.asarray([emb], dtype=np.float32)
+        except (TypeError, ValueError):
+            return None
+        if vector.ndim != 2 or not vector.shape[1] or not np.isfinite(vector).all():
+            return None
+        return vector
 
     def add_nodes(self, nodes: list[Dict[str, Any]]) -> int:
         if not nodes:
@@ -207,18 +243,29 @@ class HybridVectorStore:
         texts = [n.get("content", "") for n in nodes]
         if dense_retrieval_enabled():
             from rag.embeddings import get_embeddings_batch
-            new_embeddings = get_embeddings_batch(texts, prefix="search_document:")
-            if new_embeddings is not None and len(new_embeddings) == len(nodes):
-                if self.embeddings is None or len(self.embeddings) == 0:
+            rebuild_dense = bool(self.documents) and (
+                self.embeddings is None or self.embeddings.ndim != 2
+                or len(self.embeddings) != len(self.documents)
+                or self.embedding_profile != embedding_identity()
+            )
+            embedding_texts = ([document.get("content", "") for document in self.documents] + texts
+                               if rebuild_dense else texts)
+            new_embeddings = get_embeddings_batch(embedding_texts, prefix=DOCUMENT_EMBEDDING_PREFIX)
+            valid_batch = (isinstance(new_embeddings, np.ndarray) and new_embeddings.ndim == 2
+                           and len(new_embeddings) == len(embedding_texts)
+                           and new_embeddings.shape[1] > 0 and np.isfinite(new_embeddings).all())
+            if valid_batch:
+                if rebuild_dense or self.embeddings is None or len(self.embeddings) == 0:
                     self.embeddings = new_embeddings
-                else:
+                elif self.embeddings.shape[1] == new_embeddings.shape[1]:
                     self.embeddings = np.vstack([self.embeddings, new_embeddings])
-            elif self.embeddings is not None:
+                else:
+                    self.embeddings = None
+                    self.faiss_index = None
+            else:
                 # Never keep a partial dense index whose rows no longer align
                 # with the document list. BM25 remains fully functional.
                 self.embeddings = None
-                self.faiss_index = None
-            else:
                 self.faiss_index = None
         else:
             # BM25 production mode does not pay embedding/indexing cost. Drop
@@ -226,6 +273,7 @@ class HybridVectorStore:
             # persisted rows cannot become misaligned.
             self.embeddings = None
             self.faiss_index = None
+        self.embedding_profile = embedding_identity() if self.embeddings is not None else None
         self.documents.extend(nodes)
         self._build_bm25()
         if self.embeddings is not None and len(self.embeddings) > 0:
@@ -265,6 +313,10 @@ class HybridVectorStore:
         # stale store as an additional guard against lost updates.
         if self.revision and self.revision != index_revision(self.user_id):
             raise RuntimeError("Index changed; reload before applying this mutation")
+        if self.embeddings is not None and self.embedding_profile != embedding_identity():
+            self.embeddings = None
+            self.faiss_index = None
+            self.embedding_profile = None
         from services.document_lifecycle import deleted_documents
         for name in deleted_documents(self.user_id):
             self.remove_by_file_name(name)
@@ -283,7 +335,8 @@ class HybridVectorStore:
             files["faiss.index"] = directory / "faiss.index"
         manifest = {"revision": revision, "files": {
             name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in files.items()
-        }, "ingestion_version": 2}
+        }, "ingestion_version": 2,
+            "embedding_profile": self.embedding_profile if self.embeddings is not None else None}
         encoded = json.dumps(manifest).encode()
         if _remote_enabled():
             from services.remote_storage import upload_file, upload_bytes
@@ -309,18 +362,10 @@ class HybridVectorStore:
         file_name: str | None = None,
     ) -> list[Dict[str, Any]]:
         n = len(self.documents)
-        if n == 0:
+        if n == 0 or top_k <= 0:
             return []
         normalized_file_name = (file_name or "").strip().casefold()
-        eligible_indices = {
-            index
-            for index, document in enumerate(self.documents)
-            if not normalized_file_name
-            or normalized_file_name in {
-                str(document.get("metadata", {}).get("file_name", "")).strip().casefold(),
-                str(document.get("metadata", {}).get("storage_name", "")).strip().casefold(),
-            }
-        }
+        eligible_indices = document_scope_indices(self.documents, normalized_file_name)
         if not eligible_indices:
             return []
         expanded = expand_query(query)
@@ -331,24 +376,27 @@ class HybridVectorStore:
             bm25_scores = np.array(self.bm25.get_scores(tokenized_query), dtype=np.float64)
 
         dense_scores = np.zeros(n, dtype=np.float32)
-        if dense_retrieval_enabled() and self.faiss_index is not None and self.faiss_index.ntotal > 0:
+        if (dense_retrieval_enabled() and self.faiss_index is not None and self.faiss_index.ntotal > 0
+                and self.embedding_profile == embedding_identity()):
             query_emb = self._get_query_embedding(expanded)
-            if query_emb is not None:
+            if query_emb is not None and query_emb.shape[1] == self.faiss_index.d:
                 import faiss
                 faiss.normalize_L2(query_emb)
-                search_k = min(top_k * 4, n)
+                # A global candidate cap can discard every passage from the
+                # selected document before the scope filter is applied.
+                search_k = n if normalized_file_name else min(top_k * 4, n)
                 faiss_scores, faiss_indices = self.faiss_index.search(query_emb, search_k)
                 for idx, score in zip(faiss_indices[0], faiss_scores[0]):
-                    if idx != -1 and idx < n:
+                    if idx in eligible_indices:
                         dense_scores[idx] = float(score)
 
         rrf_k = settings.RRF_K
         rrf_scores: dict[int, float] = {}
-        bm25_order = np.argsort(-bm25_scores)
+        bm25_order = [idx for idx in np.argsort(-bm25_scores) if idx in eligible_indices]
         for rank, idx in enumerate(bm25_order):
             if bm25_scores[idx] > 0:
                 rrf_scores[idx] = 1.0 / (rrf_k + rank + 1)
-        dense_order = np.argsort(-dense_scores)
+        dense_order = [idx for idx in np.argsort(-dense_scores) if idx in eligible_indices]
         for rank, idx in enumerate(dense_order):
             if dense_scores[idx] > 0:
                 rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (rrf_k + rank + 1)
@@ -362,7 +410,7 @@ class HybridVectorStore:
                 len(query_token_set.intersection(self._tokenize(document.get("content", ""))))
                 for document in self.documents
             ]
-            overlap_order = np.argsort(-np.asarray(overlap_scores))
+            overlap_order = [idx for idx in np.argsort(-np.asarray(overlap_scores)) if idx in eligible_indices]
             for rank, idx in enumerate(overlap_order):
                 if overlap_scores[idx] > 0:
                     rrf_scores[int(idx)] = 1.0 / (rrf_k + rank + 1)
@@ -411,6 +459,7 @@ def build_vector_store(nodes: list[Dict[str, Any]], user_id: str = "") -> Hybrid
     return store
 
 
+@account_mutation
 def load_vector_store(user_id: str = "") -> HybridVectorStore:
     manifest = _read_manifest(user_id)
     if manifest:
@@ -438,10 +487,13 @@ def load_vector_store(user_id: str = "") -> HybridVectorStore:
         raise FileNotFoundError(f"Vector store not found for user {user_id}")
     documents = [json.loads(line) for line in metadata.read_text(encoding="utf-8").splitlines() if line.strip()]
     embeddings = None
-    if dense_retrieval_enabled() and (directory / "embeddings.npy").exists():
+    if (dense_retrieval_enabled() and (directory / "embeddings.npy").exists()
+            and manifest and manifest.get("embedding_profile") == embedding_identity()):
         embeddings = np.load(directory / "embeddings.npy", allow_pickle=False)
-        if len(embeddings) != len(documents):
+        if embeddings.ndim != 2 or len(embeddings) != len(documents) or not embeddings.shape[1] or not np.isfinite(embeddings).all():
             embeddings = None
+    elif dense_retrieval_enabled() and (directory / "embeddings.npy").exists():
+        logger.warning("Dense index identity is missing or differs from current configuration; using BM25 until reindex")
     store = HybridVectorStore(user_id=user_id, documents=documents, embeddings=embeddings)
     # Rebuild the inexpensive BM25 index rather than deserializing pickle.
     store._build_bm25()

@@ -2,12 +2,13 @@ import json
 import os
 import subprocess
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
 from rag import rag_chain, vector_store
-from services import remote_storage
+from services import remote_storage, index_jobs
 from api.routes import documents
 from config.settings import settings
 
@@ -22,6 +23,9 @@ def local_indexes(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "REDIS_URL", "")
     monkeypatch.setattr(settings, "B2_KEY_ID", "")
     monkeypatch.setattr(settings, "B2_APP_KEY", "")
+    monkeypatch.setattr(remote_storage, "download_bytes", lambda *args, **kwargs: None)
+    # These tests exercise the object-store protocol, not a real Redis lease.
+    monkeypatch.setattr(index_jobs, "_user_index_lock", lambda user: nullcontext())
     rag_chain.unload_vector_store("owner")
     yield tmp_path
     rag_chain.unload_vector_store("owner")
@@ -39,6 +43,64 @@ def test_cached_queries_observe_external_updates_and_empty_revision(local_indexe
     assert rag_chain.get_retriever("owner") is not old_reader
     vector_store.delete_vector_store("owner")
     assert rag_chain.retrieve_context("beta", "owner") == []
+
+
+def test_dense_model_change_never_reuses_same_dimension_vectors(local_indexes, monkeypatch):
+    import numpy as np
+    from rag import embeddings
+    calls = []
+    monkeypatch.setattr(settings, "RETRIEVAL_MODE", "hybrid")
+    monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", "https://embedding.example/v1")
+    monkeypatch.setattr(settings, "EMBEDDING_MODEL", "model-a")
+    def embed(texts, **kwargs):
+        calls.append(list(texts))
+        return np.asarray([[1.0, 0.0]] * len(texts), dtype=np.float32)
+    monkeypatch.setattr(embeddings, "get_embeddings_batch", embed)
+    store = vector_store.build_vector_store([node("alpha evidence", "a.txt")], "owner")
+    assert vector_store.load_vector_store("owner").faiss_index is not None
+    monkeypatch.setattr(settings, "EMBEDDING_MODEL", "model-b")
+    loaded = vector_store.load_vector_store("owner")
+    assert loaded.embeddings is None and loaded.faiss_index is None
+    assert loaded.retrieve("alpha")  # Metadata/BM25 remain usable.
+    monkeypatch.setattr(store, "_get_query_embedding", lambda *_: pytest.fail("old in-memory model space was queried"))
+    assert store.retrieve("alpha")
+    loaded.add_nodes([node("beta evidence", "b.txt")])
+    loaded.persist()
+    assert calls[-1] == ["alpha evidence", "beta evidence"]
+    assert vector_store.load_vector_store("owner").faiss_index.ntotal == 2
+    manifest = json.loads(vector_store._pointer_file("owner").read_bytes())
+    assert manifest["embedding_profile"]["model"] == "model-b"
+    assert "https://" not in json.dumps(manifest["embedding_profile"])
+
+
+def test_dense_snapshot_without_identity_falls_back_to_lexical(local_indexes, monkeypatch):
+    import numpy as np
+    from rag import embeddings
+    monkeypatch.setattr(settings, "RETRIEVAL_MODE", "hybrid")
+    monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", "https://embedding.example/v1")
+    monkeypatch.setattr(embeddings, "get_embeddings_batch", lambda texts, **kw: np.asarray([[1.0, 0.0]] * len(texts), dtype=np.float32))
+    vector_store.build_vector_store([node("alpha evidence", "a.txt")], "owner")
+    pointer = vector_store._pointer_file("owner")
+    manifest = json.loads(pointer.read_bytes())
+    manifest.pop("embedding_profile", None)
+    pointer.write_text(json.dumps(manifest))
+    loaded = vector_store.load_vector_store("owner")
+    assert loaded.faiss_index is None
+    assert loaded.retrieve("alpha")
+
+
+def test_model_change_invalidates_cached_dense_query_results(local_indexes, monkeypatch):
+    import numpy as np
+    from rag import embeddings
+    monkeypatch.setattr(settings, "RETRIEVAL_MODE", "hybrid")
+    monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", "https://embedding.example/v1")
+    monkeypatch.setattr(settings, "EMBEDDING_MODEL", "model-a")
+    monkeypatch.setattr(embeddings, "get_embeddings_batch", lambda texts, **kw: np.asarray([[1.0, 0.0]] * len(texts), dtype=np.float32))
+    monkeypatch.setattr(embeddings, "get_embedding", lambda *a, **kw: [1.0, 0.0])
+    vector_store.build_vector_store([node("alpha evidence", "a.txt")], "owner")
+    assert rag_chain.retrieve_context("qwerty", "owner")
+    monkeypatch.setattr(settings, "EMBEDDING_MODEL", "model-b")
+    assert rag_chain.retrieve_context("qwerty", "owner") == []
 
 
 def test_stale_writer_cannot_replace_a_new_revision(local_indexes):
@@ -113,6 +175,7 @@ def test_corrupt_remote_snapshot_is_not_used_as_fresh_evidence(local_indexes, mo
     monkeypatch.setattr(settings, "REDIS_URL", "redis://test")
     manifest = {"revision": "a" * 32, "files": {"metadata.jsonl": "b" * 64}}
     monkeypatch.setattr(remote_storage, "download_bytes", lambda key, **kwargs:
+        None if key.startswith("account-deletions/") else
         json.dumps(manifest).encode() if key.endswith("current.json") else b'corrupt')
     with pytest.raises(RuntimeError, match="incomplete or corrupt"):
         vector_store.load_vector_store("owner")
@@ -128,6 +191,9 @@ from pathlib import Path
 from config.settings import settings
 from rag import rag_chain, vector_store
 from services import remote_storage
+from services import index_jobs
+from contextlib import nullcontext
+index_jobs._user_index_lock = lambda user: nullcontext()
 root, host, action = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 settings.REDIS_URL = "redis://test"
 settings.RETRIEVAL_MODE = "bm25"

@@ -145,6 +145,7 @@ def test_listing_merges_replica_cache_and_remote_and_hides_deleted(uploads, monk
     assert listed[1]["chunks"] == 2
     monkeypatch.setattr(settings, "REDIS_URL", "redis://test")
     monkeypatch.setattr(documents, "_load_manifest", lambda user: {})
+    monkeypatch.setattr(index_jobs, "_user_index_lock", lambda user: nullcontext())
     monkeypatch.setattr(remote_storage, "download_bytes", lambda *a, **kw: None)
     def unavailable(*args, **kwargs):
         assert kwargs["required"]

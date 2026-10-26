@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
 import re
@@ -15,20 +16,25 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
+from dataclasses import dataclass
 
 import numpy as np
 
 from config.settings import settings
-from evaluation.metrics import citation_precision, citation_recall, lexical_faithfulness
-from rag.llm_client import stream_tokens
+from evaluation.metrics import lexical_faithfulness
+from rag.llm_client import LLMStreamError, stream_tokens
+from rag.rag_chain import retrieve_from_store
+from rag.vector_store import HybridVectorStore
+from rag.prompts import build_prompt, build_context_and_evidence, no_context_template
 
 DEFAULT_DATASET = Path(__file__).with_name("arxiv_corpus") / "generated_dataset.json"
 _CITATION_PATTERN = re.compile(r"\(Source:\s*([^)]+?)\s*\)", re.IGNORECASE)
+_EVIDENCE_PATTERN = re.compile(r"\[(E\d+)\]")
 _WORD_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
 
 def _tokens(text: str) -> list[str]:
-    return [token.casefold() for token in _WORD_PATTERN.findall(_CITATION_PATTERN.sub("", text))]
+    return [token.casefold() for token in _WORD_PATTERN.findall(_EVIDENCE_PATTERN.sub("", _CITATION_PATTERN.sub("", text)))]
 
 
 def token_f1(prediction: str, reference: str) -> float:
@@ -46,127 +52,165 @@ def token_f1(prediction: str, reference: str) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def _question_for(source_id: str, queries: list[dict]) -> str:
-    for sample in queries:
-        if source_id in sample.get("relevant_ids", []):
-            return sample["query"]
-    raise ValueError(f"No labeled query exists for {source_id}")
+def _reference_answer(query, citation_samples):
+    if query.get("reference_answer"):
+        return query["reference_answer"]
+    for sample in citation_samples:
+        if query.get("id") is not None and sample.get("query_id") == query["id"]:
+            return sample.get("answer", "")
+    # Compatibility with small, single-question fixtures; never used to retrieve.
+    return citation_samples[0].get("answer", "") if len(citation_samples) == 1 else ""
 
 
-def _looks_like_provider_error(answer: str) -> bool:
-    lowered = answer.casefold()
-    markers = (
-        "[error:", "cannot reach the ai service", "too many requests",
-        "service returned an error", "service connection was interrupted",
-        "service took too long", "service encountered an error",
-    )
-    return any(marker in lowered for marker in markers)
+def _citation_scores(answer, evidence, relevant_pages):
+    cited = _EVIDENCE_PATTERN.findall(answer)
+    by_id = {item["id"]: item for item in evidence}
+    correct = [citation for citation in cited if citation in by_id
+               and (by_id[citation]["file_name"], by_id[citation]["page"]) in relevant_pages]
+    supported_pages = {(by_id[citation]["file_name"], by_id[citation]["page"]) for citation in correct}
+    return (len(correct) / len(cited) if cited else 0.0,
+            len(supported_pages) / len(relevant_pages) if relevant_pages else 0.0,
+            sorted(set(cited) - set(by_id)))
 
 
-async def _generate(prompt: str) -> str:
+
+@dataclass
+class GenerationResult:
+    answer: str
+    error_type: str | None
+    first_token_ms: float | None
+
+
+async def _generate(prompt: str) -> GenerationResult:
     parts: list[str] = []
-    async for token in stream_tokens(prompt):
-        parts.append(token)
-    return "".join(parts).strip()
+    first_token_ms = None
+    started = time.perf_counter()
+    error_type = None
+    try:
+        async for token in stream_tokens(prompt):
+            if token and first_token_ms is None:
+                first_token_ms = (time.perf_counter() - started) * 1000
+            parts.append(token)
+    except LLMStreamError as exc:
+        # Keep diagnostic text/usage for failed attempts, while scoring the
+        # failed attempt as zero rather than presenting it as a valid answer.
+        error_type = type(exc).__name__
+    return GenerationResult("".join(parts).strip(), error_type, first_token_ms)
 
 
 async def evaluate_live(dataset: dict, limit: int | None, delay_seconds: float,
-                        input_cost_per_million: float, output_cost_per_million: float) -> dict:
-    corpus = dataset["corpus"]
-    corpus_by_relevance_id: dict[str, list[dict]] = {}
-    for item in corpus:
-        relevance_id = item.get("metadata", {}).get("relevance_id", item["id"])
-        corpus_by_relevance_id.setdefault(relevance_id, []).append(item)
-    queries_by_id = {sample.get("id"): sample for sample in dataset["queries"]}
-    samples = dataset.get("citation_samples", [])[:limit]
+                        input_cost_per_million: float, output_cost_per_million: float,
+                        k: int = 5) -> dict:
+    """Evaluate generated answers using production BM25 retrieval and packing.
+
+    Labels are read only after context selection. This is an offline, stateless
+    query path: it does not include HTTP, auth, conversation rewriting or B2 I/O.
+    """
+    if not 1 <= k <= 15:
+        raise ValueError("k must be between 1 and 15, matching production retrieval")
+    if limit is not None and limit < 1:
+        raise ValueError("limit must be positive")
+    corpus = dataset.get("corpus", [])
+    if not corpus or not dataset.get("queries"):
+        raise ValueError("Live evaluation requires a non-empty corpus and query list")
+    documents = [{"content": item["content"], "metadata": {
+        **item.get("metadata", {}),
+        "evaluation_id": item.get("metadata", {}).get("relevance_id", item["id"]),
+    }} for item in corpus]
+    retriever = HybridVectorStore(documents=documents)
+    retriever._build_bm25()
+    samples = dataset["queries"][:limit]
     records: list[dict] = []
+    dataset_hash = hashlib.sha256(json.dumps(
+        dataset, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
     for index, sample in enumerate(samples):
-        sources = sample["relevant_sources"]
-        evidence_items = [
-            item
-            for relevance_id in sample.get("relevant_ids", [])
-            for item in corpus_by_relevance_id.get(relevance_id, [])
-        ]
-        if not evidence_items:
-            source_files = {source.split("#", 1)[0] for source in sources}
-            evidence_items = [
-                item for item in corpus
-                if item.get("metadata", {}).get("file_name") in source_files
-            ]
-        if not evidence_items:
-            raise ValueError(f"No evidence chunks found for {sample.get('query_id', 'sample')}")
-        query_sample = queries_by_id.get(sample.get("query_id"))
-        source_id = next(iter(sample.get("relevant_ids", [])), evidence_items[0]["id"])
-        question = query_sample["query"] if query_sample else _question_for(
-            source_id, dataset["queries"]
-        )
-        source_label = sources[0]
-        evidence = "\n\n".join(
-            f"[Source: {source_label}]\n{item['content']}"
-            for item in evidence_items
-        )
-        prompt = (
-            "Answer the question using only the evidence below. "
-            "If the evidence is insufficient, say you do not know. "
-            "Keep the answer concise and cite every factual claim using exactly "
-            "(Source: filename).\n\n"
-            f"Question: {question}\n\nEvidence:\n{evidence}\n\nAnswer:"
-        )
+        question = sample["query"]
+        nodes = retrieve_from_store(question, retriever, top_k=k)
+        _, evidence = build_context_and_evidence(nodes, question)
+        prompt = (build_prompt(question, nodes, []) if nodes else no_context_template.format(
+            question=question, history="", instructions="No specific instructions."))
+        # Ground truth is used only for scoring, never to construct the prompt.
+        relevant_ids = set(sample.get("relevant_ids", []))
+        relevant_pages = {(doc["metadata"].get("file_name", "Unknown"), doc["metadata"].get("page"))
+                          for doc in documents if doc["metadata"]["evaluation_id"] in relevant_ids}
+        reference = _reference_answer(sample, dataset.get("citation_samples", []))
         started = time.perf_counter()
-        answer = await _generate(prompt)
+        generation = await _generate(prompt)
+        answer, error_type = generation.answer, generation.error_type
         latency_ms = (time.perf_counter() - started) * 1000
-        failed = not answer or _looks_like_provider_error(answer)
+        failed = not answer or error_type is not None
+        precision, recall, unsupported_ids = _citation_scores(answer, evidence, relevant_pages)
         input_tokens = math.ceil(len(prompt) / 4)
         output_tokens = math.ceil(len(answer) / 4)
-        record = {
-            "question": question,
-            "answer": answer,
-            "reference_answer": sample["answer"],
-            "relevant_sources": sources,
-            "provider_error": failed,
-            "citation_precision": 0.0 if failed else citation_precision(answer, sources),
-            "citation_recall": 0.0 if failed else citation_recall(answer, sources),
-            "faithfulness": 0.0 if failed else lexical_faithfulness(
-                answer, [item["content"] for item in evidence_items]
-            ),
-            "reference_token_f1": 0.0 if failed else token_f1(answer, sample["answer"]),
-            "latency_ms": latency_ms,
+        records.append({
+            "id": sample.get("id"), "question": question, "answer": answer,
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            "reference_answer": reference, "answerable": bool(relevant_ids),
+            "retrieved_ids": list(dict.fromkeys(node["metadata"]["evaluation_id"] for node in nodes)),
+            "evidence": evidence, "unsupported_citation_ids": unsupported_ids,
+            "provider_error": failed, "provider_error_type": error_type,
+            # Citation/faithfulness scores are only defined for answerable labels;
+            # absent-claim questions are retained for explicit human review.
+            "citation_precision": (0.0 if failed else precision) if relevant_ids else None,
+            "citation_recall": (0.0 if failed else recall) if relevant_ids else None,
+            "faithfulness": (0.0 if failed else lexical_faithfulness(
+                _EVIDENCE_PATTERN.sub("", answer), [item["content"] for item in evidence]
+            )) if relevant_ids else None,
+            "reference_token_f1": (0.0 if failed else token_f1(answer, reference)) if reference else None,
+            "latency_ms": latency_ms, "first_token_ms": generation.first_token_ms,
             "estimated_input_tokens": input_tokens,
             "estimated_output_tokens": output_tokens,
-        }
-        records.append(record)
+        })
         if delay_seconds > 0 and index + 1 < len(samples):
             await asyncio.sleep(delay_seconds)
 
     successful = [record for record in records if not record["provider_error"]]
     latencies = [record["latency_ms"] for record in successful]
+    attempt_latencies = [record["latency_ms"] for record in records]
+    first_token_times = [record["first_token_ms"] for record in records if record["first_token_ms"] is not None]
     total_input = sum(record["estimated_input_tokens"] for record in records)
     total_output = sum(record["estimated_output_tokens"] for record in records)
-    estimated_cost = (
-        total_input * input_cost_per_million / 1_000_000
-        + total_output * output_cost_per_million / 1_000_000
-    )
-    aggregate = lambda key: mean(record[key] for record in successful) if successful else 0.0
+    estimated_cost = (total_input * input_cost_per_million + total_output * output_cost_per_million) / 1_000_000
+    def aggregate(key):
+        scores = [record[key] for record in records if record[key] is not None]
+        return mean(scores) if scores else 0.0
     return {
+        "evaluation_version": 3,
+        "dataset_sha256": dataset_hash,
+        "dataset_hash_method": "canonical UTF-8 JSON; sorted keys, compact separators",
+        "configuration": {"RETRIEVAL_MODE": "bm25", "TOP_K": k, **{name: getattr(settings, name) for name in (
+            "RRF_K", "MAX_CHUNK_CHARS", "MAX_CONTEXT_CHARS", "MAX_HISTORY_MESSAGES",
+            "MAX_TOKENS", "NUM_CTX", "TEMPERATURE", "LLM_TOP_K", "LLM_TOP_P", "LLM_SEED",
+        )}},
+        "pipeline": {"retrieval": "rag.rag_chain.retrieve_from_store", "mode": "bm25", "k": k,
+                     "prompt": "rag.prompts.build_prompt", "context": "rag.prompts.build_context_and_evidence"},
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "provider": settings.LLM_PROVIDER,
         "model": settings.GROQ_MODEL if settings.LLM_PROVIDER == "groq" else settings.MODEL_NAME,
-        "sample_count": len(records),
-        "successful_samples": len(successful),
-        "citation_precision": aggregate("citation_precision"),
-        "citation_recall": aggregate("citation_recall"),
-        "faithfulness": aggregate("faithfulness"),
-        "faithfulness_method": "lexical_evidence_support_proxy",
+        "sample_count": len(records), "successful_samples": len(successful),
+        "provider_failure_rate": (len(records) - len(successful)) / len(records) if records else 0.0,
+        "answerable_samples": sum(record["answerable"] for record in records),
+        "unanswerable_samples": sum(not record["answerable"] for record in records),
+        "quality_denominator": "all labeled attempts, including provider failures scored zero; null scores excluded",
+        "citation_method": "evidence-ID validity and annotated page relevance; not claim entailment",
+        "unanswerable_evaluation": "answers retained for human review; no automatic answer-accuracy claim",
+        "citation_precision": aggregate("citation_precision"), "citation_recall": aggregate("citation_recall"),
+        "faithfulness": aggregate("faithfulness"), "faithfulness_method": "lexical_evidence_support_proxy",
         "reference_token_f1": aggregate("reference_token_f1"),
         "latency_ms_p50": float(np.percentile(latencies, 50)) if latencies else 0.0,
         "latency_ms_p95": float(np.percentile(latencies, 95)) if latencies else 0.0,
-        "estimated_input_tokens": total_input,
-        "estimated_output_tokens": total_output,
-        "token_estimation_method": "ceil(unicode_character_count/4); provider streaming usage unavailable",
+        "attempt_latency_ms_p50": float(np.percentile(attempt_latencies, 50)) if attempt_latencies else 0.0,
+        "attempt_latency_ms_p95": float(np.percentile(attempt_latencies, 95)) if attempt_latencies else 0.0,
+        "first_token_ms_p50": float(np.percentile(first_token_times, 50)) if first_token_times else None,
+        "first_token_ms_p95": float(np.percentile(first_token_times, 95)) if first_token_times else None,
+        "first_token_scope": "first non-empty provider token; includes failed attempts that emitted text; not HTTP time-to-first-byte",
+        "latency_scope": "successful provider generations only; excludes retrieval, packing, HTTP and index synchronization",
+        "estimated_input_tokens": total_input, "estimated_output_tokens": total_output,
+        "token_estimation_method": "ceil(unicode_character_count/4), including retained partial answers; not billing usage; provider usage unavailable",
         "input_cost_per_million_usd": input_cost_per_million,
         "output_cost_per_million_usd": output_cost_per_million,
-        "estimated_cost_usd": estimated_cost,
-        "samples": records,
+        "estimated_cost_usd": estimated_cost, "samples": records,
     }
 
 
@@ -175,6 +219,7 @@ def main() -> int:
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("live_results.json"))
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--k", type=int, choices=range(1, 16), default=5)
     parser.add_argument("--delay-seconds", type=float, default=1.0)
     parser.add_argument("--input-cost-per-million", type=float, default=0.0)
     parser.add_argument("--output-cost-per-million", type=float, default=0.0)
@@ -186,6 +231,7 @@ def main() -> int:
         max(0.0, args.delay_seconds),
         max(0.0, args.input_cost_per_million),
         max(0.0, args.output_cost_per_million),
+        args.k,
     ))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

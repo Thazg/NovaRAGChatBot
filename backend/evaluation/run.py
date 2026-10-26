@@ -12,7 +12,7 @@ DEFAULT_DATASET = Path(__file__).with_name("arxiv_corpus") / "generated_dataset.
 def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate Nova retrieval and citation quality offline.")
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
-    parser.add_argument("--k", type=int, default=5)
+    parser.add_argument("--k", type=int, choices=range(1, 16), default=5)
     parser.add_argument("--min-hit", type=float, default=0.78)
     parser.add_argument("--min-recall", type=float, default=0.78)
     parser.add_argument("--min-mrr", type=float, default=0.55)

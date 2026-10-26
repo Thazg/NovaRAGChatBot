@@ -94,20 +94,20 @@ def test_evidence_survives_history_and_regeneration_does_not_duplicate_user(tmp_
     assert conversation_store.get_conversation("session", "owner")["messages"][-1]["content"] == previous_answer
 
 
-def test_failed_provider_does_not_emit_done_and_is_persisted_as_interrupted(tmp_path, monkeypatch):
+@pytest.mark.parametrize("tokens", [["one"], ["one", " two"], ["one", " two", " three"], ["one", " two", " three", " four"]])
+def test_failed_provider_does_not_emit_done_and_is_persisted_as_interrupted(tmp_path, monkeypatch, tokens):
     monkeypatch.setattr(conversation_store, "BASE_DIR", tmp_path)
     monkeypatch.setattr(remote_storage, "upload_file", lambda *args: False)
     monkeypatch.setattr(remote_storage, "download_file", lambda *args: False)
     async def retrieve(*args):
         return []
-    async def tokens(prompt):
-        yield "one"
-        yield " two"
-        yield " three"
+    async def provider_tokens(prompt):
+        for token in tokens:
+            yield token
         raise RuntimeError("provider disconnected")
     monkeypatch.setattr(chat, "_retrieve_nodes", retrieve)
     monkeypatch.setattr(chat, "get_retriever", lambda *args: None)
-    monkeypatch.setattr(chat, "stream_tokens", tokens)
+    monkeypatch.setattr(chat, "stream_tokens", provider_tokens)
     async def run():
         response = await chat.chat_stream(request(), chat.ChatRequest(session_id="failed", question="What does the paper establish?"))
         return "".join([event async for event in response.body_iterator])
@@ -116,4 +116,60 @@ def test_failed_provider_does_not_emit_done_and_is_persisted_as_interrupted(tmp_
     assert '"error"' in wire
     message = conversation_store.get_conversation("failed", "owner")["messages"][-1]
     assert message["interrupted"] is True
-    assert message["content"] == "one two three"
+    assert message["content"] == "".join(tokens)
+
+
+@pytest.mark.parametrize("citation,success", [("E1", True), ("E99", False)])
+def test_unknown_evidence_ids_cannot_complete_a_grounded_answer(tmp_path, monkeypatch, citation, success):
+    monkeypatch.setattr(conversation_store, "BASE_DIR", tmp_path / "sessions")
+    monkeypatch.setattr(chat.settings, "REDIS_URL", "")
+    monkeypatch.setattr(chat.settings, "B2_KEY_ID", "")
+    monkeypatch.setattr(chat.settings, "B2_APP_KEY", "")
+    monkeypatch.setattr(remote_storage, "upload_file", lambda *args: False)
+    monkeypatch.setattr(remote_storage, "download_file", lambda *args: False)
+    nodes = [{"content": "Supported evidence.", "metadata": {"file_name": "notes.txt", "chunk_index": 1}}]
+    async def retrieve(*args):
+        return nodes
+    async def tokens(prompt):
+        assert "Earlier assistant answers are not evidence" in prompt
+        assert "untrusted document excerpts" in prompt
+        assert "A missing mention is not proof" in prompt
+        yield f"A claim [{citation}]."
+    monkeypatch.setattr(chat, "_retrieve_nodes", retrieve)
+    monkeypatch.setattr(chat, "get_retriever", lambda *args: type("Store", (), {"documents": nodes})())
+    monkeypatch.setattr(chat, "stream_tokens", tokens)
+    async def send():
+        response = await chat.chat_stream(request(), chat.ChatRequest(session_id="citation-test", question="What does the evidence say?"))
+        return "".join([part async for part in response.body_iterator])
+    wire = asyncio.run(send())
+    assert ("[DONE]" in wire) is success
+    saved = conversation_store.get_conversation("citation-test", "owner")["messages"][-1]
+    assert saved["content"] == f"A claim [{citation}]."
+    assert bool(saved.get("interrupted")) is not success
+
+
+def test_account_deletion_during_generation_prevents_late_history_and_done(tmp_path, monkeypatch):
+    from services import account_lifecycle
+    monkeypatch.setattr(conversation_store, "BASE_DIR", tmp_path / "sessions")
+    monkeypatch.setattr(account_lifecycle, "BASE_DIR", tmp_path / "barriers")
+    monkeypatch.setattr(chat.settings, "REDIS_URL", "")
+    monkeypatch.setattr(chat.settings, "B2_KEY_ID", "")
+    monkeypatch.setattr(chat.settings, "B2_APP_KEY", "")
+    monkeypatch.setattr(remote_storage, "upload_file", lambda *args: False)
+    monkeypatch.setattr(remote_storage, "download_file", lambda *args: False)
+    async def retrieve(*args):
+        return []
+    async def tokens(prompt):
+        account_lifecycle.mark_deleting("owner")
+        yield "Late model answer."
+    monkeypatch.setattr(chat, "_retrieve_nodes", retrieve)
+    monkeypatch.setattr(chat, "get_retriever", lambda *args: None)
+    monkeypatch.setattr(chat, "stream_tokens", tokens)
+    async def send():
+        response = await chat.chat_stream(request(), chat.ChatRequest(session_id="deleting", question="Explain the document."))
+        return "".join([part async for part in response.body_iterator])
+    wire = asyncio.run(send())
+    assert "[DONE]" not in wire
+    assert '"error"' in wire
+    messages = conversation_store._load_store("owner")["deleting"]["messages"]
+    assert [message["role"] for message in messages] == ["user"]

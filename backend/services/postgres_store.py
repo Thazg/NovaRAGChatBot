@@ -10,6 +10,10 @@ from sqlalchemy.exc import IntegrityError
 from services.database import ConversationRecord, RefreshSessionRecord, UserRecord, database_session
 
 
+class ConversationIdConflict(ValueError):
+    pass
+
+
 def find_user_by_username(username: str) -> dict | None:
     with database_session() as session:
         user = session.scalar(select(UserRecord).where(UserRecord.username == username))
@@ -144,18 +148,26 @@ def create_conversation(user_id: str, title: str = "New Chat", conversation_id: 
                         messages: list[dict[str, Any]] | None = None, pinned: bool = False) -> dict[str, Any]:
     conversation_id = conversation_id or str(uuid.uuid4())
     now = float(int(time.time() * 1000))
-    with database_session() as session:
-        existing = session.scalar(select(ConversationRecord).where(
-            ConversationRecord.id == conversation_id,
-            ConversationRecord.user_id == user_id,
-        ))
-        if existing:
-            return _conversation_dict(existing)
-        record = ConversationRecord(id=conversation_id, user_id=user_id, title=title.strip()[:120] or "New Chat",
-                                    messages=messages or [], pinned=pinned, created_at=now, updated_at=now)
-        session.add(record)
-        session.flush()
-        return _conversation_dict(record)
+    try:
+        with database_session() as session:
+            existing = session.scalar(select(ConversationRecord).where(
+                ConversationRecord.id == conversation_id,
+                ConversationRecord.user_id == user_id,
+            ))
+            if existing:
+                return _conversation_dict(existing)
+            record = ConversationRecord(id=conversation_id, user_id=user_id, title=title.strip()[:120] or "New Chat",
+                                        messages=messages or [], pinned=pinned, created_at=now, updated_at=now)
+            session.add(record)
+            session.flush()
+            return _conversation_dict(record)
+    except IntegrityError:
+        # A concurrent same-owner create is idempotent. A foreign owner's ID
+        # must never return their record or leak a database constraint error.
+        try:
+            return get_conversation(conversation_id, user_id)
+        except KeyError as exc:
+            raise ConversationIdConflict("Conversation ID is unavailable") from exc
 
 
 def mutate_conversation(conversation_id: str, user_id: str, mutation) -> dict[str, Any]:

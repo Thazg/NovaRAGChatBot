@@ -10,6 +10,8 @@ def migrate_uploads(user_id: str) -> int:
     import json
 
     with _user_index_lock(user_id):
+        from services.account_lifecycle import ensure_writable
+        ensure_writable(user_id)
         directory = documents._user_uploads_dir(user_id)
         local_manifest = directory / "document_manifest.json"
         manifest = json.loads(local_manifest.read_bytes()) if local_manifest.exists() else {}

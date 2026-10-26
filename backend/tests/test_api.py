@@ -41,6 +41,40 @@ def test_private_routes_require_authentication() -> None:
     assert response.json() == {"detail": "Authentication required"}
 
 
+def test_api_documentation_is_public_and_private_operations_advertise_bearer() -> None:
+    assert client.get("/docs").status_code == 200
+    assert client.get("/redoc").status_code == 200
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    assert schema["components"]["securitySchemes"]["BearerAuth"]["scheme"] == "bearer"
+    assert set(schema["paths"]["/chat/stream"]["post"]["responses"]["200"]["content"]) == {"text/event-stream"}
+    for path, operations in schema["paths"].items():
+        for method, operation in operations.items():
+            if method not in {"get", "head", "post", "put", "patch", "delete"}:
+                continue
+            is_public = path.startswith("/health") or path in {
+                "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout",
+            }
+            assert operation["security"] == ([] if is_public else [{"BearerAuth": []}])
+    assert client.get("/documents").status_code == 401
+    assert client.get("/auth/preferences").status_code == 401
+
+
+def test_pending_account_deletion_returns_actionable_conflict(monkeypatch) -> None:
+    from api.routes import conversation
+    from services.account_lifecycle import AccountDeletionPending
+
+    monkeypatch.setattr("app.verify_token", lambda _token: {"user_id": "owner"})
+    monkeypatch.setattr("app.user_exists", lambda _user: True)
+    def blocked(*_args, **_kwargs):
+        raise AccountDeletionPending()
+    monkeypatch.setattr(conversation, "create_conversation", blocked)
+    response = client.post("/conversation/new", headers={"Authorization": "Bearer test"}, json={})
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Account deletion is pending. Retry deleting the account."}
+
+
 def test_production_frontend_origin_passes_cors_preflight() -> None:
     response = client.options(
         "/auth/login",

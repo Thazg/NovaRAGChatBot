@@ -93,9 +93,13 @@ def create_token(user_id: str) -> str:
 
 
 def verify_token(token: str, expected_type: str = "access") -> dict | None:
-    import json
+    import math
+    # Validate the entire untrusted envelope before ASCII encoding/HMAC. A bad
+    # Authorization header must be an authentication failure, never a 500.
+    if not isinstance(token, str) or len(token) > 8192:
+        return None
     parts = token.split(".")
-    if len(parts) != 3:
+    if len(parts) != 3 or any(not re.fullmatch(r"[A-Za-z0-9_-]+", part) for part in parts):
         return None
     header, payload, sig = parts
     signing_input = f"{header}.{payload}"
@@ -106,18 +110,18 @@ def verify_token(token: str, expected_type: str = "access") -> dict | None:
         return None
     try:
         header_data = json.loads(_base64url_decode(header))
+        data = json.loads(_base64url_decode(payload))
+        if not isinstance(header_data, dict) or not isinstance(data, dict):
+            return None
         if header_data.get("alg") != "HS256" or header_data.get("typ") != "JWT":
             return None
-        data = json.loads(_base64url_decode(payload))
-    except Exception:
-        return None
-    if data.get("exp", 0) < time.time():
-        return None
-    if data.get("type") != expected_type:
-        return None
-    try:
+        expires = data.get("exp")
+        if isinstance(expires, bool) or not isinstance(expires, (int, float)) or not math.isfinite(expires):
+            return None
+        if expires <= time.time() or data.get("type") != expected_type:
+            return None
         uuid.UUID(str(data.get("user_id", "")))
-    except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, OverflowError, UnicodeError):
         return None
     return data
 
@@ -131,14 +135,20 @@ def _load_users() -> dict:
             pass
     if USERS_FILE.exists():
         try:
-            with USERS_FILE.open("r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
+            payload = json.loads(USERS_FILE.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("Expected a user mapping")
+            return payload
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("User store is unreadable; restore or repair it before accepting writes") from exc
     return {}
 
 
-def _save_users(users: dict) -> None:
+def _save_users(users: dict, *, required: bool = False) -> None:
+    if required:
+        from services.remote_storage import upload_bytes
+        if not upload_bytes("data/users.json", json.dumps(users, ensure_ascii=False).encode()):
+            raise RuntimeError("Could not persist account removal")
     temp_file = USERS_FILE.with_suffix(".tmp")
     with temp_file.open("w", encoding="utf-8") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
@@ -196,61 +206,47 @@ def change_password(user_id: str, current_password: str, new_password: str) -> b
 
 
 def delete_user(user_id: str) -> bool:
-    if DATABASE_ENABLED:
-        from services.postgres_store import delete_user_record
-        if not delete_user_record(user_id):
+    from services.index_jobs import _user_index_lock
+    from services.account_lifecycle import mark_deleting
+    from services import conversation_store, user_preferences, refresh_sessions
+    from rag import vector_store, rag_chain
+    from services.remote_storage import delete_file, list_files
+
+    with _user_index_lock(user_id):
+        if not user_exists(user_id):
             return False
-    else:
+        # Keep credentials until cleanup succeeds so failures remain retryable.
+        mark_deleting(user_id)
+        refresh_sessions.revoke_user(user_id)
+        remote_required = vector_store._remote_enabled()
+        for prefix in (f"uploads/{user_id}/", f"index/{user_id}/", f"sessions/{user_id}/"):
+            paths = list_files(prefix, required=True) if remote_required else list_files(prefix)
+            for remote_path in paths:
+                if not delete_file(remote_path) and remote_required:
+                    raise RuntimeError("Could not finish remote account cleanup")
+        if remote_required and not delete_file(f"preferences/{user_id}.json"):
+            raise RuntimeError("Could not remove remote preferences")
+        # Writers hold this same user lock, so neither delayed streams nor jobs
+        # can recreate these artifacts after the barrier is installed.
+        from api.routes.documents import BASE_UPLOADS_DIR
+        for path in (BASE_UPLOADS_DIR / user_id, vector_store.BASE_INDEX_DIR / user_id,
+                     conversation_store.BASE_DIR / user_id):
+            if path.exists():
+                shutil.rmtree(path)
+        preference_path = user_preferences.BASE_DIR / f"{user_id}.json"
+        preference_path.unlink(missing_ok=True)
+        rag_chain.unload_vector_store(user_id)
+        if DATABASE_ENABLED:
+            from services.postgres_store import delete_user_record
+            return delete_user_record(user_id)
         with _USERS_LOCK:
             users = _load_users()
-            username_to_delete = None
-            for uname, data in list(users.items()):
-                if data.get("user_id") == user_id:
-                    username_to_delete = uname
-                    break
-            if not username_to_delete:
-                return False
-            del users[username_to_delete]
-            _save_users(users)
-
-    # Clean up local user data.
-    upload_dir = Path(settings.UPLOAD_FOLDER) / user_id
-    if upload_dir.exists():
-        shutil.rmtree(upload_dir, ignore_errors=True)
-
-    # Remove vector store
-    from rag.vector_store import BASE_INDEX_DIR
-    index_dir = BASE_INDEX_DIR / user_id
-    if index_dir.exists():
-        shutil.rmtree(index_dir, ignore_errors=True)
-
-    # Remove conversations
-    conv_file = BACKEND_DIR / "storage" / "sessions" / user_id / "conversations.json"
-    if conv_file.exists():
-        conv_file.unlink(missing_ok=True)
-
-    # Remove matching remote objects when B2 is configured.
-    try:
-        from services.remote_storage import delete_file, list_files
-        for prefix in (f"uploads/{user_id}/", f"index/{user_id}/", f"sessions/{user_id}/"):
-            for remote_path in list_files(prefix):
-                delete_file(remote_path)
-    except Exception:
-        pass
-
-    try:
-        from rag.rag_chain import unload_vector_store
-        unload_vector_store(user_id)
-    except Exception:
-        pass
-
-    try:
-        from services.user_preferences import delete_preferences
-        delete_preferences(user_id)
-    except Exception:
-        pass
-
-    return True
+            for username, record in list(users.items()):
+                if isinstance(record, dict) and record.get("user_id") == user_id:
+                    del users[username]
+                    _save_users(users, required=remote_required)
+                    return True
+        return False
 
 
 def register(username: str, password: str) -> dict | None:

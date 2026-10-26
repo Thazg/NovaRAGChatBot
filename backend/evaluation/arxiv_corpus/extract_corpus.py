@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import sys
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,8 @@ def extract_corpus() -> dict[str, Any]:
             "version": manifest["version"],
             "source_format": "version-pinned arXiv PDFs",
             "extractor": "rag.load.load_pdf + rag.chunking.split_documents",
+            "pypdf_version": version("pypdf"),
+            "fonttools_version": version("fonttools"),
             "chunk_size_words": MAX_CHUNK_SIZE,
             "chunk_overlap_words": CHUNK_OVERLAP,
             "paper_count": len(papers),

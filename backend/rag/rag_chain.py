@@ -1,8 +1,9 @@
 import re
 
-from rag.vector_store import load_vector_store, index_revision
+from rag.vector_store import load_vector_store, index_revision, embedding_identity, document_scope_indices
 from config.settings import settings
 from rag.cache import SimpleCache
+from services.account_lifecycle import account_mutation
 
 retrieval_cache = SimpleCache(max_entries=256)
 _vector_store_instances: dict[str, object] = {}
@@ -13,6 +14,11 @@ def _ensure_user_id(user_id: str) -> str:
 
 
 def get_retriever(user_id: str = ""):
+    return _get_retriever_locked(_ensure_user_id(user_id))
+
+
+@account_mutation
+def _get_retriever_locked(user_id: str):
     uid = _ensure_user_id(user_id)
     current_revision = index_revision(uid)
     from services.document_lifecycle import deleted_documents
@@ -30,6 +36,11 @@ def get_retriever(user_id: str = ""):
 
 
 def reload_vector_store(user_id: str = "") -> None:
+    _reload_vector_store_locked(_ensure_user_id(user_id))
+
+
+@account_mutation
+def _reload_vector_store_locked(user_id: str) -> None:
     uid = _ensure_user_id(user_id)
     try:
         _vector_store_instances[uid] = load_vector_store(uid)
@@ -40,8 +51,11 @@ def reload_vector_store(user_id: str = "") -> None:
 
 def unload_vector_store(user_id: str = "") -> None:
     uid = _ensure_user_id(user_id)
-    _vector_store_instances.pop(uid, None)
-    retrieval_cache.clear()
+    from services.index_jobs import _user_index_lock
+    # Cleanup must remain possible after the account deletion barrier exists.
+    with _user_index_lock(uid):
+        _vector_store_instances.pop(uid, None)
+        retrieval_cache.clear()
 
 
 def _is_document_overview_query(query: str) -> bool:
@@ -80,10 +94,8 @@ def retrieve_from_store(
     scope = document_name.strip()
     nodes = retriever.retrieve(query.strip(), top_k=count, file_name=scope or None)
     if not nodes and allow_broad and _is_document_overview_query(query):
-        documents = [document for document in retriever.documents if not scope or scope.casefold() in {
-            str(document.get("metadata", {}).get("file_name", "")).casefold(),
-            str(document.get("metadata", {}).get("storage_name", "")).casefold(),
-        }]
+        eligible = document_scope_indices(retriever.documents, scope)
+        documents = [document for index, document in enumerate(retriever.documents) if index in eligible]
         nodes = _representative_nodes(documents, count)
     return nodes
 
@@ -92,13 +104,22 @@ def retrieve_context(
     query: str, user_id: str = "", top_k: int | None = None,
     allow_broad: bool = True, document_name: str = "",
 ):
+    return _retrieve_context_locked(query, _ensure_user_id(user_id), top_k, allow_broad, document_name)
+
+
+@account_mutation
+def _retrieve_context_locked(
+    query: str, user_id: str, top_k: int | None,
+    allow_broad: bool, document_name: str,
+):
     uid = _ensure_user_id(user_id)
     # Resolve the current revision before looking up a query result: an old
     # retrieval-cache hit must not bypass cross-process invalidation.
     retriever = get_retriever(uid)
     if retriever is None:
         return []
-    cache_key = repr((uid, getattr(retriever, "revision", ""), getattr(retriever, "deletion_revision", ()), document_name.strip().casefold(),
+    cache_key = repr((uid, getattr(retriever, "revision", ""), getattr(retriever, "deletion_revision", ()),
+                      settings.RETRIEVAL_MODE, embedding_identity(), document_name.strip().casefold(),
                       query.strip(), top_k or settings.TOP_K, allow_broad))
     cached = retrieval_cache.get(cache_key)
     if cached is not None:
@@ -109,23 +130,39 @@ def retrieve_context(
 
 
 def rewrite_question(question, history):
+    """Expand referential follow-ups with bounded user questions, never model output.
+
+    This is a lexical heuristic, not a model-based standalone-question rewriter.
+    Short standalone topics and document overviews must remain independent of
+    previous answers, which are not a source of verified document facts.
+    """
     question = (question or "").strip()
     if not question:
         return ""
-    if not history or len(history) < 2:
+    if not history or _is_document_overview_query(question):
         return question
-    history_text = "\n".join(f"{m['role']}: {m['content']}" for m in history[-4:])
     question_lower = question.lower()
     trigger_words = [
-        "it", "this", "that", "those", "they", "them", "he", "she", "the",
+        "it", "this", "that", "those", "they", "them", "its", "their", "these",
         "nó", "cái này", "cái đó", "những cái này", "những cái đó", "chúng", "chúng nó",
         "cụ thể", "chi tiết", "cụ thể hơn", "rõ hơn", "kể tiếp", "tiếp theo", "nói rõ",
     ]
-    if any(
+    referential = any(
         (word in question_lower if " " in word else re.search(rf"\b{re.escape(word)}\b", question_lower))
         for word in trigger_words
-    ):
-        return f"{question} (Context: {history_text})"
-    if len(question.split()) <= 3:
-        return f"{question} (Context: {history_text})"
-    return question
+    )
+    elliptical = question_lower.rstrip(".!?") in {
+        "why", "how so", "explain more", "continue", "vì sao", "tại sao", "tiếp", "nói tiếp", "giải thích thêm",
+    } or question_lower.startswith(("what about ", "how about ", "còn "))
+    if not (referential or elliptical):
+        return question
+    user_questions = []
+    for message in reversed(history):
+        content = str(message.get("content", "")).strip()
+        if message.get("role") == "user" and content and content.casefold() != question.casefold():
+            user_questions.append(re.sub(r"\s+", " ", content)[:200])
+            if len(user_questions) == 2:
+                break
+    if not user_questions:
+        return question
+    return f"{question}\nPrevious user questions: {' | '.join(reversed(user_questions))}"

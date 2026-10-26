@@ -108,3 +108,31 @@ def test_provider_eof_without_completion_is_not_a_successful_answer(monkeypatch)
     monkeypatch.setattr(llm_client.httpx, "AsyncClient", lambda **kwargs: FakeAsyncClient(response, {}))
     with pytest.raises(llm_client.LLMStreamError, match="before completion"):
         asyncio.run(_collect(llm_client._stream_groq("question")))
+
+
+def test_groq_usage_only_frame_does_not_discard_the_generated_answer(monkeypatch):
+    monkeypatch.setattr(llm_client.settings, "GROQ_API_KEY", "test-key")
+    wire = (b'data:{"choices":[{"delta":{"content":"answer"}}]}\n\n'
+            b'data: {"choices":[],"usage":{"completion_tokens":1}}\n\n'
+            b'data: [DONE]\n\n')
+    response = FakeStreamResponse(200, [wire])
+    monkeypatch.setattr(llm_client.httpx, "AsyncClient", lambda **kwargs: FakeAsyncClient(response, {}))
+    assert asyncio.run(_collect(llm_client._stream_groq("question"))) == "answer"
+
+
+def test_ollama_final_json_without_newline_and_split_utf8_is_complete(monkeypatch):
+    wire = (json.dumps({"message": {"content": "Tiếng Việt"}}, ensure_ascii=False)
+            + '\n{"done":true}').encode("utf-8")
+    # Byte-sized delivery deliberately splits multibyte Vietnamese characters.
+    response = FakeStreamResponse(200, [wire[index:index + 1] for index in range(len(wire))])
+    monkeypatch.setattr(llm_client.httpx, "AsyncClient", lambda **kwargs: FakeAsyncClient(response, {}))
+    assert asyncio.run(_collect(llm_client._stream_ollama("question"))) == "Tiếng Việt"
+
+
+@pytest.mark.parametrize("payload", [b'not json', b'[]', b'{"choices":null}', b'{"choices":[{"delta":{"content":42}}]}'])
+def test_malformed_provider_event_cannot_be_silently_acknowledged(monkeypatch, payload):
+    monkeypatch.setattr(llm_client.settings, "GROQ_API_KEY", "test-key")
+    response = FakeStreamResponse(200, [b'data: ' + payload + b'\n\ndata: [DONE]\n\n'])
+    monkeypatch.setattr(llm_client.httpx, "AsyncClient", lambda **kwargs: FakeAsyncClient(response, {}))
+    with pytest.raises(llm_client.LLMStreamError):
+        asyncio.run(_collect(llm_client._stream_groq("question")))

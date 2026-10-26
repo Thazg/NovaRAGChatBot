@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from evaluation.text_matching import normalize_evidence_span
 
 ROOT = Path(__file__).resolve().parent
 CORPUS_PATH = ROOT / "corpus.json"
@@ -15,7 +20,7 @@ DATASET_PATH = ROOT / "generated_dataset.json"
 
 
 def _normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip().casefold()
+    return normalize_evidence_span(text)
 
 
 def build_dataset() -> dict[str, Any]:
@@ -102,6 +107,8 @@ def build_dataset() -> dict[str, Any]:
             "version": "1.0.0",
             "language": "English",
             "source_kind": "version-pinned arXiv PDF papers",
+            "pypdf_version": extracted["metadata"].get("pypdf_version"),
+            "fonttools_version": extracted["metadata"].get("fonttools_version"),
             "paper_count": extracted["metadata"]["paper_count"],
             "page_count": len(page_ids),
             "chunk_count": len(corpus),
