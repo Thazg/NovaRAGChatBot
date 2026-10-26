@@ -1,19 +1,58 @@
 import { z } from 'zod';
+import { readEventStream } from './eventStream';
+import { resolveAPIBaseURL } from './apiOrigin';
+
+const EvidenceSchema = z.object({
+  id: z.string().regex(/^E\d+$/),
+  document_id: z.string(),
+  file_name: z.string(),
+  chunk_index: z.number().int().nonnegative(),
+  page: z.number().int().positive().nullable(),
+  line_start: z.number().int().positive().nullable().default(null),
+  line_end: z.number().int().positive().nullable().default(null),
+  content: z.string(),
+});
+export type Evidence = z.infer<typeof EvidenceSchema>;
 
 // Production authentication must stay same-origin so the host-only refresh
 // cookie is sent through the Vercel/nginx `/api` proxy. Ignore stale hosting
 // environment overrides in production; a direct Render URL is also rejected
 // by the production Content-Security-Policy.
-export const API_BASE_URL = (
-  import.meta.env.PROD
-    ? '/api'
-    : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000')
-).replace(/\/+$/, '');
+export const API_BASE_URL = resolveAPIBaseURL(
+  import.meta.env.PROD, import.meta.env.VITE_API_BASE_URL, window.location.hostname,
+);
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const ALLOWED_UPLOAD_EXTENSIONS = ['.pdf', '.md', '.markdown', '.rst', '.txt', '.py', '.docx', '.ipynb'];
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<AuthResponse> | null = null;
+let sessionRevision = 0;
+let refreshController: AbortController | null = null;
+const responseSessions = new WeakMap<Response, number>();
+
+export function getSessionRevision(): number {
+  return sessionRevision;
+}
+
+function beginSessionChange(): number {
+  sessionRevision += 1;
+  accessToken = null;
+  refreshController?.abort();
+  refreshController = null;
+  refreshPromise = null;
+  return sessionRevision;
+}
+
+function assertSession(revision: number): void {
+  if (revision !== sessionRevision) throw new Error('Session changed. Sign in again.');
+}
+
+async function responseJson(response: Response): Promise<unknown> {
+  const revision = responseSessions.get(response) ?? sessionRevision;
+  const data: unknown = await response.json();
+  assertSession(revision);
+  return data;
+}
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
@@ -52,6 +91,8 @@ const MessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system']),
   content: z.string(),
   createdAt: z.number().optional(),
+  retrievedDocs: z.array(EvidenceSchema).optional(),
+  interrupted: z.boolean().optional(),
 });
 
 const ConversationSchema = z.object({
@@ -178,13 +219,20 @@ const AccountExportSchema = z.object({
 const StreamEventSchema = z.union([
   z.object({ token: z.string() }),
   z.object({ action: z.literal('search_offer'), query: z.string().optional() }),
+  z.object({ evidence: z.array(EvidenceSchema) }),
+  z.object({ error: z.string() }),
 ]);
 
 async function performRefresh(): Promise<AuthResponse> {
+  const revision = sessionRevision;
+  const controller = new AbortController();
+  refreshController = controller;
   const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
     credentials: 'include',
+    signal: controller.signal,
   });
+  assertSession(revision);
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
       setAccessToken(null);
@@ -193,6 +241,8 @@ async function performRefresh(): Promise<AuthResponse> {
     throw await responseError(response, 'Session service unavailable');
   }
   const data = AuthResponseSchema.parse(await response.json());
+  assertSession(revision);
+  if (refreshController === controller) refreshController = null;
   setAccessToken(data.access_token);
   return data;
 }
@@ -202,14 +252,16 @@ function refreshAccessToken(): Promise<AuthResponse> {
   // prevents concurrent 401 responses (or React StrictMode) from replaying the
   // same cookie and accidentally invalidating a freshly rotated session.
   if (!refreshPromise) {
-    refreshPromise = performRefresh().finally(() => {
-      refreshPromise = null;
+    const pending = performRefresh().finally(() => {
+      if (refreshPromise === pending) refreshPromise = null;
     });
+    refreshPromise = pending;
   }
   return refreshPromise;
 }
 
 async function authorizedFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+  const revision = sessionRevision;
   const headers = new Headers(init.headers);
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -217,15 +269,19 @@ async function authorizedFetch(path: string, init: RequestInit = {}, retry = tru
     headers,
     credentials: 'include',
   });
+  assertSession(revision);
   if (response.status === 401 && retry) {
     await refreshAccessToken();
+    assertSession(revision);
     return authorizedFetch(path, init, false);
   }
+  responseSessions.set(response, revision);
   return response;
 }
 
 export const auth = {
   async register(username: string, password: string): Promise<AuthResponse> {
+    const revision = beginSessionChange();
     const res = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -236,11 +292,13 @@ export const auth = {
       throw await responseError(res, res.statusText || 'Registration failed');
     }
     const data = AuthResponseSchema.parse(await res.json());
+    assertSession(revision);
     setAccessToken(data.access_token);
     return data;
   },
 
   async login(username: string, password: string): Promise<AuthResponse> {
+    const revision = beginSessionChange();
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -251,6 +309,7 @@ export const auth = {
       throw await responseError(res, res.statusText || 'Login failed');
     }
     const data = AuthResponseSchema.parse(await res.json());
+    assertSession(revision);
     setAccessToken(data.access_token);
     return data;
   },
@@ -260,11 +319,9 @@ export const auth = {
   },
 
   async logout(): Promise<void> {
-    try {
-      await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
-    } finally {
-      setAccessToken(null);
-    }
+    // Invalidate pending refresh/login work before waiting for the network.
+    beginSessionChange();
+    await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
   },
 
   async me(): Promise<{ user_id: string }> {
@@ -315,6 +372,8 @@ export interface Conversation {
     role: 'user' | 'assistant' | 'system';
     content: string;
     createdAt?: number;
+    retrievedDocs?: Evidence[];
+    interrupted?: boolean;
   }>;
   createdAt?: number;
   updatedAt?: number;
@@ -368,7 +427,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return ChatResponseSchema.parse(await response.json());
+    return ChatResponseSchema.parse(await responseJson(response));
   },
 
   async streamMessage(
@@ -381,122 +440,46 @@ export const api = {
     language?: string,
     regenerate = false,
     documentName?: string,
-    reconnectAttempt = 0,
-    replayPrefix = '',
+    onEvidence?: (evidence: Evidence[]) => void,
   ): Promise<void> {
     const body: Record<string, string | boolean> = { session_id: sessionId, question, stream: true };
     if (instructions) body.instructions = instructions;
     if (language && language !== 'auto') body.language = language;
     if (regenerate) body.regenerate = true;
     if (documentName) body.document_name = documentName;
-    let response: Response;
-    try {
-      response = await authorizedFetch('/chat/stream', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(body),
-        signal: abortSignal,
-      });
-    } catch (error) {
-      if (reconnectAttempt < 1 && !abortSignal?.aborted) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        return api.streamMessage(
-          sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, documentName, reconnectAttempt + 1, replayPrefix,
-        );
-      }
-      throw error;
-    }
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('ReadableStream not supported by this browser.');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-    let attemptText = '';
-    let emittedText = replayPrefix;
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-      
-      // Attempt to split by lines or SSE data format
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep the incomplete line in buffer
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        
-        let jsonStr = trimmed;
-        // Handle SSE format "data: {...}"
-        if (trimmed.startsWith('data:')) {
-          jsonStr = trimmed.substring(5).trim();
-          if (jsonStr === '[DONE]') continue; // common SSE end signal
-        }
-
-        try {
-          const parsed = StreamEventSchema.safeParse(JSON.parse(jsonStr));
-          if (!parsed.success) continue;
-          if ('token' in parsed.data) {
-            const previousAttemptLength = attemptText.length;
-            attemptText += parsed.data.token;
-            if (!replayPrefix) {
-              onToken(parsed.data.token);
-              emittedText += parsed.data.token;
-            } else if (replayPrefix.startsWith(attemptText)) {
-              // Suppress the deterministic replay that was already rendered.
-            } else if (attemptText.startsWith(replayPrefix)) {
-              const delta = attemptText.slice(Math.max(previousAttemptLength, replayPrefix.length));
-              if (delta) {
-                onToken(delta);
-                emittedText += delta;
-              }
-            } else {
-              throw new Error('The regenerated stream changed after reconnecting. Please regenerate the answer.');
-            }
-          } else if (parsed.data.action === 'search_offer') {
-            onAction?.({ type: 'search_offer', query: parsed.data.query || '' });
-          }
-          } catch {
-            // Incomplete JSON or other format, ignore for now
-          }
-        }
-      }
-    } catch (streamError: unknown) {
-      // StreamClosed / AbortError — expected when user cancels or connection drops
-      const errorName = streamError instanceof DOMException ? streamError.name : '';
-      const errorMessage = streamError instanceof Error ? streamError.message : '';
-      if (errorName === 'AbortError' || errorMessage.includes('StreamClosed')) {
-        return;
-      }
-      if (reconnectAttempt < 1 && !abortSignal?.aborted) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        return api.streamMessage(
-          sessionId, question, onToken, abortSignal, instructions,
-          onAction, language, regenerate, documentName, reconnectAttempt + 1, emittedText,
-        );
-      }
-      throw streamError;
-    }
+    // A failed POST may already have created a server-side turn. Never replay it
+    // automatically: explicit regeneration keeps the existing user turn.
+    const response = await authorizedFetch('/chat/stream', {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(body), signal: abortSignal,
+    });
+    if (!response.ok) throw await responseError(response, `API error: ${response.statusText}`);
+    if (!response.body) throw new Error('Streaming is unavailable in this browser.');
+    await readEventStream(response.body, (event) => {
+      const parsed = StreamEventSchema.parse(event);
+      if ('error' in parsed) throw new Error(parsed.error);
+      if ('token' in parsed) onToken(parsed.token);
+      else if ('evidence' in parsed) onEvidence?.(parsed.evidence);
+      else onAction?.({ type: 'search_offer', query: parsed.query || '' });
+    });
   },
 
   // Documents API
+  async downloadDocument(documentId: string): Promise<Blob> {
+    const response = await authorizedFetch(`/documents/${encodeURIComponent(documentId)}/download`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) throw await responseError(response, `Download failed (${response.status})`);
+    const blob = await response.blob();
+    assertSession(responseSessions.get(response) ?? sessionRevision);
+    return blob;
+  },
+
   async getDocuments(): Promise<Document[]> {
     const response = await authorizedFetch('/documents', { headers: authHeaders() });
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await responseError(response, `Could not load documents (${response.status})`);
     }
-    return z.array(DocumentSchema).parse(await response.json());
+    return z.array(DocumentSchema).parse(await responseJson(response));
   },
 
   async uploadDocument(file: File): Promise<{ status: string; id?: string; filename: string; indexed?: boolean; chunks?: number; job_id?: string; progress?: number; message?: string }> {
@@ -522,26 +505,33 @@ export const api = {
       throw await responseError(response, `Upload failed (${response.status})`);
     }
 
-    return UploadResponseSchema.parse(await response.json());
+    return UploadResponseSchema.parse(await responseJson(response));
   },
 
-  async getIndexJob(jobId: string): Promise<IndexJob> {
+  async getIndexJob(jobId: string, signal?: AbortSignal): Promise<IndexJob> {
     const response = await authorizedFetch(`/documents/jobs/${encodeURIComponent(jobId)}`, {
       headers: authHeaders(),
+      signal,
     });
     if (!response.ok) throw new Error(`Unable to read indexing progress (${response.status})`);
-    return IndexJobSchema.parse(await response.json()) as IndexJob;
+    return IndexJobSchema.parse(await responseJson(response)) as IndexJob;
   },
 
-  async waitForIndexJob(jobId: string, timeoutMs = 180_000): Promise<IndexJob> {
+  async waitForIndexJob(jobId: string, timeoutMs = 180_000, signal?: AbortSignal): Promise<IndexJob> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      const job = await api.getIndexJob(jobId);
+      signal?.throwIfAborted();
+      const job = await api.getIndexJob(jobId, signal);
       if (job.status === 'finished') return job;
       if (job.status === 'failed' || job.status === 'stopped' || job.status === 'canceled') {
         throw new Error(job.error || 'Document indexing did not complete');
       }
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => { clearTimeout(timer); reject(signal?.reason || new DOMException('Request canceled', 'AbortError')); };
+        const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, 700);
+        signal?.addEventListener('abort', abort, { once: true });
+        if (signal?.aborted) abort();
+      });
     }
     throw new Error('Document indexing is still running. Check back shortly.');
   },
@@ -556,7 +546,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return StatusSchema.parse(await response.json());
+    return StatusSchema.parse(await responseJson(response));
   },
 
   async clearAllDocuments(): Promise<{ status: string; deleted: number }> {
@@ -569,7 +559,7 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return DeleteCountSchema.parse(await response.json());
+    return DeleteCountSchema.parse(await responseJson(response));
   },
 
   async summarizeDocument(filename: string): Promise<{ summary: string; chunks: number; filename: string }> {
@@ -581,19 +571,20 @@ export const api = {
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return SummarySchema.parse(await response.json());
+    return SummarySchema.parse(await responseJson(response));
   },
 
-  async searchDownload(query: string, maxResults: number = 3): Promise<{ status: string; downloaded: DownloadedDocument[]; message: string; job_id?: string | null }> {
+  async searchDownload(query: string, maxResults: number = 3, signal?: AbortSignal): Promise<{ status: string; downloaded: DownloadedDocument[]; message: string; job_id?: string | null }> {
     const response = await authorizedFetch('/documents/search-download', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ query, max_results: maxResults }),
+      signal,
     });
     if (!response.ok) {
       throw await responseError(response, `PDF search failed (${response.status})`);
     }
-    return SearchDownloadSchema.parse(await response.json());
+    return SearchDownloadSchema.parse(await responseJson(response));
   },
 
   async reindexDocuments(): Promise<{ status: string; message: string; job_id?: string; progress?: number }> {
@@ -606,16 +597,16 @@ export const api = {
       throw new Error(`API error: ${response.statusText}`);
     }
 
-    return ReindexSchema.parse(await response.json());
+    return ReindexSchema.parse(await responseJson(response));
   },
 
   // Conversations API
   async getConversations(): Promise<Conversation[]> {
     const response = await authorizedFetch('/conversation', { headers: authHeaders() });
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await responseError(response, 'Conversation request failed');
     }
-    return z.array(ConversationSchema).parse(await response.json());
+    return z.array(ConversationSchema).parse(await responseJson(response));
   },
 
   async createConversation(
@@ -634,10 +625,10 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await responseError(response, 'Conversation request failed');
     }
 
-    return ConversationSchema.parse(await response.json());
+    return ConversationSchema.parse(await responseJson(response));
   },
 
   async deleteConversation(id: string): Promise<{ status: string }> {
@@ -647,10 +638,10 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await responseError(response, 'Conversation request failed');
     }
 
-    return StatusSchema.parse(await response.json());
+    return StatusSchema.parse(await responseJson(response));
   },
 
   async updateConversation(id: string, update: { title?: string; pinned?: boolean }): Promise<Conversation> {
@@ -661,10 +652,10 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await responseError(response, 'Conversation request failed');
     }
 
-    return ConversationSchema.parse(await response.json());
+    return ConversationSchema.parse(await responseJson(response));
   },
 
   async clearConversations(): Promise<{ status: string; deleted: number }> {
@@ -672,8 +663,8 @@ export const api = {
       method: 'DELETE',
       headers: authHeaders(),
     });
-    if (!response.ok) throw new Error(`API error: ${response.statusText}`);
-    return DeleteCountSchema.parse(await response.json());
+    if (!response.ok) throw await responseError(response, 'Conversation request failed');
+    return DeleteCountSchema.parse(await responseJson(response));
   },
 
   // Health check
@@ -682,12 +673,12 @@ export const api = {
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
-    return HealthStatusSchema.parse(await response.json());
+    return HealthStatusSchema.parse(await responseJson(response));
   },
 
   async readinessCheck(refresh = false): Promise<ReadinessStatus> {
     const response = await authorizedFetch(`/health/ready${refresh ? '?refresh=true' : ''}`, { headers: authHeaders() });
-    const data = await response.json().catch(() => null);
+    const data = await responseJson(response).catch(() => null);
     if (!data) {
       throw new Error(`API error: ${response.statusText}`);
     }
@@ -698,7 +689,7 @@ export const api = {
   async getPreferences(): Promise<UserPreferences> {
     const response = await authorizedFetch('/auth/preferences', { headers: authHeaders() });
     if (!response.ok) throw await responseError(response, 'Failed to load preferences');
-    return UserPreferencesSchema.parse(await response.json());
+    return UserPreferencesSchema.parse(await responseJson(response));
   },
 
   async updatePreferences(preferences: UserPreferences): Promise<UserPreferences> {
@@ -708,7 +699,7 @@ export const api = {
       body: JSON.stringify(preferences),
     });
     if (!response.ok) throw await responseError(response, 'Failed to save preferences');
-    return UserPreferencesSchema.parse(await response.json());
+    return UserPreferencesSchema.parse(await responseJson(response));
   },
 
   async patchPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {
@@ -718,7 +709,7 @@ export const api = {
       body: JSON.stringify(preferences),
     });
     if (!response.ok) throw await responseError(response, 'Failed to save preference');
-    return UserPreferencesSchema.parse(await response.json());
+    return UserPreferencesSchema.parse(await responseJson(response));
   },
 
   async changePassword(currentPassword: string, newPassword: string): Promise<{ status: string; message: string }> {
@@ -728,13 +719,13 @@ export const api = {
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     });
     if (!response.ok) throw await responseError(response, 'Failed to update password');
-    return AccountDeleteSchema.parse(await response.json());
+    return AccountDeleteSchema.parse(await responseJson(response));
   },
 
   async exportAccountData(): Promise<AccountExport> {
     const response = await authorizedFetch('/auth/export', { headers: authHeaders() });
     if (!response.ok) throw await responseError(response, 'Failed to export account data');
-    return AccountExportSchema.parse(await response.json());
+    return AccountExportSchema.parse(await responseJson(response));
   },
 
   async deleteAccount(): Promise<{ status: string; message: string }> {
@@ -745,6 +736,6 @@ export const api = {
     if (!response.ok) {
       throw await responseError(response, response.statusText || 'Failed to delete account');
     }
-    return AccountDeleteSchema.parse(await response.json());
+    return AccountDeleteSchema.parse(await responseJson(response));
   },
 };

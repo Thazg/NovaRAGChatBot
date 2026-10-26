@@ -2,38 +2,34 @@ import asyncio
 import json
 import logging
 import re
+from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config.settings import settings
-from rag.llm_client import stream_tokens
-from rag.prompts import build_prompt, no_context_template, empty_db_template
-from rag.rag_chain import retrieve_context, get_retriever
+from rag.llm_client import LLMStreamError, stream_tokens
+from rag.prompts import build_prompt, build_context_and_evidence, no_context_template, empty_db_template, unknown_citation_ids
+from rag.rag_chain import retrieve_context, get_retriever, rewrite_question
 from services.conversation_store import (
     append_session_message,
     get_session_history,
     prepare_regeneration,
 )
+from services.account_lifecycle import AccountDeletionPending
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _contains_trigger(text: str, trigger: str) -> bool:
-    if " " in trigger:
-        return trigger in text
-    return re.search(rf"\b{re.escape(trigger)}\b", text) is not None
-
-
 class ChatRequest(BaseModel):
-    session_id: str
-    question: str
+    session_id: str = Field(min_length=1, max_length=36, pattern=r"^[A-Za-z0-9_-]+$")
+    question: str = Field(min_length=1, max_length=8000)
     stream: bool = True
-    instructions: str = ""
-    language: str = ""
+    instructions: str = Field(default="", max_length=4000)
+    language: Literal["", "auto", "english", "vietnamese"] = ""
     regenerate: bool = False
     document_name: str = Field(default="", max_length=180)
 
@@ -64,21 +60,36 @@ async def _retrieve_nodes(
             )
     except FileNotFoundError:
         nodes = []
+    except AccountDeletionPending:
+        # Keep the actionable account-cleanup conflict rather than reporting
+        # it as a transient index outage that ordinary chat retry could fix.
+        raise
     except Exception as exc:
         logger.error("Retrieval error: %s", exc)
-        nodes = []
+        raise HTTPException(status_code=503, detail="Document index is temporarily unavailable") from exc
     return nodes
 
 
 async def generate_stream(prompt: str, extra_events: list[dict] | None = None):
     batch: list[str] = []
-    async for token in stream_tokens(prompt):
-        batch.append(token)
-        if len(batch) >= 3:
+    has_tokens = False
+    try:
+        async for token in stream_tokens(prompt):
+            has_tokens = has_tokens or bool(token)
+            batch.append(token)
+            if len(batch) >= 3:
+                yield f"data: {json.dumps({'token': ''.join(batch)})}\n\n"
+                batch.clear()
+    except Exception:
+        # Preserve text already produced before a provider failure, including
+        # a short final batch. Cancellation is deliberately not caught here.
+        if batch:
             yield f"data: {json.dumps({'token': ''.join(batch)})}\n\n"
-            batch.clear()
+        raise
     if batch:
         yield f"data: {json.dumps({'token': ''.join(batch)})}\n\n"
+    if not has_tokens:
+        raise RuntimeError("The provider returned an empty response")
     if extra_events:
         for event in extra_events:
             yield f"data: {json.dumps(event)}\n\n"
@@ -90,13 +101,19 @@ async def single_token_stream(text: str):
     yield "data: [DONE]\n\n"
 
 
-@router.post("")
-@router.post("/stream")
+_STREAM_RESPONSES = {200: {
+    "description": "Server-sent events; only [DONE] confirms a completed answer.",
+    "content": {"text/event-stream": {"schema": {"type": "string"}}},
+}}
+
+
+@router.post("", response_class=StreamingResponse, responses=_STREAM_RESPONSES)
+@router.post("/stream", response_class=StreamingResponse, responses=_STREAM_RESPONSES)
 async def chat_stream(http_request: Request, request: ChatRequest):
     user_id = getattr(http_request.state, "user_id", "") or "__anonymous__"
     session_id = request.session_id
     question = request.question.strip()
-    language = request.language.strip().lower() if request.language else ""
+    language = "" if request.language in {"", "auto"} else request.language
     document_name = request.document_name.strip()
 
     if not question:
@@ -106,12 +123,22 @@ async def chat_stream(http_request: Request, request: ChatRequest):
         )
 
     if request.regenerate:
-        prepare_regeneration(session_id, user_id)
+        prepare_regeneration(session_id, user_id, question=question)
+        # A request may have failed before the original user turn reached the
+        # server. Regenerate reuses a matching last turn, or creates it once.
+        prior = get_session_history(session_id, user_id)
+        if not prior or prior[-1] != {"role": "user", "content": question}:
+            append_session_message(session_id, "user", question, user_id)
 
     question_lower = question.lower().strip()
-    greetings = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
-    if any(re.search(r'\b' + re.escape(greeting) + r'\b', question_lower) for greeting in greetings):
-        greeting_response = "Hi! I'm Nova — your intelligent research companion. What would you like to explore today?"
+    greetings = {"hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening", "xin chào", "chào"}
+    greeting_only = re.sub(r"[.!?,;:]+$", "", question_lower).strip()
+    if greeting_only in greetings:
+        vietnamese = language == "vietnamese" or (not language and greeting_only in {"xin chào", "chào"})
+        greeting_response = (
+            "Chào bạn! Mình là Nova. Bạn muốn tìm hiểu nội dung nào trong tài liệu?"
+            if vietnamese else "Hi! I'm Nova — your intelligent research companion. What would you like to explore today?"
+        )
         if not request.regenerate:
             append_session_message(session_id, "user", question, user_id)
         append_session_message(session_id, "assistant", greeting_response, user_id)
@@ -122,18 +149,7 @@ async def chat_stream(http_request: Request, request: ChatRequest):
 
     history = get_session_history(session_id, user_id)[-settings.MAX_HISTORY_MESSAGES :]
 
-    rewritten_question = question
-    trigger_words = [
-        "it", "this", "that", "they", "them", "its", "their", "these", "those",
-        "nó", "cái này", "cái đó", "những cái này", "những cái đó", "chúng", "chúng nó",
-        "cụ thể", "chi tiết", "cụ thể hơn", "rõ hơn", "kể tiếp", "tiếp theo", "nói rõ",
-    ]
-    if history and (
-        any(_contains_trigger(question_lower, word) for word in trigger_words)
-        or len(question.split()) <= 3
-    ):
-        history_text = "\n".join(f"{m['role']}: {m['content'][:200]}" for m in history)
-        rewritten_question = f"{question} (Previous context: {history_text})"
+    rewritten_question = rewrite_question(question, history)
 
     nodes = await _retrieve_nodes(question, rewritten_question, user_id, document_name)
     has_docs = False
@@ -187,21 +203,35 @@ async def chat_stream(http_request: Request, request: ChatRequest):
 
     async def sse_generator():
         full_response = ""
+        evidence = build_context_and_evidence(nodes, question)[1]
+        yield f"data: {json.dumps({'evidence': evidence})}\n\n"
         extra = [{"action": "search_offer", "query": question}] if no_context_found else None
-        async for chunk in generate_stream(prompt, extra_events=extra):
-            if chunk.startswith("data: ") and not chunk.startswith("data: [DONE]"):
-                try:
+        completed = False
+        try:
+            async for chunk in generate_stream(prompt, extra_events=extra):
+                if chunk == "data: [DONE]\n\n":
+                    if unknown_citation_ids(full_response, evidence):
+                        raise LLMStreamError("The provider cited an unknown evidence ID")
+                    # Commit the answer and its evidence before acknowledging
+                    # completion to the browser.
+                    append_session_message(session_id, "assistant", full_response, user_id, evidence=evidence)
+                    completed = True
+                elif chunk.startswith("data: "):
                     data = json.loads(chunk[6:])
-                    if "token" in data:
-                        full_response += data["token"]
-                except Exception:
-                    pass
-            yield chunk
-
-        fallback = "I apologize, but I couldn't generate a response. Please try again."
-        final_response = full_response or fallback
-        history.append({"role": "assistant", "content": final_response})
-        append_session_message(session_id, "assistant", final_response, user_id)
+                    full_response += data.get("token", "")
+                yield chunk
+        except Exception:
+            logger.exception("Chat stream failed")
+            yield f"data: {json.dumps({'error': 'Response interrupted. Regenerate the answer to try again.'})}\n\n"
+        finally:
+            if not completed:
+                try:
+                    append_session_message(session_id, "assistant", full_response, user_id, evidence=evidence, interrupted=True)
+                except AccountDeletionPending:
+                    # Cleanup deliberately prevents a delayed response from
+                    # recreating history. The interrupted stream is already
+                    # reported to the browser; do not retry the blocked write.
+                    logger.info("Skipped interrupted-response persistence for a deleting account")
 
     return StreamingResponse(
         sse_generator(),

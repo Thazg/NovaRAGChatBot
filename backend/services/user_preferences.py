@@ -2,6 +2,7 @@ import json
 import os
 import threading
 from pathlib import Path
+from services.account_lifecycle import account_mutation, account_lock, deletion_pending
 
 
 BASE_DIR = Path(__file__).resolve().parents[1] / "storage" / "preferences"
@@ -27,7 +28,10 @@ def _remote_path(user_id: str) -> str:
     return f"preferences/{user_id}.json"
 
 
+@account_lock
 def load_preferences(user_id: str) -> dict[str, str]:
+    if deletion_pending(user_id):
+        return dict(DEFAULT_PREFERENCES)
     path = _file_for(user_id)
     if not path.exists():
         try:
@@ -46,6 +50,7 @@ def load_preferences(user_id: str) -> dict[str, str]:
     }
 
 
+@account_mutation
 def save_preferences(user_id: str, preferences: dict[str, str]) -> dict[str, str]:
     payload = {
         key: str(preferences.get(key, default))
@@ -71,3 +76,12 @@ def delete_preferences(user_id: str) -> None:
         delete_file(_remote_path(user_id))
     except Exception:
         pass
+
+
+@account_mutation
+def patch_preferences(user_id: str, updates: dict[str, str]) -> dict[str, str]:
+    # Call the undecorated save inside the already-held user lock.
+    with _LOCK:
+        preferences = load_preferences(user_id)
+        preferences.update(updates)
+        return save_preferences.__wrapped__(user_id, preferences)

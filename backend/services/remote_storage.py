@@ -50,20 +50,28 @@ def download_file(remote_path: str, local_path: Path) -> bool:
         return False
 
 
-def file_exists(remote_path: str) -> bool:
+def file_exists(remote_path: str, *, required: bool = False) -> bool:
     client = _get_client()
     if not client:
+        if required:
+            raise RuntimeError("Durable object storage is not configured")
         return False
     try:
         client.head_object(Bucket=settings.B2_BUCKET, Key=remote_path)
         return True
-    except (BotoCoreError, ClientError):
+    except (BotoCoreError, ClientError) as exc:
+        if isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
+            return False
+        if required:
+            raise RuntimeError("Could not check durable object storage") from exc
         return False
 
 
-def list_file_info(prefix: str = "") -> list[dict[str, str | int]]:
+def list_file_info(prefix: str = "", *, required: bool = False) -> list[dict[str, str | int]]:
     client = _get_client()
     if not client:
+        if required:
+            raise RuntimeError("Durable object storage is not configured")
         return []
     try:
         files: list[dict[str, str | int]] = []
@@ -81,12 +89,15 @@ def list_file_info(prefix: str = "") -> list[dict[str, str | int]]:
                 break
             continuation_token = response.get("NextContinuationToken")
         return files
-    except (BotoCoreError, ClientError):
+    except (BotoCoreError, ClientError) as exc:
+        if required:
+            raise RuntimeError("Could not list durable object storage") from exc
         return []
 
 
-def list_files(prefix: str = "") -> List[str]:
-    return [str(item["key"]) for item in list_file_info(prefix)]
+def list_files(prefix: str = "", *, required: bool = False) -> List[str]:
+    items = list_file_info(prefix, required=True) if required else list_file_info(prefix)
+    return [str(item["key"]) for item in items]
 
 
 def delete_file(remote_path: str) -> bool:
@@ -113,12 +124,18 @@ def upload_bytes(remote_path: str, data: bytes) -> bool:
         return False
 
 
-def download_bytes(remote_path: str) -> Optional[bytes]:
+def download_bytes(remote_path: str, *, required: bool = False) -> Optional[bytes]:
     client = _get_client()
     if not client:
+        if required:
+            raise RuntimeError("Durable object storage is not configured")
         return None
     try:
         response = client.get_object(Bucket=settings.B2_BUCKET, Key=remote_path)
         return response["Body"].read()
-    except (BotoCoreError, ClientError):
+    except (BotoCoreError, ClientError) as exc:
+        if isinstance(exc, ClientError) and exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
+            return None
+        if required:
+            raise RuntimeError("Durable object storage is unavailable") from exc
         return None

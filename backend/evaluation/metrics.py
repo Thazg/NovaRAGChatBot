@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import hashlib
+import json
 import time
 from statistics import mean
 from typing import Any, Iterable
@@ -10,6 +12,10 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from rag.vector_store import HybridVectorStore, expand_query
+from rag.rag_chain import retrieve_from_store
+from rag.chunking import MAX_CHUNK_SIZE, CHUNK_OVERLAP
+from rag.prompts import build_context_and_evidence
+from evaluation.text_matching import normalize_evidence_span
 
 _CITATION_PATTERN = re.compile(r"\(Source:\s*([^)]+?)\s*\)", re.IGNORECASE)
 _WORD_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -117,7 +123,8 @@ def _rrf(*rankings: list[str], rrf_k: int = 60) -> list[str]:
     return [item_id for item_id, _ in sorted(scores.items(), key=lambda item: item[1], reverse=True)]
 
 
-def _calibrate_lexical_ranking(query: str, ranking: list[str], corpus_by_id: dict[str, str]) -> list[str]:
+def _calibrate_lexical_ranking(query: str, ranking: list[str], corpus_by_id: dict[str, str],
+                               tokenized_corpus: dict[str, set[str]] | None = None) -> list[str]:
     """Remove rankings supported only by corpus-common/question boilerplate."""
     query_terms = {
         _stem_token(token) for token in _WORD_PATTERN.findall(query)
@@ -125,10 +132,11 @@ def _calibrate_lexical_ranking(query: str, ranking: list[str], corpus_by_id: dic
     }
     if not query_terms or not corpus_by_id:
         return ranking
-    tokenized_corpus = {
-        item_id: {_stem_token(token) for token in _WORD_PATTERN.findall(content)}
-        for item_id, content in corpus_by_id.items()
-    }
+    if tokenized_corpus is None:
+        tokenized_corpus = {
+            item_id: {_stem_token(token) for token in _WORD_PATTERN.findall(content)}
+            for item_id, content in corpus_by_id.items()
+        }
     max_document_frequency = max(1, int(len(tokenized_corpus) * 0.4))
     informative_terms = {
         term for term in query_terms
@@ -144,7 +152,11 @@ def _calibrate_lexical_ranking(query: str, ranking: list[str], corpus_by_id: dic
 
 
 def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
+    if not 1 <= k <= 15:
+        raise ValueError("k must be between 1 and 15, matching production retrieval")
     corpus = dataset.get("corpus", [])
+    if not corpus:
+        raise ValueError("Evaluation requires a non-empty corpus")
     documents = [{
         "content": item["content"],
         "metadata": {
@@ -169,19 +181,41 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         corpus_by_id[evaluation_id] = (
             f"{corpus_by_id.get(evaluation_id, '')} {item['content']}"
         ).strip()
+    # Corpus preprocessing is independent of a query. Reusing these token sets
+    # avoids repeatedly tokenizing every page for every proxy ablation.
+    calibration_tokens = {
+        item_id: {_stem_token(token) for token in _WORD_PATTERN.findall(content)}
+        for item_id, content in corpus_by_id.items()
+    }
 
     mode_results: dict[str, list[dict[str, Any]]] = {
-        "bm25": [], "tfidf_faiss_proxy": [], "hybrid_rrf": [],
+        "production": [], "bm25": [], "tfidf_faiss_proxy": [], "hybrid_rrf": [],
     }
     candidate_k = min(max(k * 5, 25), len(corpus_ids))
     latencies: dict[str, list[float]] = {mode: [] for mode in mode_results}
+    packing_results = []
+    packing_latencies = []
     for sample in dataset.get("queries", []):
+        started = time.perf_counter()
+        production_nodes = retrieve_from_store(sample["query"], bm25_store, top_k=k)
+        latencies["production"].append((time.perf_counter() - started) * 1000)
+        if sample.get("evidence"):
+            normalize = normalize_evidence_span
+            annotated_span = normalize(sample["evidence"])
+            raw_present = any(annotated_span in normalize(node["content"]) for node in production_nodes)
+            packing_started = time.perf_counter()
+            _, packed = build_context_and_evidence(production_nodes, sample["query"])
+            packing_latencies.append((time.perf_counter() - packing_started) * 1000)
+            packed_present = any(annotated_span in normalize(item["content"]) for item in packed)
+            packing_results.append({"id": sample.get("id"), "retrieved_span": raw_present,
+                                    "packed_span": packed_present})
+        production_ids = _deduplicate(node["metadata"]["evaluation_id"] for node in production_nodes)
         started = time.perf_counter()
         bm25_nodes = bm25_store.retrieve(sample["query"], top_k=candidate_k)
         bm25_ids = _deduplicate(
             node.get("metadata", {}).get("evaluation_id", "") for node in bm25_nodes
         )
-        bm25_ids = _calibrate_lexical_ranking(expand_query(sample["query"]), bm25_ids, corpus_by_id)
+        bm25_ids = _calibrate_lexical_ranking(expand_query(sample["query"]), bm25_ids, corpus_by_id, calibration_tokens)
         bm25_latency = (time.perf_counter() - started) * 1000
         latencies["bm25"].append(bm25_latency)
 
@@ -196,7 +230,7 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
                 for score, index in zip(scores[0], indices[0])
                 if index >= 0 and score > 0.02
             )
-            dense_ids = _calibrate_lexical_ranking(expand_query(sample["query"]), dense_ids, corpus_by_id)
+            dense_ids = _calibrate_lexical_ranking(expand_query(sample["query"]), dense_ids, corpus_by_id, calibration_tokens)
         dense_latency = (time.perf_counter() - started) * 1000
         latencies["tfidf_faiss_proxy"].append(dense_latency)
 
@@ -206,6 +240,7 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         latencies["hybrid_rrf"].append(bm25_latency + dense_latency + fusion_latency)
 
         for mode, retrieved_ids in {
+            "production": production_ids,
             "bm25": bm25_ids,
             "tfidf_faiss_proxy": dense_ids,
             "hybrid_rrf": hybrid_ids,
@@ -248,8 +283,8 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         )
         for item in citation_samples
     ]
-    primary = ablations["hybrid_rrf"]
-    hybrid_answerable = [item for item in mode_results["hybrid_rrf"] if item["answerable"]]
+    primary = ablations["production"]
+    hybrid_answerable = [item for item in mode_results["production"] if item["answerable"]]
     per_paper: dict[str, Any] = {}
     for paper_slug in sorted({item["paper_slug"] for item in hybrid_answerable}):
         paper_results = [item for item in hybrid_answerable if item["paper_slug"] == paper_slug]
@@ -260,9 +295,34 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
             "mrr": mean(item["reciprocal_rank"] for item in paper_results),
         }
     return {
+        "evaluation_version": 2,
+        "primary_method": "production_bm25",
+        "context_packing": {
+            "method": "annotated character span, case/whitespace insensitive; not token boundaries or answer accuracy",
+            "annotated_queries": len(packing_results),
+            "retrieved_spans": sum(item["retrieved_span"] for item in packing_results),
+            "packed_spans": sum(item["packed_span"] for item in packing_results),
+            "retention": (sum(item["retrieved_span"] and item["packed_span"] for item in packing_results)
+                          / sum(item["retrieved_span"] for item in packing_results)
+                          if any(item["retrieved_span"] for item in packing_results) else None),
+            "queries": packing_results,
+            "latency_ms_p50": _percentile(packing_latencies, 50),
+            "latency_ms_p95": _percentile(packing_latencies, 95),
+            "latency_scope": "packing only for annotated queries; excludes annotation matching and retrieval",
+        },
+        "pipeline": {
+            "ingestion": "rag.load.load_pdf + rag.chunking.split_documents",
+            "retrieval": "rag.rag_chain.retrieve_from_store",
+            "chunk_size_words": MAX_CHUNK_SIZE,
+            "chunk_overlap_words": CHUNK_OVERLAP,
+            "pypdf_version": dataset.get("metadata", {}).get("pypdf_version"),
+            "fonttools_version": dataset.get("metadata", {}).get("fonttools_version"),
+            "corpus_sha256": hashlib.sha256(json.dumps(corpus, sort_keys=True).encode()).hexdigest(),
+            "latency_scope": "warm store; uncached production retrieval only; excludes packing, annotation matching, HTTP and generation",
+        },
         "k": k,
         "corpus_count": len(corpus),
-        "query_count": len(mode_results["hybrid_rrf"]),
+        "query_count": len(mode_results["production"]),
         "hit_at_k": primary["hit_at_k"],
         "recall_at_k": primary["recall_at_k"],
         "mrr": primary["mrr"],
@@ -273,5 +333,5 @@ def evaluate_dataset(dataset: dict[str, Any], k: int = 5) -> dict[str, Any]:
         "unanswerable_accuracy": primary["unanswerable_accuracy"],
         "ablations": ablations,
         "per_paper": per_paper,
-        "queries": mode_results["hybrid_rrf"],
+        "queries": mode_results["production"],
     }

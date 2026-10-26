@@ -7,14 +7,17 @@ export interface Message {
   createdAt: number;
   feedback?: 'like' | 'dislike' | null;
   retrievedDocs?: RetrievedDocument[];
+  interrupted?: boolean;
 }
 
 export interface RetrievedDocument {
   id: string;
-  title: string;
-  similarityScore: number;
-  chunkId: string;
-  page: number;
+  document_id: string;
+  file_name: string;
+  chunk_index: number;
+  page: number | null;
+  line_start: number | null;
+  line_end: number | null;
   content: string;
 }
 

@@ -1,4 +1,7 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+import threading
 
 import pytest
 from sqlalchemy import create_engine
@@ -7,8 +10,8 @@ from services import conversation_store, database, postgres_store
 
 
 @pytest.fixture
-def relational_store(monkeypatch):
-    path = Path(__file__).with_name("_relational_test.db")
+def relational_store(monkeypatch, tmp_path):
+    path = tmp_path / "relational.db"
     path.unlink(missing_ok=True)
     engine = create_engine(f"sqlite:///{path.as_posix()}", connect_args={"check_same_thread": False})
     database.Base.metadata.create_all(engine)
@@ -78,3 +81,53 @@ def test_production_database_requires_alembic_schema(monkeypatch) -> None:
     finally:
         empty_engine.dispose()
         path.unlink(missing_ok=True)
+
+
+def test_conversation_ids_are_idempotent_and_do_not_cross_owners(relational_store):
+    first = postgres_store.create_user("first.owner", "hash")
+    second = postgres_store.create_user("second.owner", "hash")
+    conversation_id = "8ab4ef03-50ba-4782-95db-ecc55d64c53d"
+    original = postgres_store.create_conversation(first["user_id"], "Private title", conversation_id)
+    same = postgres_store.create_conversation(first["user_id"], "Must not overwrite", conversation_id)
+    assert same == original
+    with pytest.raises(postgres_store.ConversationIdConflict):
+        postgres_store.create_conversation(second["user_id"], "Other owner", conversation_id)
+    assert postgres_store.list_conversations(second["user_id"]) == []
+    assert postgres_store.get_conversation(conversation_id, first["user_id"])["title"] == "Private title"
+
+
+def test_concurrent_same_owner_creates_return_the_one_committed_record(relational_store, monkeypatch):
+    user = postgres_store.create_user("concurrent.owner", "hash")
+    conversation_id = "9ab4ef03-50ba-4782-95db-ecc55d64c53d"
+    both_saw_missing = threading.Barrier(2)
+    original_session = postgres_store.database_session
+
+    @contextmanager
+    def concurrent_session():
+        with original_session() as session:
+            scalar = session.scalar
+            def synchronized_lookup(statement, *args, **kwargs):
+                record = scalar(statement, *args, **kwargs)
+                if record is None and any(
+                    column.get("entity") is database.ConversationRecord
+                    for column in getattr(statement, "column_descriptions", [])
+                ):
+                    # Force the real uniqueness race: both requests observe
+                    # absence before either INSERT, rather than relying on
+                    # thread timing to happen to exercise retry behavior.
+                    both_saw_missing.wait(timeout=5)
+                return record
+            session.scalar = synchronized_lookup
+            yield session
+    monkeypatch.setattr(postgres_store, "database_session", concurrent_session)
+
+    def create(label):
+        return postgres_store.create_conversation(user["user_id"], label, conversation_id,
+            messages=[{"role": "user", "content": label}])
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(create, "first request")
+        second = executor.submit(create, "second request")
+        results = [first.result(timeout=10), second.result(timeout=10)]
+    assert results[0] == results[1]
+    assert results[0]["messages"][0]["content"] == results[0]["title"]
+    assert len(postgres_store.list_conversations(user["user_id"])) == 1

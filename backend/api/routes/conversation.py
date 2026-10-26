@@ -25,6 +25,8 @@ class ConversationMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str = Field(max_length=200_000)
     createdAt: int | None = None
+    retrievedDocs: list[dict] = Field(default_factory=list, max_length=15)
+    interrupted: bool = False
 
 
 class ConversationCreate(BaseModel):
@@ -46,10 +48,15 @@ def list_conversations(request: Request):
 @router.post("/new")
 def create_conversation_route(request: Request, body: ConversationCreate | None = None):
     body = body or ConversationCreate()
-    return create_conversation(
-        _get_user(request), body.title.strip(), str(body.id) if body.id else None,
-        [message.model_dump(exclude_none=True) for message in body.messages], body.pinned
-    )
+    from services.postgres_store import ConversationIdConflict
+    try:
+        return create_conversation(
+            _get_user(request), body.title.strip(), str(body.id) if body.id else None,
+            [message.model_dump(exclude_none=True) for message in body.messages], body.pinned
+        )
+    except ConversationIdConflict as exc:
+        raise HTTPException(status_code=409, detail="Conversation ID is unavailable") from exc
+
 
 
 @router.delete("")

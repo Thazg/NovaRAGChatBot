@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,8 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from rag.chunking import chunk_text
+from rag.chunking import MAX_CHUNK_SIZE, CHUNK_OVERLAP, split_documents
+from rag.load import load_pdf
 
 
 ROOT = Path(__file__).resolve().parent
@@ -32,18 +33,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _normalize_pdf_text(text: str) -> str:
-    text = text.replace("\u00ad", "")
-    for ligature, replacement in {
-        "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl",
-    }.items():
-        text = text.replace(ligature, replacement)
-    text = re.sub(r"(?<=\w)-\s*\n\s*(?=\w)", "", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-def extract_corpus(chunk_size: int = 220, overlap: int = 40) -> dict[str, Any]:
+def extract_corpus() -> dict[str, Any]:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
     locked = {item["pdf_file"]: item for item in lock["papers"]}
@@ -62,33 +52,27 @@ def extract_corpus(chunk_size: int = 220, overlap: int = 40) -> dict[str, Any]:
 
         reader = PdfReader(pdf_path)
         paper_chunk_count = 0
-        for page_number, page in enumerate(reader.pages, start=1):
-            page_text = _normalize_pdf_text(page.extract_text() or "")
-            if not page_text:
-                continue
-            page_chunks = chunk_text(
-                page_text,
-                chunk_size=chunk_size,
-                overlap=overlap,
-                file_path=paper["pdf_file"],
-            )
-            for chunk_index, content in enumerate(page_chunks, start=1):
-                chunk_id = f"{paper['slug']}--p{page_number:03d}-c{chunk_index:02d}"
-                chunks.append({
-                    "id": chunk_id,
-                    "content": content,
-                    "metadata": {
-                        "file_name": paper["pdf_file"],
-                        "title": paper["title"],
-                        "arxiv_id": paper["arxiv_id"],
-                        "version": paper["version"],
-                        "page": page_number,
-                        "page_chunk": chunk_index,
-                        "source_url": paper["abs_url"],
-                        "pdf_sha256": lock_item["sha256"],
-                    },
-                })
-                paper_chunk_count += 1
+        # Use the exact parser and chunker invoked by document uploads.
+        for node in split_documents(load_pdf(pdf_path)):
+            page_number = node["metadata"]["page"]
+            chunk_index = node["metadata"]["chunk_index"]
+            chunk_id = f"{paper['slug']}--p{page_number:03d}-c{chunk_index:02d}"
+            chunks.append({
+                "id": chunk_id,
+                "content": node["content"],
+                "metadata": {
+                    **node["metadata"],
+                    "file_path": paper["pdf_file"],
+                    "source": paper["pdf_file"],
+                    "title": paper["title"],
+                    "arxiv_id": paper["arxiv_id"],
+                    "version": paper["version"],
+                    "page_chunk": chunk_index,
+                    "source_url": paper["abs_url"],
+                    "pdf_sha256": lock_item["sha256"],
+                },
+            })
+            paper_chunk_count += 1
         papers.append({
             "arxiv_id": paper["arxiv_id"],
             "version": paper["version"],
@@ -104,9 +88,11 @@ def extract_corpus(chunk_size: int = 220, overlap: int = 40) -> dict[str, Any]:
             "name": manifest["name"],
             "version": manifest["version"],
             "source_format": "version-pinned arXiv PDFs",
-            "extractor": "pypdf plus backend.rag.chunking.chunk_text",
-            "chunk_size_words": chunk_size,
-            "chunk_overlap_words": overlap,
+            "extractor": "rag.load.load_pdf + rag.chunking.split_documents",
+            "pypdf_version": version("pypdf"),
+            "fonttools_version": version("fonttools"),
+            "chunk_size_words": MAX_CHUNK_SIZE,
+            "chunk_overlap_words": CHUNK_OVERLAP,
             "paper_count": len(papers),
             "chunk_count": len(chunks),
         },
@@ -117,10 +103,8 @@ def extract_corpus(chunk_size: int = 220, overlap: int = 40) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Extract the pinned arXiv PDF corpus.")
-    parser.add_argument("--chunk-size", type=int, default=220)
-    parser.add_argument("--overlap", type=int, default=40)
-    args = parser.parse_args()
-    result = extract_corpus(args.chunk_size, args.overlap)
+    parser.parse_args()
+    result = extract_corpus()
     CORPUS_PATH.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

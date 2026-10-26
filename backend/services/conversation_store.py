@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from services.database import DATABASE_ENABLED
+from services.account_lifecycle import account_mutation, account_lock, deletion_pending
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 BASE_DIR = BACKEND_DIR / "storage" / "sessions"
@@ -35,9 +36,11 @@ def _load_store(user_id: str) -> Dict[str, Dict[str, Any]]:
         return {}
     try:
         data = json.loads(store_file.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+        if not isinstance(data, dict):
+            raise ValueError("Expected a conversation mapping")
+        return data
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("Conversation store is unreadable; restore or repair it before accepting writes") from exc
 
 
 def _save_store(data: Dict[str, Dict[str, Any]], user_id: str) -> None:
@@ -70,7 +73,10 @@ def _summary_title(content: str) -> str:
     return text[:37] + "..."
 
 
+@account_lock
 def get_conversation(conversation_id: str, user_id: str) -> Dict[str, Any]:
+    if deletion_pending(user_id):
+        raise KeyError(conversation_id)
     if DATABASE_ENABLED:
         from services.postgres_store import get_conversation as get_database_conversation
         return get_database_conversation(conversation_id, user_id)
@@ -81,7 +87,10 @@ def get_conversation(conversation_id: str, user_id: str) -> Dict[str, Any]:
     return conversation
 
 
+@account_lock
 def list_conversations(user_id: str) -> List[Dict[str, Any]]:
+    if deletion_pending(user_id):
+        return []
     if DATABASE_ENABLED:
         from services.postgres_store import list_conversations as list_database_conversations
         return list_database_conversations(user_id)
@@ -91,6 +100,7 @@ def list_conversations(user_id: str) -> List[Dict[str, Any]]:
     return conversations
 
 
+@account_mutation
 def create_conversation(
     user_id: str,
     title: str = "New Chat",
@@ -129,7 +139,12 @@ def get_session_history(session_id: str, user_id: str) -> List[Dict[str, Any]]:
         return []
 
 
-def append_session_message(session_id: str, role: str, content: str, user_id: str) -> Dict[str, Any]:
+@account_mutation
+def append_session_message(
+    session_id: str, role: str, content: str, user_id: str,
+    *, evidence: list[dict] | None = None, interrupted: bool = False,
+) -> Dict[str, Any]:
+    extra = {"retrievedDocs": evidence or [], "interrupted": interrupted} if role == "assistant" else {}
     if DATABASE_ENABLED:
         from services.postgres_store import create_conversation as create_database_conversation, mutate_conversation
         create_database_conversation(user_id, conversation_id=session_id)
@@ -137,7 +152,7 @@ def append_session_message(session_id: str, role: str, content: str, user_id: st
         def append_message(record):
             now = int(time.time() * 1000)
             messages = list(record.messages or [])
-            messages.append({"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now})
+            messages.append({"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now, **extra})
             record.messages = messages
             if role == "user" and record.title == "New Chat":
                 record.title = _summary_title(content)
@@ -151,7 +166,7 @@ def append_session_message(session_id: str, role: str, content: str, user_id: st
             conversation = {"id": session_id, "title": "New Chat", "messages": [], "createdAt": now, "updatedAt": now, "pinned": False}
             data[session_id] = conversation
 
-        message = {"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now}
+        message = {"id": str(uuid.uuid4()), "role": role, "content": content, "createdAt": now, **extra}
         conversation.setdefault("messages", []).append(message)
         conversation["updatedAt"] = now
 
@@ -162,17 +177,22 @@ def append_session_message(session_id: str, role: str, content: str, user_id: st
         return conversation
 
 
-def prepare_regeneration(session_id: str, user_id: str) -> None:
+@account_mutation
+def prepare_regeneration(session_id: str, user_id: str, question: str | None = None) -> None:
     """Remove the most recent assistant reply before regenerating it."""
+    def remove_reply(messages):
+        if not messages or messages[-1].get("role") != "assistant":
+            return
+        previous_user = next((message for message in reversed(messages[:-1]) if message.get("role") == "user"), None)
+        if question is None or (previous_user and previous_user.get("content") == question):
+            messages.pop()
+
     if DATABASE_ENABLED:
         from services.postgres_store import mutate_conversation
 
         def remove_last_assistant(record):
             messages = list(record.messages or [])
-            for index in range(len(messages) - 1, -1, -1):
-                if messages[index].get("role") == "assistant":
-                    del messages[index]
-                    break
+            remove_reply(messages)
             record.messages = messages
 
         try:
@@ -186,14 +206,12 @@ def prepare_regeneration(session_id: str, user_id: str) -> None:
         if not isinstance(conversation, dict):
             return
         messages = conversation.get("messages", [])
-        for index in range(len(messages) - 1, -1, -1):
-            if messages[index].get("role") == "assistant":
-                del messages[index]
-                break
+        remove_reply(messages)
         conversation["updatedAt"] = int(time.time() * 1000)
         _save_store(data, user_id)
 
 
+@account_mutation
 def delete_conversation(conversation_id: str, user_id: str) -> None:
     if DATABASE_ENABLED:
         from services.postgres_store import delete_conversation as delete_database_conversation
@@ -207,6 +225,7 @@ def delete_conversation(conversation_id: str, user_id: str) -> None:
         _save_store(data, user_id)
 
 
+@account_mutation
 def update_conversation(
     conversation_id: str,
     user_id: str,
@@ -237,6 +256,7 @@ def update_conversation(
         return conversation
 
 
+@account_mutation
 def clear_conversations(user_id: str) -> int:
     if DATABASE_ENABLED:
         from services.postgres_store import clear_conversations as clear_database_conversations

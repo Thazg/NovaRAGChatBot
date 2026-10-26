@@ -1,5 +1,7 @@
 # Retrieval strategy evaluation
 
+> Historical algorithm-candidate comparison. For the shared production parser/chunker/retrieval measurement from 2026-10-18, see [evaluation README](README.md) and [results.json](results.json). This candidate report was not rerun and is not a live-chat latency measurement.
+
 This report compares six retrieval strategies on Nova's 100-question arXiv
 PDF benchmark. It records retrieval quality and warm, steady-state online
 latency for every method instead of comparing quality in isolation.

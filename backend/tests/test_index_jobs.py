@@ -1,6 +1,9 @@
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+
+import pytest
 
 from services import index_jobs
 
@@ -82,3 +85,61 @@ def test_local_index_mutations_are_serialized_per_user(monkeypatch) -> None:
             future.result()
 
     assert maximum_active == 1
+
+
+def test_nested_redis_operations_share_one_lease_and_release_after_error(monkeypatch):
+    import sys
+    from types import ModuleType
+    redis = ModuleType("redis")
+    monkeypatch.setitem(sys.modules, "redis", redis)
+
+    monkeypatch.setattr(index_jobs.settings, "REDIS_URL", "redis://adapter-test")
+    calls = []
+    class Lease:
+        def acquire(self, blocking):
+            calls.append(("acquire", blocking))
+            return True
+        def release(self):
+            calls.append(("release",))
+    class Connection:
+        def lock(self, name, timeout, blocking_timeout):
+            calls.append(("lock", name, timeout, blocking_timeout))
+            return Lease()
+    monkeypatch.setattr(redis, "Redis", SimpleNamespace(from_url=lambda _url: Connection()), raising=False)
+
+    with pytest.raises(RuntimeError, match="inner failure"):
+        with index_jobs._user_index_lock("nested-owner"):
+            with index_jobs._user_index_lock("nested-owner"):
+                raise RuntimeError("inner failure")
+    assert calls == [("lock", "nova:index-lock:nested-owner", 960, 30), ("acquire", True), ("release",)]
+    # The exception must clear the thread-local ownership marker. A later
+    # operation must obtain a fresh real lease, not silently bypass locking.
+    with index_jobs._user_index_lock("nested-owner"):
+        pass
+    assert [call[0] for call in calls] == ["lock", "acquire", "release", "lock", "acquire", "release"]
+
+
+def test_failed_redis_acquisition_never_marks_thread_as_owner(monkeypatch):
+    import sys
+    from types import ModuleType
+    redis = ModuleType("redis")
+    monkeypatch.setitem(sys.modules, "redis", redis)
+
+    monkeypatch.setattr(index_jobs.settings, "REDIS_URL", "redis://adapter-test")
+    acquired = []
+    released = []
+    class Lease:
+        def acquire(self, blocking):
+            acquired.append(blocking)
+            return len(acquired) > 1
+        def release(self):
+            released.append(True)
+    connection = SimpleNamespace(lock=lambda *_args, **_kwargs: Lease())
+    monkeypatch.setattr(redis, "Redis", SimpleNamespace(from_url=lambda _url: connection), raising=False)
+    with pytest.raises(TimeoutError):
+        with index_jobs._user_index_lock("contended-owner"):
+            raise AssertionError("the failed lease must not enter the operation")
+    with index_jobs._user_index_lock("contended-owner"):
+        pass
+    assert acquired == [True, True]
+    assert released == [True]

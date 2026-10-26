@@ -41,10 +41,12 @@ class Settings:
     LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.9"))
     LLM_SEED: int = int(os.getenv("LLM_SEED", "42"))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "2048"))
-    NUM_CTX: int = int(os.getenv("NUM_CTX", "4096"))
+    NUM_CTX: int = int(os.getenv("NUM_CTX", "8192"))
     MAX_HISTORY_MESSAGES: int = int(os.getenv("MAX_HISTORY_MESSAGES", "4"))
-    MAX_CHUNK_CHARS: int = int(os.getenv("MAX_CHUNK_CHARS", "1000"))
-    MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "6000"))
+    # Keep typical top-5, 220-word passages whole. Custom smaller limits use
+    # query windows; NUM_CTX is the Ollama context setting, not a tokenizer.
+    MAX_CHUNK_CHARS: int = int(os.getenv("MAX_CHUNK_CHARS", "2400"))
+    MAX_CONTEXT_CHARS: int = int(os.getenv("MAX_CONTEXT_CHARS", "10000"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "").strip()
     SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05"))
@@ -115,11 +117,34 @@ class Settings:
     B2_ENDPOINT: str = os.getenv("B2_ENDPOINT", "https://s3.us-west-004.backblazeb2.com")
 
 
-settings = Settings()
+def validate_settings(config: Settings) -> None:
+    """Reject configuration that cannot satisfy runtime/security contracts."""
+    if config.ENVIRONMENT not in {"development", "test", "staging", "production"}:
+        raise RuntimeError("ENVIRONMENT must be development, test, staging or production")
+    if config.LLM_PROVIDER not in {"groq", "ollama"}:
+        raise RuntimeError("LLM_PROVIDER must be groq or ollama")
+    if config.RETRIEVAL_MODE not in {"bm25", "hybrid"}:
+        raise RuntimeError("RETRIEVAL_MODE must be bm25 or hybrid")
+    for name in ("MAX_UPLOAD_BYTES", "MAX_PDF_PAGES", "MAX_PDF_OBJECTS", "MAX_PDF_DECOMPRESSED_STREAM_BYTES",
+                 "MAX_PDF_EXTRACTED_CHARS", "MAX_ARCHIVE_ENTRIES", "MAX_ARCHIVE_UNCOMPRESSED_BYTES",
+                 "MAX_ARCHIVE_COMPRESSION_RATIO", "MAX_NOTEBOOK_CELLS", "MAX_TOKENS", "NUM_CTX",
+                 "MAX_CHUNK_CHARS", "MAX_CONTEXT_CHARS", "MAX_HISTORY_MESSAGES", "ACCESS_TOKEN_TTL_SECONDS", "REFRESH_TOKEN_TTL_SECONDS",
+                 "RATE_LIMIT_REQUESTS", "AUTH_RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW_SECONDS", "EMBEDDING_DIM", "TOP_K"):
+        if getattr(config, name) <= 0:
+            raise RuntimeError(f"{name} must be greater than zero")
+    if config.REFRESH_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+        raise RuntimeError("REFRESH_COOKIE_SAMESITE must be lax, strict or none")
+    if not config.REFRESH_COOKIE_NAME or any(char in config.REFRESH_COOKIE_NAME for char in " ;=\r\n"):
+        raise RuntimeError("REFRESH_COOKIE_NAME must be a valid non-empty cookie name")
+    if (config.REFRESH_COOKIE_NAME.startswith("__Host-") or config.REFRESH_COOKIE_SAMESITE == "none") and not config.COOKIE_SECURE:
+        raise RuntimeError("Host-prefixed and SameSite=None refresh cookies require COOKIE_SECURE=true")
+    if config.ENVIRONMENT == "production":
+        if (not config.JWT_SECRET or config.JWT_SECRET == "nova-ai-default-secret"
+                or config.JWT_SECRET.startswith("replace_") or len(config.JWT_SECRET.encode("utf-8")) < 32):
+            raise RuntimeError("JWT_SECRET must be a production-only secret of at least 32 bytes; replace example values")
+        if not config.COOKIE_SECURE:
+            raise RuntimeError("Production requires COOKIE_SECURE=true")
 
-if settings.ENVIRONMENT == "production" and (
-    not settings.JWT_SECRET
-    or settings.JWT_SECRET == "nova-ai-default-secret"
-    or len(settings.JWT_SECRET.encode("utf-8")) < 32
-):
-    raise RuntimeError("JWT_SECRET must be a production-only secret of at least 32 bytes")
+
+settings = Settings()
+validate_settings(settings)

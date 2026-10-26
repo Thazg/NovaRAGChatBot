@@ -17,7 +17,7 @@ def test_build_context_includes_source_and_chunk() -> None:
 
 def test_build_context_respects_total_limit(monkeypatch) -> None:
     monkeypatch.setattr(prompts.settings, "MAX_CHUNK_CHARS", 20)
-    monkeypatch.setattr(prompts.settings, "MAX_CONTEXT_CHARS", 120)
+    monkeypatch.setattr(prompts.settings, "MAX_CONTEXT_CHARS", 180)
     nodes = [
         {"content": "A" * 100, "metadata": {"file_name": f"doc-{index}.txt"}}
         for index in range(5)
@@ -26,7 +26,9 @@ def test_build_context_respects_total_limit(monkeypatch) -> None:
     context = prompts.build_context(nodes)
 
     assert context.count("Source:") == 1
-    assert "..." in context
+    assert len(context) <= 180
+    assert "A" * 20 in context
+    assert "A" * 21 not in context
 
 
 def test_build_prompt_contains_history_instructions_and_question() -> None:

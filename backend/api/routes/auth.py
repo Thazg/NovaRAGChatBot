@@ -20,7 +20,7 @@ from services.refresh_sessions import consume as consume_refresh_session
 from services.refresh_sessions import issue as issue_refresh_session
 from services.refresh_sessions import revoke as revoke_refresh_session
 from services.refresh_sessions import revoke_user as revoke_user_refresh_sessions
-from services.user_preferences import load_preferences, save_preferences
+from services.user_preferences import load_preferences, save_preferences, patch_preferences as patch_preferences_store
 
 router = APIRouter()
 
@@ -168,9 +168,7 @@ def patch_preferences(request: Request, body: PreferencesPatchRequest):
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    preferences = load_preferences(user_id)
-    preferences.update(body.model_dump(exclude_none=True))
-    return save_preferences(user_id, preferences)
+    return patch_preferences_store(user_id, body.model_dump(exclude_none=True))
 
 
 @router.post("/change-password")
@@ -210,9 +208,14 @@ def delete_account(request: Request, response: Response):
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
     from services.auth import delete_user
-    ok = delete_user(user_id)
+    try:
+        ok = delete_user(user_id)
+    except (OSError, RuntimeError) as exc:
+        import logging
+        logging.getLogger(__name__).exception("Account cleanup failed for %s", user_id)
+        raise HTTPException(status_code=503, detail="Account cleanup could not finish. Retry deleting the account.") from exc
     if not ok:
         raise HTTPException(status_code=404, detail="User not found")
     revoke_refresh_session(request.cookies.get(settings.REFRESH_COOKIE_NAME, ""))
     _clear_refresh_cookie(response)
-    return {"status": "success", "message": "Account and all associated data deleted"}
+    return {"status": "success", "message": "Account deleted and active document, conversation and preference data removed"}

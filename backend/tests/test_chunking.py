@@ -32,3 +32,23 @@ def test_split_documents_keeps_source_metadata() -> None:
     assert nodes[0]["content"] == "alpha beta gamma delta"
     assert nodes[0]["metadata"]["file_name"] == "notes.txt"
     assert nodes[0]["metadata"]["chunk_index"] == 1
+
+
+def test_line_mapping_preserves_overlap_and_dehyphenated_word_offsets():
+    from rag.load import Document, normalize_pdf_with_lines
+    import re
+    text, lines = normalize_pdf_with_lines("retrieval-\naugmented evidence.\n" + "one two three\n" * 180)
+    nodes = split_documents([Document(text=text, metadata={"_line_spans": lines})])
+    words = list(re.finditer(r"\S+", text))
+    # Compare to a simple exhaustive interval reference, including overlapping
+    # chunks and the word that straddles the first two extracted PDF lines.
+    for index, node in enumerate(nodes):
+        expected, offset = {}, 0
+        for word in words[index * 180:index * 180 + 220]:
+            for line in lines:
+                start, end = max(word.start(), line["start"]), min(word.end(), line["end"])
+                if start < end:
+                    span = expected.setdefault(line["line"], {"line": line["line"], "start": offset + start - word.start(), "end": 0})
+                    span["end"] = offset + end - word.start()
+            offset += len(word.group()) + 1
+        assert node["metadata"]["line_spans"] == list(expected.values())

@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from config.settings import settings
+from services.account_lifecycle import account_mutation
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="nova-index")
 _LOCAL_JOBS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.RLock()
 _USER_LOCKS: dict[str, threading.RLock] = {}
+_HELD_USER_LOCKS = threading.local()
 _LOCAL_JOB_TTL_SECONDS = 24 * 60 * 60
 logger = logging.getLogger(__name__)
 
@@ -25,23 +27,35 @@ class IndexQueueUnavailable(RuntimeError):
 
 @contextmanager
 def _user_index_lock(user_id: str):
-    """Serialize index mutations per user across threads or RQ replicas."""
+    """Serialize mutations and read-cache publication; reuse a thread's lease."""
+    held = getattr(_HELD_USER_LOCKS, "users", None)
+    if held is None:
+        held = _HELD_USER_LOCKS.users = set()
+    if user_id in held:
+        yield
+        return
     if settings.REDIS_URL:
         from redis import Redis
         lock = Redis.from_url(settings.REDIS_URL).lock(
-            f"nova:index-lock:{user_id}", timeout=900, blocking_timeout=30
+            f"nova:index-lock:{user_id}", timeout=960, blocking_timeout=30
         )
         if not lock.acquire(blocking=True):
-            raise TimeoutError("Another indexing job is still running for this user")
+            raise TimeoutError("Another indexing operation is still running for this user")
+        held.add(user_id)
         try:
             yield
         finally:
+            held.remove(user_id)
             lock.release()
         return
     with _LOCK:
         user_lock = _USER_LOCKS.setdefault(user_id, threading.RLock())
     with user_lock:
-        yield
+        held.add(user_id)
+        try:
+            yield
+        finally:
+            held.remove(user_id)
 
 
 def _purge_local_jobs() -> None:
@@ -79,28 +93,31 @@ def _update_rq_progress(progress: int) -> None:
         pass
 
 
+@account_mutation
 def process_file_index(user_id: str, file_path: str, display_name: str) -> dict[str, Any]:
     _update_rq_progress(25)
-    path = Path(file_path)
+    from api.routes.documents import _user_uploads_dir, _safe_document_id, _index_uploaded_file_locked
+    # A worker may have a different local root/OS than the API host. Only the
+    # validated storage ID crosses the queue boundary, never a writer's path.
+    name = _safe_document_id(file_path.replace("\\", "/").rsplit("/", 1)[-1])
+    path = _user_uploads_dir(user_id) / name
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         from services.remote_storage import download_file
         if not download_file(f"uploads/{user_id}/{path.name}", path):
             raise FileNotFoundError("Uploaded document is unavailable to the indexing worker")
-    from api.routes.documents import _index_uploaded_file
-    with _user_index_lock(user_id):
-        indexed, chunks, message = _index_uploaded_file(path, user_id, display_name)
+    indexed, chunks, message = _index_uploaded_file_locked(path, user_id, display_name)
     _update_rq_progress(100)
     if not indexed:
         raise ValueError(message)
     return {"indexed": True, "chunks": chunks, "message": message}
 
 
+@account_mutation
 def process_full_reindex(user_id: str) -> dict[str, Any]:
     _update_rq_progress(20)
-    from api.routes.documents import _rebuild_full_index
-    with _user_index_lock(user_id):
-        documents, chunks = _rebuild_full_index(user_id)
+    from api.routes.documents import _rebuild_full_index_locked
+    documents, chunks = _rebuild_full_index_locked(user_id)
     _update_rq_progress(100)
     return {"indexed": True, "documents": documents, "chunks": chunks, "message": "Reindexing completed"}
 

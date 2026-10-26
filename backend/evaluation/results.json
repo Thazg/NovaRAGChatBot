@@ -1,101 +1,583 @@
 {
+  "evaluation_version": 2,
+  "primary_method": "production_bm25",
+  "context_packing": {
+    "method": "annotated character span, case/whitespace insensitive; not token boundaries or answer accuracy",
+    "annotated_queries": 90,
+    "retrieved_spans": 57,
+    "packed_spans": 57,
+    "retention": 1.0,
+    "queries": [
+      {
+        "id": "rag-001",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "rag-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "rag-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "rag-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "rag-005",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "rag-006",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "rag-007",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "rag-008",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "rag-009",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "dpr-001",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "dpr-002",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "dpr-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "dpr-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "dpr-005",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "dpr-006",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "dpr-007",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "dpr-008",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "dpr-009",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "realm-001",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "realm-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "realm-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "realm-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "realm-005",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "realm-006",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "realm-007",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "realm-008",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "realm-009",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "colbert-001",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "colbert-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "colbert-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "colbert-004",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "colbert-005",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "colbert-006",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "colbert-007",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "colbert-008",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "colbert-009",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-001",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-005",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-006",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-007",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "hyde-008",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "hyde-009",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "ragas-001",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "ragas-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "ragas-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "ragas-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "ragas-005",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "ragas-006",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "ragas-007",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "ragas-008",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "ragas-009",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "self-rag-001",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "self-rag-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "self-rag-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "self-rag-004",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "self-rag-005",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "self-rag-006",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "self-rag-007",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "self-rag-008",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "self-rag-009",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "lost-middle-001",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "lost-middle-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "lost-middle-003",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "lost-middle-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "lost-middle-005",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "lost-middle-006",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "lost-middle-007",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "lost-middle-008",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "lost-middle-009",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "crag-001",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "crag-002",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "crag-003",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "crag-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "crag-005",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "crag-006",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "crag-007",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "crag-008",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "crag-009",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "raptor-001",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "raptor-002",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "raptor-003",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "raptor-004",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "raptor-005",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "raptor-006",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "raptor-007",
+        "retrieved_span": false,
+        "packed_span": false
+      },
+      {
+        "id": "raptor-008",
+        "retrieved_span": true,
+        "packed_span": true
+      },
+      {
+        "id": "raptor-009",
+        "retrieved_span": false,
+        "packed_span": false
+      }
+    ],
+    "latency_ms_p50": 0.13795799998206348,
+    "latency_ms_p95": 0.2651391001109004,
+    "latency_scope": "packing only for annotated queries; excludes annotation matching and retrieval"
+  },
+  "pipeline": {
+    "ingestion": "rag.load.load_pdf + rag.chunking.split_documents",
+    "retrieval": "rag.rag_chain.retrieve_from_store",
+    "chunk_size_words": 220,
+    "chunk_overlap_words": 40,
+    "pypdf_version": "6.21.2",
+    "fonttools_version": "4.67.0",
+    "corpus_sha256": "0cf02375395db104d9bf256cbe019d0935887ead198b3a2e6463b60c87fb6201",
+    "latency_scope": "warm store; uncached production retrieval only; excludes packing, annotation matching, HTTP and generation"
+  },
   "k": 5,
-  "corpus_count": 549,
+  "corpus_count": 555,
   "query_count": 100,
-  "hit_at_k": 0.7888888888888889,
-  "recall_at_k": 0.7888888888888889,
-  "mrr": 0.5812838704505371,
+  "hit_at_k": 0.8333333333333334,
+  "recall_at_k": 0.8333333333333334,
+  "mrr": 0.554074074074074,
   "citation_precision": 1.0,
   "citation_recall": 1.0,
-  "faithfulness": 0.8346017375265741,
+  "faithfulness": 0.8390461819710185,
   "faithfulness_method": "lexical_evidence_support_proxy",
   "unanswerable_accuracy": 0,
   "ablations": {
-    "bm25": {
-      "hit_at_k": 0.8,
-      "recall_at_k": 0.8,
-      "mrr": 0.571041366041366,
+    "production": {
+      "hit_at_k": 0.8333333333333334,
+      "recall_at_k": 0.8333333333333334,
+      "mrr": 0.554074074074074,
       "unanswerable_accuracy": 0,
-      "latency_ms_p50": 216.23629999521654,
-      "latency_ms_p95": 228.70806999562774
+      "latency_ms_p50": 5.797963500072001,
+      "latency_ms_p95": 10.186081700010162
+    },
+    "bm25": {
+      "hit_at_k": 0.8111111111111111,
+      "recall_at_k": 0.8111111111111111,
+      "mrr": 0.5645811287477954,
+      "unanswerable_accuracy": 0,
+      "latency_ms_p50": 6.31919149998339,
+      "latency_ms_p95": 10.942388599960394
     },
     "tfidf_faiss_proxy": {
       "hit_at_k": 0.7555555555555555,
-      "recall_at_k": 0.7444444444444445,
-      "mrr": 0.5688026325526325,
+      "recall_at_k": 0.75,
+      "mrr": 0.5680537518037518,
       "unanswerable_accuracy": 0,
-      "latency_ms_p50": 221.45344999444205,
-      "latency_ms_p95": 239.13414499984356
+      "latency_ms_p50": 18.106529499959834,
+      "latency_ms_p95": 30.0325946500152
     },
     "hybrid_rrf": {
-      "hit_at_k": 0.7888888888888889,
-      "recall_at_k": 0.7888888888888889,
-      "mrr": 0.5812838704505371,
+      "hit_at_k": 0.8111111111111111,
+      "recall_at_k": 0.8111111111111111,
+      "mrr": 0.583699695366362,
       "unanswerable_accuracy": 0,
-      "latency_ms_p50": 439.3236999894725,
-      "latency_ms_p95": 466.497520043049
+      "latency_ms_p50": 24.6057804999964,
+      "latency_ms_p95": 41.80517264990158
     }
   },
   "per_paper": {
     "colbert": {
       "query_count": 9,
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "mrr": 0.45555555555555555
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.4148148148148148
     },
     "crag": {
       "query_count": 9,
-      "hit_at_k": 0.6666666666666666,
-      "recall_at_k": 0.6666666666666666,
-      "mrr": 0.43047138047138045
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.4981481481481482
     },
     "dpr": {
       "query_count": 9,
-      "hit_at_k": 0.8888888888888888,
-      "recall_at_k": 0.8888888888888888,
-      "mrr": 0.6962962962962963
+      "hit_at_k": 0.7777777777777778,
+      "recall_at_k": 0.7777777777777778,
+      "mrr": 0.5925925925925926
     },
     "hyde": {
       "query_count": 9,
-      "hit_at_k": 0.6666666666666666,
-      "recall_at_k": 0.6666666666666666,
-      "mrr": 0.42592592592592593
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "mrr": 0.6574074074074074
     },
     "lost-middle": {
       "query_count": 9,
       "hit_at_k": 0.7777777777777778,
       "recall_at_k": 0.7777777777777778,
-      "mrr": 0.7888888888888889
+      "mrr": 0.5740740740740741
     },
     "rag": {
       "query_count": 9,
-      "hit_at_k": 0.7777777777777778,
-      "recall_at_k": 0.7777777777777778,
-      "mrr": 0.7481962481962482
+      "hit_at_k": 0.6666666666666666,
+      "recall_at_k": 0.6666666666666666,
+      "mrr": 0.5555555555555556
     },
     "ragas": {
       "query_count": 9,
-      "hit_at_k": 0.8888888888888888,
-      "recall_at_k": 0.8888888888888888,
-      "mrr": 0.674074074074074
+      "hit_at_k": 0.7777777777777778,
+      "recall_at_k": 0.7777777777777778,
+      "mrr": 0.6944444444444444
     },
     "raptor": {
       "query_count": 9,
-      "hit_at_k": 0.5555555555555556,
-      "recall_at_k": 0.5555555555555556,
-      "mrr": 0.34034391534391534
+      "hit_at_k": 0.6666666666666666,
+      "recall_at_k": 0.6666666666666666,
+      "mrr": 0.2722222222222222
     },
     "realm": {
       "query_count": 9,
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "mrr": 0.6296296296296297
+      "hit_at_k": 0.8888888888888888,
+      "recall_at_k": 0.8888888888888888,
+      "mrr": 0.5777777777777777
     },
     "self-rag": {
       "query_count": 9,
-      "hit_at_k": 0.6666666666666666,
-      "recall_at_k": 0.6666666666666666,
-      "mrr": 0.6234567901234568
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "mrr": 0.7037037037037037
     }
   },
   "queries": [
@@ -109,15 +591,15 @@
         "rag--p001"
       ],
       "retrieved_ids": [
-        "crag--p003",
         "rag--p001",
         "rag--p002",
+        "self-rag--p022",
         "rag--p019",
-        "self-rag--p022"
+        "rag--p009"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -131,15 +613,15 @@
         "rag--p002"
       ],
       "retrieved_ids": [
-        "rag--p002",
-        "rag--p001",
         "crag--p001",
+        "rag--p001",
+        "rag--p002",
         "rag--p006",
         "rag--p009"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -154,9 +636,9 @@
       "retrieved_ids": [
         "rag--p001",
         "self-rag--p001",
-        "lost-middle--p001",
-        "self-rag--p020",
-        "rag--p009"
+        "rag--p005",
+        "self-rag--p002",
+        "crag--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -174,10 +656,10 @@
       ],
       "retrieved_ids": [
         "rag--p002",
-        "rag--p003",
-        "crag--p002",
         "rag--p001",
-        "rag--p005"
+        "crag--p002",
+        "crag--p001",
+        "rag--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -194,15 +676,15 @@
         "rag--p003"
       ],
       "retrieved_ids": [
-        "rag--p003",
         "rag--p002",
+        "rag--p003",
         "rag--p019",
         "rag--p004",
         "rag--p017"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -216,10 +698,10 @@
       ],
       "retrieved_ids": [
         "rag--p003",
-        "rag--p004",
-        "rag--p017",
         "rag--p002",
-        "rag--p008"
+        "self-rag--p026",
+        "realm--p005",
+        "rag--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -236,15 +718,15 @@
         "rag--p003"
       ],
       "retrieved_ids": [
-        "rag--p003",
         "rag--p008",
-        "rag--p006",
+        "self-rag--p002",
         "rag--p004",
+        "rag--p001",
         "rag--p017"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -257,15 +739,15 @@
         "rag--p004"
       ],
       "retrieved_ids": [
+        "self-rag--p002",
+        "rag--p001",
         "rag--p002",
         "self-rag--p007",
-        "rag--p001",
-        "crag--p015",
-        "self-rag--p002"
+        "self-rag--p001"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.09090909090909091,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -278,15 +760,15 @@
         "rag--p004"
       ],
       "retrieved_ids": [
-        "crag--p015",
-        "rag--p005",
         "crag--p006",
-        "crag--p009",
-        "lost-middle--p014"
+        "crag--p001",
+        "crag--p015",
+        "self-rag--p005",
+        "crag--p009"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.14285714285714285,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -297,11 +779,11 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "rag--p009",
         "ragas--p001",
-        "self-rag--p003",
-        "crag--p015",
-        "crag--p006"
+        "rag--p009",
+        "rag--p017",
+        "crag--p006",
+        "self-rag--p001"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -319,14 +801,14 @@
       ],
       "retrieved_ids": [
         "self-rag--p003",
-        "dpr--p001",
         "dpr--p009",
-        "self-rag--p010",
+        "dpr--p001",
+        "dpr--p002",
         "dpr--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -339,15 +821,15 @@
         "dpr--p001"
       ],
       "retrieved_ids": [
+        "dpr--p007",
         "dpr--p012",
         "dpr--p006",
-        "dpr--p007",
         "dpr--p005",
-        "dpr--p001"
+        "dpr--p002"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -362,9 +844,9 @@
       "retrieved_ids": [
         "dpr--p001",
         "dpr--p002",
-        "dpr--p004",
-        "dpr--p008",
-        "realm--p002"
+        "realm--p002",
+        "dpr--p013",
+        "rag--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -381,15 +863,15 @@
         "dpr--p003"
       ],
       "retrieved_ids": [
+        "hyde--p002",
         "dpr--p003",
-        "dpr--p007",
         "dpr--p008",
-        "dpr--p013",
-        "raptor--p019"
+        "dpr--p007",
+        "dpr--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -404,13 +886,13 @@
       "retrieved_ids": [
         "rag--p003",
         "colbert--p002",
+        "colbert--p004",
         "lost-middle--p007",
-        "self-rag--p029",
-        "dpr--p002"
+        "colbert--p003"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.06666666666666667,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -426,8 +908,8 @@
         "dpr--p009",
         "dpr--p003",
         "dpr--p006",
-        "raptor--p007",
-        "raptor--p019"
+        "dpr--p007",
+        "raptor--p007"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -448,7 +930,7 @@
         "dpr--p006",
         "dpr--p012",
         "dpr--p004",
-        "dpr--p005"
+        "colbert--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -468,8 +950,8 @@
         "dpr--p004",
         "dpr--p002",
         "dpr--p005",
-        "dpr--p008",
-        "dpr--p012"
+        "dpr--p012",
+        "dpr--p008"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -506,10 +988,10 @@
       "relevant_ids": [],
       "retrieved_ids": [
         "crag--p014",
-        "realm--p008",
         "raptor--p018",
+        "raptor--p007",
         "dpr--p005",
-        "raptor--p007"
+        "realm--p010"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -526,15 +1008,15 @@
         "realm--p001"
       ],
       "retrieved_ids": [
-        "realm--p003",
         "realm--p005",
-        "realm--p001",
-        "realm--p002",
+        "colbert--p006",
+        "realm--p003",
+        "crag--p014",
         "realm--p006"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -548,9 +1030,9 @@
       ],
       "retrieved_ids": [
         "realm--p001",
-        "realm--p007",
-        "rag--p009",
         "realm--p009",
+        "realm--p007",
+        "realm--p002",
         "realm--p003"
       ],
       "hit_at_k": 1.0,
@@ -571,8 +1053,8 @@
         "realm--p002",
         "realm--p001",
         "realm--p008",
-        "realm--p007",
-        "realm--p006"
+        "realm--p004",
+        "realm--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -591,10 +1073,10 @@
       ],
       "retrieved_ids": [
         "realm--p007",
-        "realm--p002",
         "realm--p001",
-        "realm--p006",
-        "dpr--p002"
+        "rag--p017",
+        "realm--p002",
+        "realm--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -612,14 +1094,14 @@
       ],
       "retrieved_ids": [
         "self-rag--p017",
-        "crag--p003",
         "realm--p002",
+        "crag--p003",
         "rag--p005",
-        "realm--p003"
+        "realm--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -632,11 +1114,11 @@
         "realm--p002"
       ],
       "retrieved_ids": [
-        "realm--p003",
-        "realm--p002",
         "realm--p001",
-        "lost-middle--p002",
-        "realm--p009"
+        "realm--p002",
+        "realm--p003",
+        "realm--p009",
+        "lost-middle--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -657,7 +1139,7 @@
         "realm--p012",
         "hyde--p002",
         "realm--p008",
-        "realm--p007"
+        "realm--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -675,14 +1157,14 @@
       ],
       "retrieved_ids": [
         "realm--p005",
-        "realm--p003",
         "ragas--p003",
         "realm--p002",
-        "realm--p001"
+        "realm--p007",
+        "realm--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -696,10 +1178,10 @@
       ],
       "retrieved_ids": [
         "realm--p003",
-        "realm--p004",
         "realm--p011",
+        "realm--p009",
         "realm--p008",
-        "realm--p005"
+        "lost-middle--p007"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -716,8 +1198,8 @@
       "retrieved_ids": [
         "self-rag--p022",
         "raptor--p020",
+        "rag--p018",
         "raptor--p021",
-        "realm--p005",
         "realm--p007"
       ],
       "hit_at_k": null,
@@ -736,14 +1218,14 @@
       ],
       "retrieved_ids": [
         "colbert--p005",
-        "colbert--p002",
-        "colbert--p001",
         "colbert--p004",
-        "colbert--p009"
+        "colbert--p009",
+        "colbert--p002",
+        "colbert--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -758,13 +1240,13 @@
       "retrieved_ids": [
         "colbert--p002",
         "colbert--p003",
-        "colbert--p004",
         "colbert--p005",
-        "colbert--p001"
+        "colbert--p001",
+        "colbert--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -779,13 +1261,13 @@
       "retrieved_ids": [
         "colbert--p002",
         "colbert--p005",
+        "colbert--p001",
         "colbert--p008",
-        "colbert--p006",
-        "colbert--p001"
+        "colbert--p009"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -800,13 +1282,13 @@
       "retrieved_ids": [
         "colbert--p007",
         "self-rag--p007",
-        "colbert--p008",
-        "colbert--p009",
-        "colbert--p001"
+        "colbert--p006",
+        "colbert--p001",
+        "colbert--p008"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -820,14 +1302,14 @@
       ],
       "retrieved_ids": [
         "colbert--p006",
-        "colbert--p004",
-        "colbert--p002",
         "colbert--p003",
-        "realm--p005"
+        "colbert--p004",
+        "colbert--p005",
+        "colbert--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -842,9 +1324,9 @@
       "retrieved_ids": [
         "colbert--p002",
         "colbert--p005",
+        "colbert--p004",
         "colbert--p003",
-        "colbert--p001",
-        "colbert--p009"
+        "colbert--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -863,13 +1345,13 @@
       "retrieved_ids": [
         "colbert--p009",
         "colbert--p006",
-        "colbert--p002",
-        "colbert--p007",
-        "colbert--p008"
+        "colbert--p003",
+        "colbert--p008",
+        "colbert--p007"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -886,7 +1368,7 @@
         "colbert--p004",
         "colbert--p006",
         "colbert--p001",
-        "colbert--p009"
+        "colbert--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -906,8 +1388,8 @@
         "colbert--p001",
         "colbert--p003",
         "dpr--p004",
-        "dpr--p006",
-        "colbert--p002"
+        "self-rag--p020",
+        "dpr--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -922,11 +1404,11 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "crag--p009",
         "colbert--p003",
+        "crag--p009",
         "colbert--p005",
         "colbert--p009",
-        "colbert--p006"
+        "crag--p001"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -944,14 +1426,14 @@
       ],
       "retrieved_ids": [
         "hyde--p002",
-        "hyde--p001",
         "self-rag--p026",
-        "hyde--p006",
+        "hyde--p001",
+        "crag--p014",
         "self-rag--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -967,7 +1449,7 @@
         "hyde--p001",
         "hyde--p002",
         "lost-middle--p003",
-        "hyde--p004",
+        "hyde--p007",
         "rag--p006"
       ],
       "hit_at_k": 1.0,
@@ -985,15 +1467,15 @@
         "hyde--p001"
       ],
       "retrieved_ids": [
-        "hyde--p002",
         "hyde--p001",
+        "hyde--p002",
         "hyde--p004",
         "hyde--p003",
         "realm--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1010,7 +1492,7 @@
         "hyde--p001",
         "hyde--p006",
         "hyde--p007",
-        "lost-middle--p002"
+        "hyde--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1029,9 +1511,9 @@
       "retrieved_ids": [
         "hyde--p002",
         "hyde--p001",
-        "self-rag--p027",
-        "hyde--p004",
-        "raptor--p004"
+        "colbert--p006",
+        "self-rag--p028",
+        "self-rag--p027"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1049,14 +1531,14 @@
       ],
       "retrieved_ids": [
         "hyde--p006",
-        "hyde--p001",
         "hyde--p007",
-        "hyde--p005",
+        "hyde--p002",
+        "hyde--p001",
         "hyde--p004"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.16666666666666666,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1070,15 +1552,15 @@
         "hyde--p004"
       ],
       "retrieved_ids": [
-        "hyde--p006",
         "hyde--p002",
+        "hyde--p006",
         "hyde--p007",
-        "lost-middle--p003",
-        "hyde--p004"
+        "hyde--p004",
+        "hyde--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1094,12 +1576,12 @@
         "hyde--p001",
         "raptor--p017",
         "hyde--p003",
-        "hyde--p004",
+        "hyde--p002",
         "colbert--p002"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.16666666666666666,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1112,15 +1594,15 @@
         "hyde--p002"
       ],
       "retrieved_ids": [
+        "hyde--p002",
+        "hyde--p005",
         "self-rag--p002",
-        "crag--p015",
-        "ragas--p001",
-        "hyde--p001",
-        "crag--p007"
+        "hyde--p006",
+        "realm--p010"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.0,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1131,10 +1613,10 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "hyde--p003",
         "hyde--p007",
+        "hyde--p003",
         "hyde--p002",
-        "ragas--p004",
+        "hyde--p001",
         "hyde--p005"
       ],
       "hit_at_k": null,
@@ -1154,9 +1636,9 @@
       "retrieved_ids": [
         "ragas--p001",
         "ragas--p005",
-        "rag--p007",
         "rag--p005",
-        "rag--p009"
+        "colbert--p006",
+        "ragas--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1174,9 +1656,9 @@
       ],
       "retrieved_ids": [
         "ragas--p001",
-        "ragas--p005",
-        "ragas--p002",
         "crag--p006",
+        "ragas--p002",
+        "crag--p002",
         "crag--p003"
       ],
       "hit_at_k": 1.0,
@@ -1195,10 +1677,10 @@
       ],
       "retrieved_ids": [
         "ragas--p001",
+        "self-rag--p026",
         "rag--p017",
-        "ragas--p005",
-        "rag--p005",
-        "self-rag--p026"
+        "realm--p001",
+        "crag--p010"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1219,7 +1701,7 @@
         "ragas--p001",
         "ragas--p005",
         "crag--p010",
-        "rag--p001"
+        "self-rag--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1238,13 +1720,13 @@
       "retrieved_ids": [
         "ragas--p005",
         "ragas--p002",
-        "realm--p002",
         "ragas--p001",
+        "realm--p002",
         "self-rag--p017"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.16666666666666666,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -1258,14 +1740,14 @@
       ],
       "retrieved_ids": [
         "ragas--p005",
-        "colbert--p006",
-        "ragas--p004",
         "crag--p014",
-        "ragas--p003"
+        "ragas--p004",
+        "colbert--p006",
+        "realm--p002"
       ],
-      "hit_at_k": 1.0,
-      "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "hit_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -1278,15 +1760,15 @@
         "ragas--p003"
       ],
       "retrieved_ids": [
+        "rag--p009",
         "ragas--p005",
         "colbert--p006",
-        "rag--p009",
-        "ragas--p004",
-        "ragas--p003"
+        "ragas--p003",
+        "crag--p014"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1301,8 +1783,8 @@
       "retrieved_ids": [
         "ragas--p003",
         "ragas--p005",
-        "ragas--p002",
         "crag--p015",
+        "ragas--p001",
         "lost-middle--p004"
       ],
       "hit_at_k": 1.0,
@@ -1320,15 +1802,15 @@
         "ragas--p003"
       ],
       "retrieved_ids": [
-        "ragas--p005",
         "ragas--p003",
+        "ragas--p005",
         "ragas--p001",
-        "crag--p014",
-        "ragas--p002"
+        "ragas--p002",
+        "ragas--p008"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1339,11 +1821,11 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "ragas--p005",
         "realm--p005",
-        "rag--p009",
+        "ragas--p005",
+        "crag--p014",
         "realm--p002",
-        "crag--p014"
+        "rag--p003"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -1361,9 +1843,9 @@
       ],
       "retrieved_ids": [
         "self-rag--p001",
+        "self-rag--p002",
         "self-rag--p010",
         "self-rag--p003",
-        "crag--p009",
         "crag--p002"
       ],
       "hit_at_k": 1.0,
@@ -1382,10 +1864,10 @@
       ],
       "retrieved_ids": [
         "self-rag--p001",
-        "self-rag--p003",
-        "crag--p009",
         "self-rag--p002",
-        "self-rag--p006"
+        "self-rag--p010",
+        "self-rag--p003",
+        "self-rag--p005"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1403,14 +1885,14 @@
       ],
       "retrieved_ids": [
         "self-rag--p004",
-        "colbert--p004",
-        "self-rag--p024",
-        "colbert--p006",
-        "self-rag--p006"
+        "self-rag--p002",
+        "self-rag--p010",
+        "self-rag--p001",
+        "self-rag--p005"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.0,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1423,15 +1905,15 @@
         "self-rag--p001"
       ],
       "retrieved_ids": [
-        "self-rag--p009",
         "self-rag--p003",
-        "crag--p016",
+        "self-rag--p002",
+        "self-rag--p001",
         "crag--p010",
-        "crag--p009"
+        "self-rag--p009"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.16666666666666666,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1448,7 +1930,7 @@
         "self-rag--p004",
         "self-rag--p005",
         "self-rag--p006",
-        "self-rag--p010"
+        "self-rag--p007"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1465,15 +1947,15 @@
         "self-rag--p002"
       ],
       "retrieved_ids": [
-        "crag--p009",
+        "self-rag--p005",
         "self-rag--p003",
-        "self-rag--p009",
-        "self-rag--p008",
-        "crag--p010"
+        "self-rag--p001",
+        "self-rag--p002",
+        "self-rag--p009"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.1111111111111111,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1487,10 +1969,10 @@
       ],
       "retrieved_ids": [
         "self-rag--p002",
+        "self-rag--p001",
         "self-rag--p003",
-        "self-rag--p009",
         "self-rag--p010",
-        "self-rag--p001"
+        "self-rag--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1507,15 +1989,15 @@
         "self-rag--p001"
       ],
       "retrieved_ids": [
-        "crag--p008",
-        "crag--p009",
         "self-rag--p001",
+        "ragas--p001",
         "crag--p010",
-        "self-rag--p010"
+        "crag--p001",
+        "self-rag--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1528,15 +2010,15 @@
         "self-rag--p001"
       ],
       "retrieved_ids": [
-        "self-rag--p001",
         "self-rag--p008",
+        "self-rag--p001",
         "crag--p007",
-        "crag--p009",
+        "self-rag--p002",
         "self-rag--p007"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -1548,10 +2030,10 @@
       "relevant_ids": [],
       "retrieved_ids": [
         "crag--p009",
-        "crag--p015",
         "self-rag--p003",
-        "self-rag--p020",
-        "crag--p010"
+        "self-rag--p001",
+        "ragas--p001",
+        "self-rag--p002"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -1568,15 +2050,15 @@
         "lost-middle--p001"
       ],
       "retrieved_ids": [
-        "lost-middle--p001",
         "ragas--p004",
         "lost-middle--p011",
-        "lost-middle--p010",
-        "crag--p015"
+        "lost-middle--p001",
+        "ragas--p003",
+        "self-rag--p022"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1590,10 +2072,10 @@
       ],
       "retrieved_ids": [
         "lost-middle--p001",
-        "lost-middle--p010",
-        "lost-middle--p002",
+        "ragas--p003",
         "lost-middle--p003",
-        "ragas--p003"
+        "lost-middle--p010",
+        "lost-middle--p002"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1610,11 +2092,11 @@
         "lost-middle--p001"
       ],
       "retrieved_ids": [
-        "lost-middle--p005",
-        "lost-middle--p002",
-        "lost-middle--p007",
         "crag--p014",
-        "raptor--p019"
+        "lost-middle--p005",
+        "lost-middle--p007",
+        "dpr--p007",
+        "colbert--p004"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
@@ -1632,10 +2114,10 @@
       ],
       "retrieved_ids": [
         "lost-middle--p002",
-        "lost-middle--p004",
-        "lost-middle--p011",
+        "rag--p017",
         "lost-middle--p005",
-        "self-rag--p020"
+        "lost-middle--p011",
+        "raptor--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1653,14 +2135,14 @@
       ],
       "retrieved_ids": [
         "rag--p017",
-        "raptor--p001",
-        "dpr--p006",
-        "raptor--p007",
-        "crag--p008"
+        "crag--p009",
+        "raptor--p018",
+        "crag--p008",
+        "raptor--p007"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.1,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -1694,13 +2176,15 @@
         "lost-middle--p003"
       ],
       "retrieved_ids": [
+        "lost-middle--p008",
         "lost-middle--p003",
-        "raptor--p018",
-        "raptor--p006"
+        "lost-middle--p018",
+        "lost-middle--p002",
+        "dpr--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.5,
       "correctly_abstained": false
     },
     {
@@ -1715,7 +2199,7 @@
       "retrieved_ids": [
         "lost-middle--p005",
         "lost-middle--p017",
-        "realm--p011",
+        "self-rag--p024",
         "lost-middle--p007",
         "rag--p005"
       ],
@@ -1734,15 +2218,15 @@
         "lost-middle--p003"
       ],
       "retrieved_ids": [
+        "lost-middle--p015",
+        "rag--p008",
         "lost-middle--p003",
         "rag--p005",
-        "rag--p018",
-        "lost-middle--p015",
-        "lost-middle--p010"
+        "dpr--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 1.0,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1757,7 +2241,7 @@
         "rag--p007",
         "lost-middle--p001",
         "dpr--p003",
-        "rag--p003"
+        "realm--p005"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -1776,13 +2260,13 @@
       "retrieved_ids": [
         "crag--p002",
         "crag--p008",
-        "crag--p007",
         "crag--p009",
-        "crag--p006"
+        "crag--p001",
+        "crag--p007"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.125,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -1796,11 +2280,11 @@
         "crag--p002"
       ],
       "retrieved_ids": [
-        "crag--p002",
         "crag--p001",
+        "crag--p002",
         "crag--p009",
         "colbert--p006",
-        "crag--p003"
+        "crag--p006"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1818,14 +2302,14 @@
       ],
       "retrieved_ids": [
         "crag--p005",
-        "crag--p008",
         "crag--p004",
-        "crag--p009",
-        "crag--p003"
+        "crag--p008",
+        "self-rag--p004",
+        "crag--p014"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.09090909090909091,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -1860,10 +2344,10 @@
       ],
       "retrieved_ids": [
         "crag--p002",
+        "crag--p004",
+        "raptor--p004",
         "crag--p001",
-        "crag--p003",
-        "raptor--p019",
-        "raptor--p004"
+        "crag--p003"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -1881,15 +2365,15 @@
         "crag--p002"
       ],
       "retrieved_ids": [
-        "crag--p015",
-        "crag--p009",
         "crag--p001",
+        "crag--p010",
         "crag--p002",
-        "crag--p007"
+        "crag--p015",
+        "crag--p009"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.3333333333333333,
+      "reciprocal_rank": 1.0,
       "correctly_abstained": false
     },
     {
@@ -1924,14 +2408,14 @@
       ],
       "retrieved_ids": [
         "crag--p007",
-        "crag--p006",
         "crag--p015",
-        "self-rag--p002",
-        "colbert--p006"
+        "crag--p006",
+        "raptor--p010",
+        "crag--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -1944,15 +2428,15 @@
         "crag--p002"
       ],
       "retrieved_ids": [
+        "self-rag--p007",
         "crag--p006",
-        "crag--p009",
-        "crag--p007",
-        "crag--p015",
-        "self-rag--p007"
+        "rag--p017",
+        "crag--p001",
+        "crag--p002"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.125,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -1963,11 +2447,11 @@
       "answerable": false,
       "relevant_ids": [],
       "retrieved_ids": [
-        "crag--p007",
+        "colbert--p004",
         "crag--p015",
-        "colbert--p005",
         "colbert--p006",
-        "colbert--p004"
+        "self-rag--p019",
+        "crag--p007"
       ],
       "hit_at_k": null,
       "recall_at_k": null,
@@ -1988,11 +2472,11 @@
         "raptor--p009",
         "raptor--p003",
         "raptor--p022",
-        "raptor--p006"
+        "raptor--p001"
       ],
-      "hit_at_k": 0.0,
-      "recall_at_k": 0.0,
-      "reciprocal_rank": 0.125,
+      "hit_at_k": 1.0,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 0.2,
       "correctly_abstained": false
     },
     {
@@ -2006,14 +2490,14 @@
       ],
       "retrieved_ids": [
         "raptor--p009",
-        "raptor--p006",
         "raptor--p018",
-        "raptor--p004",
-        "raptor--p022"
+        "raptor--p006",
+        "raptor--p019",
+        "raptor--p004"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.07142857142857142,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -2028,9 +2512,9 @@
       "retrieved_ids": [
         "raptor--p001",
         "self-rag--p009",
-        "self-rag--p004",
+        "raptor--p016",
         "raptor--p019",
-        "raptor--p021"
+        "self-rag--p004"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2051,7 +2535,7 @@
         "raptor--p016",
         "raptor--p001",
         "raptor--p009",
-        "raptor--p007"
+        "raptor--p020"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
@@ -2068,15 +2552,15 @@
         "raptor--p001"
       ],
       "retrieved_ids": [
+        "rag--p009",
+        "realm--p007",
         "raptor--p008",
         "raptor--p007",
-        "raptor--p010",
-        "raptor--p016",
-        "raptor--p020"
+        "colbert--p003"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.16666666666666666,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -2090,14 +2574,14 @@
       ],
       "retrieved_ids": [
         "raptor--p010",
-        "raptor--p006",
         "raptor--p007",
-        "dpr--p004",
-        "raptor--p002"
+        "raptor--p006",
+        "raptor--p002",
+        "raptor--p015"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -2110,15 +2594,15 @@
         "raptor--p003"
       ],
       "retrieved_ids": [
-        "raptor--p019",
         "raptor--p007",
+        "raptor--p019",
+        "raptor--p003",
         "raptor--p002",
-        "raptor--p001",
-        "raptor--p003"
+        "raptor--p001"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.2,
+      "reciprocal_rank": 0.3333333333333333,
       "correctly_abstained": false
     },
     {
@@ -2132,14 +2616,14 @@
       ],
       "retrieved_ids": [
         "raptor--p018",
-        "raptor--p002",
         "raptor--p019",
-        "raptor--p004",
-        "raptor--p006"
+        "raptor--p017",
+        "raptor--p002",
+        "raptor--p008"
       ],
       "hit_at_k": 1.0,
       "recall_at_k": 1.0,
-      "reciprocal_rank": 0.5,
+      "reciprocal_rank": 0.25,
       "correctly_abstained": false
     },
     {
@@ -2152,15 +2636,15 @@
         "raptor--p002"
       ],
       "retrieved_ids": [
+        "raptor--p006",
         "raptor--p009",
-        "lost-middle--p002",
-        "crag--p015",
         "raptor--p007",
-        "raptor--p006"
+        "lost-middle--p002",
+        "raptor--p008"
       ],
       "hit_at_k": 0.0,
       "recall_at_k": 0.0,
-      "reciprocal_rank": 0.16666666666666666,
+      "reciprocal_rank": 0.0,
       "correctly_abstained": false
     },
     {
@@ -2173,9 +2657,9 @@
       "retrieved_ids": [
         "raptor--p001",
         "raptor--p006",
-        "raptor--p018",
-        "raptor--p002",
-        "raptor--p019"
+        "raptor--p016",
+        "raptor--p008",
+        "raptor--p018"
       ],
       "hit_at_k": null,
       "recall_at_k": null,

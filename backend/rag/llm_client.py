@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import codecs
 import logging
 from typing import AsyncIterator
 
@@ -11,6 +12,10 @@ import httpx
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+class LLMStreamError(RuntimeError):
+    """Public provider failure; never a successful answer token."""
+
 
 _CHAT_TIMEOUT = httpx.Timeout(300.0, connect=30.0)
 
@@ -22,6 +27,36 @@ async def stream_tokens(prompt: str) -> AsyncIterator[str]:
     else:
         async for token in _stream_ollama(prompt):
             yield token
+
+
+async def _provider_lines(response):
+    """Decode split UTF-8 and accept a final JSON line without a newline."""
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    buffer = ""
+    try:
+        async for chunk in response.aiter_bytes():
+            buffer += decoder.decode(chunk)
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                if line.strip():
+                    yield line.strip()
+        buffer += decoder.decode(b"", final=True)
+    except UnicodeDecodeError as exc:
+        raise LLMStreamError("AI provider returned invalid UTF-8") from exc
+    if buffer.strip():
+        yield buffer.strip()
+
+
+def _provider_event(payload, provider):
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise LLMStreamError(f"{provider} returned a malformed stream event") from exc
+    if not isinstance(data, dict):
+        raise LLMStreamError(f"{provider} returned a malformed stream event")
+    if data.get("error"):
+        raise LLMStreamError(f"{provider} reported a stream error")
+    return data
 
 
 async def _stream_ollama(prompt: str) -> AsyncIterator[str]:
@@ -48,43 +83,33 @@ async def _stream_ollama(prompt: str) -> AsyncIterator[str]:
                 if response.status_code != 200:
                     body = (await response.aread()).decode("utf-8", errors="replace")
                     logger.error("Ollama HTTP %s: %s", response.status_code, body[:300])
-                    yield f"[Error: Ollama HTTP {response.status_code}]"
-                    return
+                    raise LLMStreamError(f"Ollama HTTP {response.status_code}")
 
-                buffer = ""
-                async for chunk in response.aiter_bytes():
-                    buffer += chunk.decode("utf-8", errors="replace")
-                    while True:
-                        delim = buffer.find("\n")
-                        if delim == -1:
-                            break
-                        line = buffer[:delim].strip()
-                        buffer = buffer[delim + 1:]
-                        if not line:
-                            continue
-                        try:
-                            data = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        token = data.get("message", {}).get("content")
-                        if token:
-                            yield token
-                        if data.get("done"):
-                            return
+                async for line in _provider_lines(response):
+                    data = _provider_event(line, "Ollama")
+                    message = data.get("message") or {}
+                    if not isinstance(message, dict):
+                        raise LLMStreamError("Ollama returned a malformed message")
+                    token = message.get("content")
+                    if token is not None and not isinstance(token, str):
+                        raise LLMStreamError("Ollama returned a malformed token")
+                    if token:
+                        yield token
+                    if data.get("done") is True:
+                        return
 
-    except httpx.ConnectError:
-        logger.error("Ollama connection refused at %s", settings.OLLAMA_URL)
-        yield "[Error: Cannot connect to Ollama. Please ensure Ollama is running.]"
-    except Exception as exc:
-        logger.error("Ollama error (%s): %s", type(exc).__name__, exc)
-        yield f"[Error: {type(exc).__name__}: {str(exc)[:200]}]"
+                raise LLMStreamError("Ollama response ended before completion")
+    except LLMStreamError:
+        raise
+    except httpx.HTTPError as exc:
+        logger.warning("Ollama stream failed: %s", type(exc).__name__)
+        raise LLMStreamError("Ollama connection was interrupted") from exc
 
 
 async def _stream_groq(prompt: str) -> AsyncIterator[str]:
     api_key = settings.GROQ_API_KEY
     if not api_key:
-        yield "[Error: GROQ_API_KEY not set. Get a free key at https://console.groq.com]"
-        return
+        raise LLMStreamError("GROQ_API_KEY not set")
 
     payload = {
         "model": settings.GROQ_MODEL,
@@ -108,51 +133,42 @@ async def _stream_groq(prompt: str) -> AsyncIterator[str]:
                 },
             ) as response:
                 if response.status_code == 401:
-                    yield "[Error: Invalid Groq API key.]"
-                    return
+                    raise LLMStreamError("Invalid Groq API key")
                 if response.status_code == 429:
-                    yield "\n_I'm receiving too many requests. Please wait a moment and try again._\n"
-                    return
+                    raise LLMStreamError("AI provider received too many requests")
                 if response.status_code != 200:
                     body = (await response.aread()).decode("utf-8", errors="replace")
                     logger.error("Groq HTTP %s: %s", response.status_code, body[:300])
-                    yield f"\n_Sorry, the AI service returned an error (HTTP {response.status_code}). Please try again._\n"
-                    return
+                    raise LLMStreamError(f"AI provider HTTP {response.status_code}")
 
-                buffer = ""
-                async for chunk in response.aiter_bytes():
-                    buffer += chunk.decode("utf-8", errors="replace")
-                    while True:
-                        delim = buffer.find("\n")
-                        if delim == -1:
-                            break
-                        line = buffer[:delim].strip()
-                        buffer = buffer[delim + 1:]
-                        if not line:
-                            continue
-                        if line.startswith("data: "):
-                            data_str = line[6:]
-                            if data_str.strip() == "[DONE]":
-                                return
-                            try:
-                                data = json.loads(data_str)
-                                token = data.get("choices", [{}])[0].get("delta", {}).get("content")
-                                if token:
-                                    yield token
-                            except json.JSONDecodeError:
-                                continue
-    except httpx.ConnectError:
-        logger.error("Groq connection failed")
-        yield "\n_Sorry, cannot reach the AI service. Check your internet connection._\n"
-    except httpx.RemoteProtocolError:
-        logger.error("Groq stream closed prematurely")
-        yield "\n_The AI service connection was interrupted. Please try again._\n"
-    except httpx.TimeoutException:
-        logger.error("Groq timeout")
-        yield "\n_The AI service took too long to respond. Please try again._\n"
-    except Exception as exc:
-        logger.error("Groq error (%s): %s", type(exc).__name__, exc)
-        yield f"\n_Sorry, the AI service encountered an error. Please try again._\n"
+                async for line in _provider_lines(response):
+                    if not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].lstrip(" ")
+                    if data_str.strip() == "[DONE]":
+                        return
+                    data = _provider_event(data_str, "Groq")
+                    choices = data.get("choices", [])
+                    if not isinstance(choices, list):
+                        raise LLMStreamError("Groq returned malformed choices")
+                    # Usage-only events have an empty choices list and must not
+                    # turn a successfully generated response into an IndexError.
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    if not isinstance(choice, dict) or not isinstance(choice.get("delta", {}), dict):
+                        raise LLMStreamError("Groq returned a malformed delta")
+                    token = choice.get("delta", {}).get("content")
+                    if token is not None and not isinstance(token, str):
+                        raise LLMStreamError("Groq returned a malformed token")
+                    if token:
+                        yield token
+                raise LLMStreamError("AI provider response ended before completion")
+    except LLMStreamError:
+        raise
+    except httpx.HTTPError as exc:
+        logger.warning("Groq stream failed: %s", type(exc).__name__)
+        raise LLMStreamError("AI provider connection was interrupted") from exc
 
 
 async def warmup_model() -> None:
