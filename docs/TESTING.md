@@ -55,7 +55,7 @@ Some Windows environments restrict child processes or pytest temporary directori
 From `frontend`:
 
 ```bash
-npm audit --omit=dev --audit-level=high
+npm audit --audit-level=high
 npm run test
 npm run check
 npm run e2e
@@ -89,7 +89,7 @@ Provider-backed evaluation is an explicit opt-in operation: review dataset sensi
 
 ## Continuous integration and change acceptance
 
-The [workflow](../.github/workflows/ci.yml) audits installed Python dependencies, builds the corpus, runs backend coverage/evaluation, checks documentation, audits production frontend dependencies, builds/tests the client and runs Chromium. The Python audit includes test tools and the installer; upgrade pip before installing the development requirements. An audit checks published advisories at execution time, not arbitrary application vulnerabilities. Read the failed step before changing code: an audit failure, missing fixture, protocol regression and unavailable package registry require different remedies.
+The [workflow](../.github/workflows/ci.yml) audits installed Python dependencies, builds the corpus, runs backend coverage/evaluation, checks documentation, audits frontend runtime and build dependencies, builds/tests the client and runs Chromium. The Python audit includes test tools and the installer; upgrade pip before installing the development requirements. An audit checks published advisories at execution time, not arbitrary application vulnerabilities. Read the failed step before changing code: an audit failure, missing fixture, protocol regression and unavailable package registry require different remedies.
 
 The documentation job first runs `python -m unittest discover -s scripts -p "test_*.py"`, then `python scripts/check_docs.py`. The checker uses only the standard library and AST parsing; it never imports application settings or secrets. It checks local file targets, coverage of `Settings` field names, and the method/path inventory in `docs/API_REFERENCE.md` against the app's literal router registrations/decorators. New undocumented routes and documented removed routes fail, while parameter-name and trailing-slash aliases are normalized. Fixtures prove those failures. This does not verify external URLs, Markdown anchors, numeric defaults, deployment state or the truth of arbitrary prose; those require source review and runtime evidence.
 

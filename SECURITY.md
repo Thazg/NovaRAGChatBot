@@ -12,9 +12,13 @@ Include the affected commit/version and runtime mode, the smallest synthetic rep
 
 Security fixes target the current maintained code and dependencies; older deployed revisions are not independently supported release lines. Running an older demo deployment is not evidence that all current local fixes have been deployed.
 
-CI runs `python -m pip_audit` against the installed Python environment and `npm audit --omit=dev --audit-level=high` for frontend runtime dependencies. See [testing](docs/TESTING.md) for setup. Dependency upgrades that affect parsing must rebuild the checksum-pinned PDF corpus and rerun retrieval gates; do not weaken quality floors to absorb parser changes. A clean advisory report is time-specific and does not establish parser isolation or a penetration test.
+CI runs `python -m pip_audit` against the installed Python environment and `npm audit --audit-level=high` for the full frontend dependency graph, including build tools. See [testing](docs/TESTING.md) for setup. Dependency upgrades that affect parsing must rebuild the checksum-pinned PDF corpus and rerun retrieval gates; do not weaken quality floors to absorb parser changes. A clean advisory report is time-specific and does not establish parser isolation or a penetration test.
 
 Current controls include account-scoped routes/storage, hashed passwords, short-lived in-memory access tokens, rotating hashed refresh sessions, origin checks for cookie-backed endpoints, upload validation, bounded parsing, SSRF defenses and deletion barriers. The [session](docs/SESSION_SECURITY.md), [upload](docs/UPLOAD_SECURITY.md) and [persistence](docs/PRODUCTION_PERSISTENCE.md) documents describe their boundaries.
+
+## Frontend build dependency policy
+
+The npm lockfile is audited with development dependencies included. `postcss-selector-parser` is overridden to the patched 7.1 line (minimum 7.1.6) for Tailwind 3 and its typography/nesting tools because their older dependency ranges otherwise retain the vulnerable parser. This changes the build dependency, not the Tailwind major or runtime styling API. Lint/type/build and the browser suite, including unchanged visual baselines, must pass before accepting an override update. Review or remove the override when upstream ranges support a patched parser. Vite's minimum supported dependency range is also raised to a patched release.
 
 ## Deployment responsibilities and limits
 

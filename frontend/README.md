@@ -75,7 +75,7 @@ npm run test
 npm run check
 npm run e2e:install
 npm run e2e -- --workers=2
-npm audit --omit=dev --audit-level=high
+npm audit --audit-level=high
 ```
 
 `test` uses Node's TypeScript stripping to exercise the SSE parser and citation formatter. `check` runs oxlint, TypeScript and a production build. Browser tests use deterministic API fixtures, including cancellation races, stale refresh, cross-account storage migration, indexing failure, account-delete retry, source retention after reload, IME input, mobile layout and axe checks. They do not call a paid LLM or send native shares externally. CI runs Chromium on Linux with Node 22; visual baselines are platform-specific.
