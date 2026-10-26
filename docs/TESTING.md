@@ -14,7 +14,7 @@ npm ci
 npx playwright install chromium
 ```
 
-On Linux CI, Playwright uses `npx playwright install --with-deps chromium`. That can install operating-system packages; it is separate from application runtime installation.
+Frontend CI runs inside the pinned `mcr.microsoft.com/playwright:v1.62.1-noble` image, which supplies Chromium and system fonts for the reviewed Linux snapshots. Its version must match the locked `@playwright/test` package when upgrading. This avoids the host runner's OS/font migration changing platform-font layout. Native Linux development can use `npx playwright install --with-deps chromium` to install browser/system dependencies, but that environment is not necessarily the snapshot baseline. These dependencies are separate from application runtime installation.
 
 ## Backend and the reproducible corpus
 

@@ -166,7 +166,7 @@ npm run test
 npm run e2e
 ```
 
-CI additionally enforces its workflow-defined coverage floor and installs Chromium's system dependencies on Linux. Full setup, focused tests and optional provider/neural evaluations are documented in [the testing guide](docs/TESTING.md) and [evaluation guide](backend/evaluation/README.md).
+CI additionally enforces its workflow-defined coverage floor and runs frontend checks inside a pinned Playwright Linux image so browser/system fonts match the reviewed snapshots. Full setup, focused tests and optional provider/neural evaluations are documented in [the testing guide](docs/TESTING.md) and [evaluation guide](backend/evaluation/README.md).
 
 ## Security controls
 
