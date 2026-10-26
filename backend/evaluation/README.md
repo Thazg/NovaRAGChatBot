@@ -105,6 +105,8 @@ adjudication rules.
 
 ## Benchmark reproduction
 
+For a complete clean-source recipe, use [reproduction](../../docs/REPRODUCIBILITY.md). Paper/excerpt permissions are separate from the project code license; see [third-party notices](../../THIRD_PARTY_NOTICES.md).
+
 From `backend`:
 
 ```bash

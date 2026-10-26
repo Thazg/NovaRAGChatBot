@@ -1,315 +1,167 @@
-<div align="center">
+<h1 align="center">Nova RAG Workspace</h1>
 
-<img src="frontend/src/assets/hero.png" alt="Nova logo" width="104" />
+<p align="center">
+  Ask questions about your documents and inspect the passages behind each answer.
+</p>
 
-# Nova RAG Workspace
+<p align="center">
+  <a href="backend/requirements.txt"><img alt="Python 3.12" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" /></a>
+  <a href="backend/README.md"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" /></a>
+  <a href="https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml"><img alt="CI workflow" src="https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white" /></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-64748B" /></a>
+</p>
 
-**A full-stack retrieval-augmented generation system for private document ingestion, evidence retrieval, and citation-backed answers.**
+<p align="center">
+  <a href="https://novachatbot.vercel.app/">Live demo</a> &nbsp;|&nbsp;
+  <a href="#measured-results">Results</a> &nbsp;|&nbsp;
+  <a href="#how-it-works">Architecture</a> &nbsp;|&nbsp;
+  <a href="docs/REPRODUCIBILITY.md">Reproduce</a>
+</p>
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-6D5DFC?style=for-the-badge&logo=vercel&logoColor=white)](https://novachatbot.vercel.app/)
-[![CI: GitHub Actions](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](backend/requirements.txt)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=0B1020)](frontend/package.json)
+![Nova RAG Workspace login screen](frontend/e2e/portfolio-flow.spec.ts-snapshots/login-dark-chromium-win32.png)
 
-[Web application](https://novachatbot.vercel.app/) · [API reference](https://novaaiagent-4.onrender.com/docs) · [CI runs](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml) · [Evaluation report](backend/evaluation/README.md) · [Security architecture](docs/SESSION_SECURITY.md)
+*Actual login UI captured by Playwright on Windows. This illustrates the entry screen, not model output or live-service availability. [Capture context](docs/assets/README.md).*
 
-</div>
+## Project highlights
 
-![Nova sign-in screen](frontend/e2e/portfolio-flow.spec.ts-snapshots/login-dark-chromium-linux.png)
+Documents are useful only if a reader can find the right evidence and check the answer. Nova implements the ingestion-to-answer path, including the failures between those steps.
 
-## Project overview
+| Engineering choice | What is implemented | Evidence |
+| --- | --- | --- |
+| Traceable document QA | Validated uploads, account-scoped indexes, streamed answers and plain filename/page/extracted-line sources; original-file download | [RAG pipeline](docs/RAG_PIPELINE.md), [API contracts](docs/API_REFERENCE.md) |
+| Evaluation follows the product | The benchmark calls the same PDF parser, chunker, retriever and context packer as document QA; reports include parser versions and a corpus fingerprint | [Recorded results](backend/evaluation/results.json), [reproduction](docs/REPRODUCIBILITY.md) |
+| Explicit failure contracts | Interrupted streams retain partial output; incompatible embedding identities fall back to BM25; deletion barriers prevent late work from restoring account data | [AI engineering decisions](docs/AI_ENGINEERING.md), [backend tests](backend/tests) |
 
-Nova implements the complete private-document RAG lifecycle: validated ingestion, document parsing, chunking, benchmark-selected BM25 retrieval, prompt grounding, cited generation, token streaming, evaluation, and persistent infrastructure.
+The application uses React/TypeScript, FastAPI and BM25 by default. FAISS/RRF retrieval and PostgreSQL/Redis/RQ/B2 adapters are optional configurations, with separate verification requirements.
 
-| Capability | Implementation evidence |
-|---|---|
-| **Grounded, inspectable answers** | Structured evidence with filename, page and extracted line references; retrieval abstention remains a known limitation |
-| **Measured retrieval quality** | The shared production BM25 path is checked against a versioned regression corpus; see the [evaluation report](backend/evaluation/README.md) for results and measurement scope |
-| **Auditable provenance** | Pinned paper versions, SHA-256 locks, page evidence, reference answers, and per-query results |
-| **Configurable infrastructure** | Local JSON/thread mode; optional PostgreSQL, Redis/RQ and B2 adapters, readiness probes, rate limits, Docker and CI |
-| **Automated verification** | Backend regression tests, deterministic evaluation gates, and Chromium end-to-end coverage |
+## Live demo
 
-> The benchmark is project-specific and designed for regression testing. It also exposes a real limitation: the current retriever scores **0% on 10 unanswerable questions** because abstention is not yet calibrated.
+[Open the hosted workspace](https://novachatbot.vercel.app/) or inspect the [hosted API documentation](https://novaaiagent-4.onrender.com/docs). Create an account, upload a document, then ask a question and inspect its source locations. Chat sends selected passages to the configured model provider; use non-sensitive sample documents when evaluating the hosted service.
 
-## Documentation
+The frontend is hosted on Vercel and the API on Render, which can require a cold start. This is an application demo, not a replay of benchmark answers. **Observed on 2026-10-26:** BM25, Groq `openai/gpt-oss-20b`, JSON persistence, process-local limits and local indexing threads; health/readiness returned 200. Its reported 6,000-character context budget differs from the benchmark configuration below. A version label does not establish Git-revision parity, and connectivity does not measure answer quality. See [deployment diagnostics](docs/OPERATIONS.md#hosted-demo-and-deployment-diagnostics).
 
-Start with the [documentation index](docs/README.md). The project includes a [configuration reference](docs/CONFIGURATION.md), [architecture](docs/ARCHITECTURE.md), [API/SSE contracts](docs/API_REFERENCE.md), [user guide](docs/USER_GUIDE.md), [RAG pipeline](docs/RAG_PIPELINE.md), [testing guide](docs/TESTING.md), and [operations/recovery guide](docs/OPERATIONS.md).
+## Measured results
 
-For code changes, use the [contribution guide](CONTRIBUTING.md); report sensitive findings through the [security policy](SECURITY.md).
+**Recorded on 2026-10-26:** K=5, 10 checksum-pinned arXiv PDFs, 160 pages, 555 chunks, and 100 annotated questions: 90 answerable and 10 unanswerable. Extraction uses pypdf 6.21.2 with font decoding; chunks contain 220 words with 40-word overlap. Independent human annotation review is pending.
 
-The [AI engineering guide](docs/AI_ENGINEERING.md) maps retrieval/model changes to reproducible experiments, failure-path tests and explicit quality limits.
+All rows below come from the **same saved offline report**. The lexical comparison is the evaluator's candidate/filtering ablation; TF-IDF vectors are a deterministic proxy, not neural embeddings.
 
-## Key engineering decisions
+| Retrieval path | Page Hit@5, answerable questions | MRR@5, 90 questions | Warm retrieval P50 / P95, 100 queries |
+| --- | ---: | ---: | ---: |
+| **Production BM25** | **75/90 (83.33%)** | 0.5541 | **5.80 / 10.19 ms** |
+| Lexical candidate/filtering ablation | 73/90 (81.11%) | 0.5646 | 6.32 / 10.94 ms |
+| TF-IDF + FAISS proxy | 68/90 (75.56%) | 0.5681 | 18.11 / 30.03 ms |
+| BM25 + TF-IDF RRF proxy | 73/90 (81.11%) | **0.5837** | 24.61 / 41.81 ms |
 
-- **End-to-end system design** — The repository integrates the React client, FastAPI services, retrieval pipeline, security controls, persistence, deployment, and automated verification.
-- **Retrieval is benchmark-selected** — BM25 is the production default because it delivers the strongest quality/latency trade-off; dense, RRF, reranking, and multi-query remain reproducible evaluation paths rather than unmeasured complexity in every request.
-- **Incremental response delivery** — Server-Sent Events carry tokens and structured evidence. An incomplete stream is marked interrupted; explicit regeneration reuses the user turn instead of automatically replaying POST requests.
-- **User-level data isolation** — Uploads, indexes, conversations, preferences, and storage keys are namespaced by authenticated user ID.
-- **Explicit failure handling** — Upload quarantine, SSRF defenses, rotating refresh sessions, health/readiness separation, shared rate limiting, and background job status are implemented as first-class flows. Retrieval abstention remains an identified limitation.
-- **Reproducible verification** — [GitHub Actions](.github/workflows/ci.yml) runs documentation, backend, frontend and browser checks on pull requests and pushes to `main`. See [Continuous integration](#continuous-integration) for scope and authoritative results.
+Source: [per-query results and configuration](backend/evaluation/results.json), [metric definitions and historical neural experiments](backend/evaluation/README.md). The production path has the highest Hit@5 in this comparison, while RRF has higher MRR; BM25 remains the simpler default. This does not establish superiority on other document collections.
 
-## Hosted deployment
+Latency was measured in a local Linux/Python 3.12.15 container with a warm store and no query cache. The report does not capture a complete hardware/utilization manifest, so these timings are diagnostics rather than a portable performance claim. They exclude context packing, HTTP, storage synchronization and model generation. **They are not inference latency, end-to-end chat latency or production performance.**
 
-The application implements the following workflow. The hosted service may run an earlier revision; verify its configuration as described under [Deployment](#deployment).
+Two further results matter:
 
-1. Create a private workspace.
-2. Upload a PDF, DOCX, Markdown, RST, TXT, Python file, or Jupyter Notebook.
-3. Ask a document-specific question and watch the response stream in real time.
-4. Inspect the cited evidence, continue the conversation, or search across prior chats.
+- **Evidence retention: 57/57 retrieved annotated spans survive packing.** Only 57 of the 90 answerable questions had their annotated span retrieved; this conditional result does not count the other 33 as correct. Matching ignores case/whitespace and is not semantic entailment.
+- **Unanswerable retrieval: 0/10 correct abstentions.** There is no calibrated refusal threshold. A two-question local Ollama smoke verifies integration only; generated-answer factuality has not been established by a human-reviewed benchmark.
 
-**Web application:** [novachatbot.vercel.app](https://novachatbot.vercel.app/)
-
-**OpenAPI documentation:** [novaaiagent-4.onrender.com/docs](https://novaaiagent-4.onrender.com/docs)
-
-> The Render instance may require a cold start after an idle period.
-
-## System architecture
-
-The diagram shows the supported distributed configuration. The hosted demo configuration last observed is documented separately under Deployment.
+## How it works
 
 ```mermaid
 flowchart LR
-    U[User] --> UI[React 19 + TypeScript]
-    UI <-->|REST + SSE| API[FastAPI]
-
-    API --> AUTH[Auth + rate limiting]
-    API --> RAG[RAG orchestration]
-    API --> JOBS[Index jobs]
-
-    RAG --> BM25[BM25 production retrieval]
-    BM25 --> PROMPT[Grounded prompt + citations]
-    RAG -. hybrid opt-in .-> FAISS[FAISS vector retrieval]
-    BM25 -.-> RRF[Reciprocal Rank Fusion]
-    FAISS -.-> RRF
-    RRF -. experimental path .-> PROMPT
-    PROMPT --> LLM[Groq or Ollama]
-    LLM -->|token stream| API
-
-    AUTH --> PG[(PostgreSQL)]
-    JOBS --> REDIS[(Redis + RQ)]
-    JOBS --> B2[(Backblaze B2)]
+    PDF[Uploaded document] --> V[Validate and parse]
+    V --> C[Page/line-preserving chunks]
+    C --> I[(Account-scoped BM25 index)]
+    Q[Question] --> API[FastAPI ownership checks]
+    API --> R[Bounded follow-up rewriting]
+    R --> I
+    I --> P[Pack passages with evidence IDs]
+    P --> L[Groq or local Ollama]
+    L --> S[Tokens and completion over SSE]
+    S --> UI[React workspace and source references]
+    API --> D[(Conversation state)]
 ```
 
-### Request lifecycle
+Local mode uses JSON state and an in-process indexing executor. Shared deployment adapters add PostgreSQL, Redis/RQ and B2; they require explicit provisioning, migration and staging. Hybrid retrieval is opt-in. See [architecture](docs/ARCHITECTURE.md) for ownership boundaries and [the AI engineering guide](docs/AI_ENGINEERING.md) for model/index changes and experiment design.
 
-```text
-Upload
-  → quarantine and validate
-  → parse and normalize
-  → create overlapping chunks
-  → build a user-isolated index
-  → retrieve and rank evidence with production-default BM25
-  → construct a grounded prompt
-  → stream a cited answer over SSE
-```
+## Quick start
 
-## Technical implementation
+Use **Python 3.12** and **Node.js 22.12+**. The example below uses local Ollama so an API key is not required. Model download and CPU/GPU resources are still needed. A [Groq configuration](docs/CONFIGURATION.md) is also supported.
 
-| Area | Implementation | Engineering rationale |
-|---|---|---|
-| Retrieval | Production-default BM25 with acronym-aware expansion; opt-in FAISS/RRF experiments | Measured through the shared production retrieval function; neural methods remain historical candidate experiments |
-| Grounding | Page-preserving context, evidence IDs and plain file/page/line source references | Keeps answers traceable and bounds prompt growth |
-| Streaming | SSE token and action events, abort support, regeneration | Responsive UX without unnecessary WebSocket complexity |
-| Authentication | PBKDF2 password hashing, short-lived access tokens, rotating refresh tokens | Limits credential exposure and supports session revocation |
-| Persistence | PostgreSQL for relational state, B2 for artifacts, local fallback for development | Adapter support; the hosted demo was last observed in local fallback mode (see below) |
-| Background work | Redis + RQ indexing jobs with progress endpoints | Optional distributed mode with immutable index revisions and per-user mutation locks |
-| Operations | Liveness/readiness probes, request IDs, timing headers, optional Sentry | Makes failure diagnosis and rollout checks observable |
-| Frontend | React 19, Zustand, Tailwind, shadcn/ui, Framer Motion | Responsive interaction model with accessible motion controls |
-
-## Evaluation and quality assurance
-
-The regression gate calls the **same PDF parser, chunker and retrieval function as the application**: `load_pdf` → `split_documents` → `retrieve_from_store`. The recorded 2026-10-26 configuration uses **K = 5**, 10 pinned PDFs, 160 pages, 555 chunks (220 words, 40-word overlap), and 100 annotated questions (90 answerable + 10 unanswerable; independent human review pending). Parser versions and the corpus fingerprint accompany the report.
-
-The [evaluation report](backend/evaluation/README.md) describes the current measurements, corpus hash, timing scope, context-retention checks and limitations. [Machine-readable results](backend/evaluation/results.json) contain per-query evidence. These retrieval and packing measurements do not establish generated-answer accuracy or end-to-end chat latency.
-
-The separate [retrieval strategy analysis](backend/evaluation/RETRIEVAL_METHODS.md) records the historical neural-candidate comparison that informed the BM25 default. Its timings come from a different benchmark scope. Independent second-reviewer annotation and calibrated abstention remain open work.
-
-### Continuous integration
-
-CI is implemented in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), triggered by pull requests and pushes to `main`:
-
-| Job | Checks |
-|---|---|
-| Documentation | Checker fixtures, local links, backend-setting reference coverage and API route/reference consistency |
-| Backend tests | Audit installed Python dependencies, rebuild the checksum-pinned corpus, run pytest with the configured coverage floor, then run retrieval evaluation |
-| Frontend quality | Install locked dependencies, audit production dependencies, lint/typecheck/build, run unit tests and Chromium E2E |
-
-The workflow is the source of truth for triggers, toolchain versions, commands and thresholds. [GitHub Actions runs](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml) show the result for each commit; the header's CI badge links to those runs and does not store a pass/fail claim or assume repository visibility.
-
-The checks exercise deterministic fixtures and isolated adapters. They do not deploy the app, call paid LLM providers or certify a multi-host PostgreSQL/Redis/B2 deployment. See [testing and verification](docs/TESTING.md) for coverage and limits.
-
-### Verification commands
-
-Run each block from the **repository root**, with the Python virtual environment active. On a clean checkout, build the corpus before running the full backend suite:
+Clone the repository and prepare the backend from its root:
 
 ```bash
+git clone https://github.com/Thazg/NovaRAGChatBot.git
+cd NovaRAGChatBot
+python -m venv .venv
+source .venv/bin/activate
+# PowerShell instead: .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r backend/requirements-dev.txt
-python -m pip_audit
-cd backend
-python evaluation/arxiv_corpus/download_papers.py
-python evaluation/arxiv_corpus/extract_corpus.py
-python evaluation/arxiv_corpus/build_dataset.py
-python -m evaluation.run --k 5
-cd ..
-python -m pytest --cov --cov-report=term-missing
-python scripts/check_docs.py
+python -m pip install -r backend/requirements.txt
+cp .env.example backend/.env
 ```
+
+On PowerShell, use `Copy-Item` instead of `cp`. In `backend/.env`, set:
+
+```env
+LLM_PROVIDER=ollama
+MODEL_NAME=qwen3:4b-instruct
+OLLAMA_URL=http://127.0.0.1:11434
+RETRIEVAL_MODE=bm25
+JWT_SECRET=replace_with_a_unique_random_secret
+```
+
+Replace `JWT_SECRET` with a fresh value from `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Keep the real environment file local.
+
+Start Ollama in another terminal:
+
+```bash
+ollama pull qwen3:4b-instruct
+ollama serve
+```
+
+Skip `ollama serve` if the desktop app/server is already running. With the virtual environment active, start the API:
+
+```bash
+cd backend
+python -m uvicorn app:app --reload --host 127.0.0.1 --port 8000
+```
+
+In another terminal, from the repository root:
 
 ```bash
 cd frontend
 npm ci
-npx playwright install chromium
-npm audit --omit=dev --audit-level=high
+cp .env.example .env
+npm run dev -- --host 127.0.0.1
+```
+
+Open [127.0.0.1:5173](http://127.0.0.1:5173), register a local account and upload a small text/PDF document. [Local API docs](http://127.0.0.1:8000/docs) and [readiness](http://127.0.0.1:8000/health/ready?refresh=true) help diagnose setup. Full environment and Docker instructions are in the [configuration reference](docs/CONFIGURATION.md) and [operations guide](docs/OPERATIONS.md).
+
+## Testing and reproduction
+
+[Reproduce the recorded benchmark and all offline gates](docs/REPRODUCIBILITY.md) from a clean checkout. That recipe rebuilds the ignored corpus from checksummed PDFs before running the full backend suite; no chat provider or paid evaluation is needed.
+
+After the corpus and development dependencies are prepared, the main checks are:
+
+```bash
+python -m pytest --cov --cov-report=term-missing --cov-fail-under=64
+python -m unittest discover -s scripts -p "test_*.py"
+python scripts/check_docs.py
+cd frontend
 npm run check
 npm run test
 npm run e2e
 ```
 
-CI additionally enforces its workflow-defined coverage floor and runs frontend checks inside a pinned Playwright Linux image so browser/system fonts match the reviewed snapshots. Full setup, focused tests and optional provider/neural evaluations are documented in [the testing guide](docs/TESTING.md) and [evaluation guide](backend/evaluation/README.md).
+[GitHub Actions](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml) checks documentation, installed Python dependencies, backend coverage/retrieval gates, frontend dependencies/build/unit tests and Chromium E2E. The CI badge links to the workflow; per-commit runs are the status evidence. Browser tests use controlled API fixtures, not a model-quality judge. Linux visual baselines use the pinned Playwright image. See [testing scopes](docs/TESTING.md).
 
-## Security controls
+## Limitations
 
-Nova treats private-document RAG as a security-sensitive system.
+- **Evaluation:** one project-specific, English research-paper corpus; independent annotation review is pending. No calibrated abstention or human-validated generated-answer/citation-entailment score exists.
+- **Documents:** extracted page/line locations are not a PDF viewer's visual line numbers. OCR, robust table understanding, exact tokenizer budgets and parser process isolation are not implemented.
+- **Security:** prompt boundaries and valid evidence IDs do not eliminate prompt injection or prove factuality. Selected context goes to the chosen model provider; hybrid mode also sends text to its embedding endpoint.
+- **Operations:** JSON mode supports one process. Real PostgreSQL/Redis/RQ/B2 multi-host staging and restore drills remain unverified. Cross-replica preferences, renewable leases, snapshot GC and durable cleanup reconciliation remain gaps.
 
-- Passwords use salted **PBKDF2-HMAC-SHA256 with 310,000 iterations** and constant-time verification.
-- Access tokens live only in JavaScript memory; rotating refresh tokens use a `Secure`, `HttpOnly`, `SameSite=Strict` host-only cookie in production, while only token hashes are stored server-side.
-- Uploads are quarantined, size-bounded, checked by extension, MIME, signature, and parser, optionally scanned by ClamAV, then stored under server-generated UUIDs.
-- PDF and DOCX controls reject encrypted or active PDFs, embedded content, unsafe relationships, malformed archives, and decompression bombs.
-- Remote document download blocks unsafe schemes and ports, private/reserved IP ranges, DNS rebinding, unsafe redirects, and invalid payload signatures.
-- Production refuses weak/default JWT secrets; origin checks protect cookie-backed endpoints; rate limits can be shared across replicas through Redis.
-- Documents, conversations, vector indexes, preferences, and artifact keys remain isolated by authenticated user ID.
+## Documentation, contributing and license
 
-Related documentation: [session security](docs/SESSION_SECURITY.md) · [upload and SSRF controls](docs/UPLOAD_SECURITY.md) · [production persistence](docs/PRODUCTION_PERSISTENCE.md)
+Start with the [documentation index](docs/README.md), [API reference](docs/API_REFERENCE.md), [RAG pipeline](docs/RAG_PIPELINE.md) and [AI engineering guide](docs/AI_ENGINEERING.md). Use [CONTRIBUTING.md](CONTRIBUTING.md) for changes and [SECURITY.md](SECURITY.md) for sensitive reports.
 
-## Technology stack
-
-| Layer | Stack |
-|---|---|
-| Frontend | React 19, TypeScript 6, Vite 8, Zustand, Tailwind CSS, shadcn/ui, Framer Motion |
-| Backend | Python 3.12, FastAPI, Pydantic, HTTPX |
-| Retrieval | rank-bm25 production default; optional FAISS, RRF, BGE, and cross-encoder evaluation |
-| LLM | Groq cloud API or local Ollama |
-| Data | PostgreSQL, SQLAlchemy, Alembic, Redis, RQ, Backblaze B2 |
-| Quality | Pytest, Coverage.py, Playwright, axe-core, oxlint, TypeScript |
-| Delivery | Docker Compose, Render, Vercel, GitHub Actions, optional Sentry |
-
-## Local development
-
-### Prerequisites
-
-- Python 3.12+
-- Node.js 22.12+
-- A [Groq API key](https://console.groq.com/) **or** a local [Ollama](https://ollama.com/) model
-
-### 1. Clone and configure
-
-```bash
-git clone https://github.com/Thazg/NovaRAGChatBot.git
-cd NovaRAGChatBot
-cp .env.example backend/.env
-cp frontend/.env.example frontend/.env
-```
-
-On PowerShell, replace `cp` with `Copy-Item`.
-
-Set at least the following values in `backend/.env`:
-
-```env
-LLM_PROVIDER=groq
-GROQ_API_KEY=gsk_your_key_here
-JWT_SECRET=replace_with_a_random_secret_of_at_least_32_characters
-RETRIEVAL_MODE=bm25
-```
-
-For a local model, use `LLM_PROVIDER=ollama` and configure `OLLAMA_URL` plus `MODEL_NAME` instead. `RETRIEVAL_MODE=bm25` is the benchmark-selected production default and does not call an embedding provider. The older hybrid path is an explicit experiment: set `RETRIEVAL_MODE=hybrid` and configure an OpenAI-compatible embedding endpoint only when deliberately retesting that trade-off.
-
-### 2. Start the API
-
-```bash
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r backend/requirements.txt
-cd backend
-uvicorn app:app --reload --host 127.0.0.1 --port 8000
-```
-
-### 3. Start the frontend
-
-In a second terminal:
-
-```bash
-cd frontend
-npm ci
-npm run dev -- --host 127.0.0.1
-```
-
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Swagger UI is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
-
-### Docker Compose
-
-```bash
-cp .env.example .env
-# Add GROQ_API_KEY and a strong JWT_SECRET to .env
-docker compose up --build
-```
-
-The containerized frontend is served on `http://localhost:3000`; the API is served on `http://localhost:8000`.
-
-## Repository structure
-
-```text
-NovaRAGChatBot/
-├── backend/
-│   ├── api/routes/          # Auth, chat, documents, conversations, health
-│   ├── rag/                 # Parsing, chunking, retrieval, prompts, LLM clients
-│   ├── services/            # Auth, persistence, storage, jobs, rate limiting
-│   ├── evaluation/          # Versioned datasets, metrics, ablations, reports
-│   ├── alembic/             # PostgreSQL schema migrations
-│   └── tests/               # Unit, API, security, persistence, integration tests
-├── frontend/
-│   ├── src/components/      # Product UI, chat, onboarding, settings
-│   ├── src/services/        # Typed REST and SSE client
-│   ├── src/store/           # Zustand application state
-│   └── e2e/                 # Deterministic Playwright portfolio flow
-├── docs/                    # Architecture, API, configuration, testing and operations
-├── .github/workflows/       # CI quality gates
-├── docker-compose.yml
-└── render.yaml
-```
-
-## Architecture decisions
-
-- **Production retrieval:** BM25 is backed by the committed 100-question quality/latency benchmark; neural retrieval remains opt-in until it exceeds that baseline under an agreed latency SLO.
-- **Streaming protocol:** SSE matches the one-way token-delivery requirement without introducing bidirectional WebSocket state.
-- **Environment-specific persistence:** JSON and in-process fallbacks support local development; PostgreSQL, Redis/RQ, and B2 support shared, multi-replica deployments.
-- **Data ownership boundaries:** B2 stores uploads/index artifacts; PostgreSQL owns users, refresh sessions and conversations; Redis/RQ owns indexing jobs. Local demo mode uses JSON and in-process fallbacks.
-- **Evaluation scope:** the shared production BM25 path is the primary regression gate, with deterministic proxy ablations reported separately; provider-backed embedding and LLM evaluations remain opt-in because they transfer versioned test data and incur variable cost.
-
-## Deployment
-
-| Surface | Platform | URL |
-|---|---|---|
-| Web application | Vercel | [novachatbot.vercel.app](https://novachatbot.vercel.app/) |
-| FastAPI service | Render | [novaaiagent-4.onrender.com](https://novaaiagent-4.onrender.com) |
-| API documentation | Swagger UI | [novaaiagent-4.onrender.com/docs](https://novaaiagent-4.onrender.com/docs) |
-
-Vercel proxies same-origin `/api/*` requests to Render and applies browser security headers. **Last observed hosted configuration (2026-10-16):** JSON persistence, process-local rate limits and a local indexing thread pool. Readiness reported B2 and malware scanning as optional; that signal does not verify whether optional B2 credentials were present. Check `/health` and `/health/ready` for the current configuration.
-
-The repository also supports PostgreSQL, Redis/RQ and B2 when explicitly provisioned. `render.yaml` supplies web-service configuration; it does not create the worker or managed databases. See [the production runbook](docs/PRODUCTION_PERSISTENCE.md) for required migrations, provisioning and verification. These adapter capabilities are distinct from what has been observed on the hosted demo.
-
-Existing indexes require **Reindex** after upgrading to page/line-preserving ingestion. New citations display the uploaded filename, PDF page and extracted line range as plain text. Line numbers are 1-based within each extracted PDF page (or within extracted text for non-PDF files), including blank lines; they are not inferred from LLM output. Existing answers without saved evidence remain readable but cannot acquire locations retroactively.
-
-## Project ownership
-
-Developed and maintained by [Thazg](https://github.com/Thazg) as a portfolio project focused on production RAG, full-stack engineering, security, and measurable AI quality.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
+Project code is licensed under [MIT](LICENSE). Third-party papers, excerpts, dependencies and marks retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Maintained by [Nguyen Tam Thang](https://github.com/Thazg).

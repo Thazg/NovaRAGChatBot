@@ -13,6 +13,25 @@ Preferences remain local/B2 files even when PostgreSQL is configured; cross-repl
 
 Compose persists `/app/storage` and `/app/Dataset/uploads` through named volumes, and explicitly sets `UPLOAD_FOLDER` to the upload-volume path. Before upgrading an older container whose uploads were written to `/app/uploads` in its writable layer, copy/verify those originals while that old container still exists. Recreating it first can discard the only original copy. Do not use `docker compose down -v` as a routine upgrade command.
 
+## Hosted demo and deployment diagnostics
+
+The linked demo uses a Vercel frontend with a same-origin `/api` proxy to Render. It is a separate deployment and can lag the source branch; the public version string does not identify its Git commit. Render can require a cold start.
+
+Read-only observations on 2026-10-26 returned200 for the frontend, `/health` and `/health/ready`:
+
+| Signal | Observed value |
+| --- | --- |
+| App label | 2.1.0, production; no Git revision reported |
+| Retrieval / model | BM25 / Groq `openai/gpt-oss-20b` |
+| Provider readiness | Reachable, model available; no generated-answer test performed |
+| Persistence / limits / jobs | JSON / process-local / thread-local |
+| Reported RAG budgets | K=5, context window4096, max tokens2048, max context6000 characters |
+| Object storage / scanner | Optional-mode markers; these do not verify optional credentials/services |
+
+These hosted budgets differ from the saved offline experiment and current repository defaults. Do not present its benchmark latency or quality as measurements of the live deployment. For a fresh observation, repeat the probes below and record time, configuration and revision if known. A reachable frontend or green readiness response is not an ingestion/answer-quality test.
+
+The source supports shared adapters, but `render.yaml` does not provision PostgreSQL, Redis/RQ workers or B2 for you. The earlier2026-10-16 fallback-mode observation is superseded by the dated values above.
+
 ## Health and diagnostics
 
 ```bash

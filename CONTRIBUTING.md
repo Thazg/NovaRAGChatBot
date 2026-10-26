@@ -4,7 +4,7 @@ Nova is an application with private account/document data, streamed model output
 
 ## Set up
 
-Use Python 3.12+ and Node.js 22.12+ (or a compatible newer release). Follow the [quick start](README.md#local-development), install `backend/requirements-dev.txt` for backend tests, and run `npm ci` in `frontend`. Use disposable accounts and synthetic documents. Provider-backed evaluation is optional and may send text to the configured provider.
+Use Python 3.12+ and Node.js 22.12+ (or a compatible newer release). Follow the [quick start](README.md#quick-start), install `backend/requirements-dev.txt` for backend tests, and run `npm ci` in `frontend`. Use disposable accounts and synthetic documents. Provider-backed evaluation is optional and may send text to the configured provider.
 
 Read the [architecture](docs/ARCHITECTURE.md), the relevant module README, and the [testing guide](docs/TESTING.md) before changing a contract. Settings are loaded when backend modules are imported; restart the API and workers after changing environment configuration.
 
