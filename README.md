@@ -2,16 +2,16 @@
 
 <img src="frontend/src/assets/hero.png" alt="Nova logo" width="104" />
 
-# Nova — Private Document Retrieval-Augmented Generation
+# Nova RAG Workspace
 
 **A full-stack retrieval-augmented generation system for private document ingestion, evidence retrieval, and citation-backed answers.**
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-6D5DFC?style=for-the-badge&logo=vercel&logoColor=white)](https://novachatbot.vercel.app/)
-[![CI](https://img.shields.io/github/actions/workflow/status/Thazg/NovaRAGChatBot/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml)
+[![CI: GitHub Actions](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](backend/requirements.txt)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=0B1020)](frontend/package.json)
 
-[Web application](https://novachatbot.vercel.app/) · [API reference](https://novaaiagent-4.onrender.com/docs) · [Evaluation report](backend/evaluation/README.md) · [Security architecture](docs/SESSION_SECURITY.md)
+[Web application](https://novachatbot.vercel.app/) · [API reference](https://novaaiagent-4.onrender.com/docs) · [CI runs](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml) · [Evaluation report](backend/evaluation/README.md) · [Security architecture](docs/SESSION_SECURITY.md)
 
 </div>
 
@@ -23,13 +23,21 @@ Nova implements the complete private-document RAG lifecycle: validated ingestion
 
 | Capability | Implementation evidence |
 |---|---|
-| **Grounded, inspectable answers** | Source citations and explicit insufficient-evidence behavior |
-| **Measured retrieval quality** | The shared production BM25 path reaches **82.22% Hit@5 at 3.53 ms P50** on the local regression corpus |
+| **Grounded, inspectable answers** | Structured evidence with filename, page and extracted line references; retrieval abstention remains a known limitation |
+| **Measured retrieval quality** | The shared production BM25 path is checked against a versioned regression corpus; see the [evaluation report](backend/evaluation/README.md) for results and measurement scope |
 | **Auditable provenance** | Pinned paper versions, SHA-256 locks, page evidence, reference answers, and per-query results |
 | **Configurable infrastructure** | Local JSON/thread mode; optional PostgreSQL, Redis/RQ and B2 adapters, readiness probes, rate limits, Docker and CI |
 | **Automated verification** | Backend regression tests, deterministic evaluation gates, and Chromium end-to-end coverage |
 
 > The benchmark is project-specific and designed for regression testing. It also exposes a real limitation: the current retriever scores **0% on 10 unanswerable questions** because abstention is not yet calibrated.
+
+## Documentation
+
+Start with the [documentation index](docs/README.md). The project includes a [configuration reference](docs/CONFIGURATION.md), [architecture](docs/ARCHITECTURE.md), [API/SSE contracts](docs/API_REFERENCE.md), [user guide](docs/USER_GUIDE.md), [RAG pipeline](docs/RAG_PIPELINE.md), [testing guide](docs/TESTING.md), and [operations/recovery guide](docs/OPERATIONS.md).
+
+For code changes, use the [contribution guide](CONTRIBUTING.md); report sensitive findings through the [security policy](SECURITY.md).
+
+The [AI engineering guide](docs/AI_ENGINEERING.md) maps retrieval/model changes to reproducible experiments, failure-path tests and explicit quality limits.
 
 ## Key engineering decisions
 
@@ -38,11 +46,11 @@ Nova implements the complete private-document RAG lifecycle: validated ingestion
 - **Incremental response delivery** — Server-Sent Events carry tokens and structured evidence. An incomplete stream is marked interrupted; explicit regeneration reuses the user turn instead of automatically replaying POST requests.
 - **User-level data isolation** — Uploads, indexes, conversations, preferences, and storage keys are namespaced by authenticated user ID.
 - **Explicit failure handling** — Upload quarantine, SSRF defenses, rotating refresh sessions, health/readiness separation, shared rate limiting, and background job status are implemented as first-class flows. Retrieval abstention remains an identified limitation.
-- **Reproducible verification** — CI runs backend tests, frontend quality checks, the browser workflow, and the deterministic retrieval benchmark on every pull request.
+- **Reproducible verification** — [GitHub Actions](.github/workflows/ci.yml) runs documentation, backend, frontend and browser checks on pull requests and pushes to `main`. See [Continuous integration](#continuous-integration) for scope and authoritative results.
 
 ## Hosted deployment
 
-The hosted deployment supports the following workflow:
+The application implements the following workflow. The hosted service may run an earlier revision; verify its configuration as described under [Deployment](#deployment).
 
 1. Create a private workspace.
 2. Upload a PDF, DOCX, Markdown, RST, TXT, Python file, or Jupyter Notebook.
@@ -110,57 +118,55 @@ Upload
 
 ## Evaluation and quality assurance
 
-The regression gate now calls the **same PDF parser, chunker and retrieval function as the application**: `load_pdf` → `split_documents` → `retrieve_from_store`. Configuration: **K = 5**, 10 pinned PDFs, 160 pages, 549 chunks (220 words, 40-word overlap), and 100 reviewed questions (90 answerable + 10 unanswerable).
+The regression gate calls the **same PDF parser, chunker and retrieval function as the application**: `load_pdf` → `split_documents` → `retrieve_from_store`. The recorded 2026-10-26 configuration uses **K = 5**, 10 pinned PDFs, 160 pages, 555 chunks (220 words, 40-word overlap), and 100 annotated questions (90 answerable + 10 unanswerable; independent human review pending). Parser versions and the corpus fingerprint accompany the report.
 
-Measured locally on **2026-10-23**: **Hit@5 0.8222 (74/90)**, **MRR@5 0.5544**, **P50 3.53 ms / P95 6.43 ms**. This is uncached retrieval against a warm store, excluding HTTP, remote revision checks and LLM generation. The report records a corpus hash and the entry point used. All **58/58 verbatim annotated spans** found by retrieval survive production context packing (previously 40/58); CI now gates this retention separately. These measurements are not generated-answer accuracy. Abstention remains **0/10**, an explicitly open limitation.
+The [evaluation report](backend/evaluation/README.md) describes the current measurements, corpus hash, timing scope, context-retention checks and limitations. [Machine-readable results](backend/evaluation/results.json) contain per-query evidence. These retrieval and packing measurements do not establish generated-answer accuracy or end-to-end chat latency.
 
-The following is the **historical algorithm-candidate comparison** from the separate neural benchmark. It was not rerun for this change, and its timings must not be treated as live chat latency or compared directly with the current production-path measurement above.
+The separate [retrieval strategy analysis](backend/evaluation/RETRIEVAL_METHODS.md) records the historical neural-candidate comparison that informed the BM25 default. Its timings come from a different benchmark scope. Independent second-reviewer annotation and calibrated abstention remain open work.
 
-| Method | Hit@5 | MRR | P50 latency | Production decision |
-|---|---:|---:|---:|---|
-| **BM25** | **0.8222** | 0.5722 | **2.36 ms** | **Default** |
-| BGE dense | 0.5667 | 0.3413 | 21.15 ms | Not selected as a standalone method |
-| Equal RRF | 0.7556 | 0.5119 | 23.61 ms | Not selected for this corpus |
-| Weighted RRF | 0.7889 | 0.5384 | 23.62 ms | Outperforms equal RRF; not selected |
-| Cross-encoder reranked | **0.8444** | **0.5774** | 1,312.34 ms | Conditional quality tier |
-| Multi-query | 0.7889 | 0.5508 | 49.27 ms | Not selected for the default path |
+### Continuous integration
 
-Every answerable label is tied to a verbatim span and PDF page. The labels have one completed verification pass; independent second-reviewer status remains explicitly pending. BM25 is selected for production because reranking's 2.22-point Hit@5 gain costs roughly 555× P50 latency, while dense, equal/weighted RRF, and multi-query underperform BM25 on this corpus. All methods still score 0% on unanswerable questions, so abstention remains a visible known gap.
+CI is implemented in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), triggered by pull requests and pushes to `main`:
 
-[Retrieval strategy analysis](backend/evaluation/RETRIEVAL_METHODS.md) · [Dataset methodology and limitations](backend/evaluation/README.md)
+| Job | Checks |
+|---|---|
+| Documentation | Checker fixtures, local links, backend-setting reference coverage and API route/reference consistency |
+| Backend tests | Audit installed Python dependencies, rebuild the checksum-pinned corpus, run pytest with the configured coverage floor, then run retrieval evaluation |
+| Frontend quality | Install locked dependencies, audit production dependencies, lint/typecheck/build, run unit tests and Chromium E2E |
+
+The workflow is the source of truth for triggers, toolchain versions, commands and thresholds. [GitHub Actions runs](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml) show the result for each commit; the header's CI badge links to those runs and does not store a pass/fail claim or assume repository visibility.
+
+The checks exercise deterministic fixtures and isolated adapters. They do not deploy the app, call paid LLM providers or certify a multi-host PostgreSQL/Redis/B2 deployment. See [testing and verification](docs/TESTING.md) for coverage and limits.
 
 ### Verification commands
 
+Run each block from the **repository root**, with the Python virtual environment active. On a clean checkout, build the corpus before running the full backend suite:
+
 ```bash
-# Backend tests
-python -m pytest -q
-
-# Backend coverage (after installing development requirements)
-python -m pytest --cov --cov-report=term-missing --cov-fail-under=64
-
-# Rebuild the checksum-pinned arXiv corpus and run the benchmark
+python -m pip install --upgrade pip
+python -m pip install -r backend/requirements-dev.txt
+python -m pip_audit
 cd backend
 python evaluation/arxiv_corpus/download_papers.py
 python evaluation/arxiv_corpus/extract_corpus.py
 python evaluation/arxiv_corpus/build_dataset.py
 python -m evaluation.run --k 5
+cd ..
+python -m pytest --cov --cov-report=term-missing
+python scripts/check_docs.py
+```
 
-# Optional neural dense, equal/weighted RRF, reranker, and multi-query comparison
-pip install -r requirements-evaluation.txt
-python -m evaluation.advanced_retrieval_eval --allow-model-download
-
-# Frontend lint, typecheck, and production build
+```bash
 cd frontend
+npm ci
+npx playwright install chromium
+npm audit --omit=dev --audit-level=high
 npm run check
-
-# SSE parser and completion/error regression tests
 npm run test
-
-# Deterministic login → upload → chat → citation browser flow
 npm run e2e
 ```
 
-GitHub Actions enforces a **64% production-code coverage floor**, runs the offline evaluation gates, audits production frontend dependencies, builds the application, and executes Chromium E2E tests.
+CI additionally enforces its workflow-defined coverage floor and installs Chromium's system dependencies on Linux. Full setup, focused tests and optional provider/neural evaluations are documented in [the testing guide](docs/TESTING.md) and [evaluation guide](backend/evaluation/README.md).
 
 ## Security controls
 
@@ -193,7 +199,7 @@ Related documentation: [session security](docs/SESSION_SECURITY.md) · [upload a
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 22+
+- Node.js 22.12+
 - A [Groq API key](https://console.groq.com/) **or** a local [Ollama](https://ollama.com/) model
 
 ### 1. Clone and configure
@@ -272,7 +278,7 @@ NovaRAGChatBot/
 │   ├── src/services/        # Typed REST and SSE client
 │   ├── src/store/           # Zustand application state
 │   └── e2e/                 # Deterministic Playwright portfolio flow
-├── docs/                    # Threat models, deployment and portfolio runbooks
+├── docs/                    # Architecture, API, configuration, testing and operations
 ├── .github/workflows/       # CI quality gates
 ├── docker-compose.yml
 └── render.yaml

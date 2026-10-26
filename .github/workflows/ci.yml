@@ -9,6 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s scripts -p "test_*.py"
+      - run: python scripts/check_docs.py
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -20,7 +31,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - name: Install dependencies
-        run: pip install -r backend/requirements-dev.txt
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
+      - name: Audit installed Python dependencies
+        run: python -m pip_audit
       - name: Cache checksum-pinned arXiv PDFs
         uses: actions/cache@v4
         with:

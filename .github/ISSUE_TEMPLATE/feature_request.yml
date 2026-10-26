@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a concrete product or engineering improvement.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: User need
+      description: What workflow is blocked, and who needs it?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and scope
+      description: Include expected failure behavior and alternatives considered.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance evidence
+      description: How could someone verify this works? Mention data, infrastructure or provider access it requires.

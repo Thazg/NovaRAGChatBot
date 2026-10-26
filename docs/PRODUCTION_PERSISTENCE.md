@@ -10,6 +10,7 @@ Nova deliberately keeps local development dependency-light while enabling shared
 | Rate limiting | Process-local sliding window | Atomic Redis sorted-set window |
 | Document indexing | Two-thread local executor | RQ queue and Redis worker |
 | Upload and index artifacts | Local filesystem, optionally B2 | B2 is required for workers on separate hosts |
+| User preferences | Local files with optional B2 copies | Still local/B2, not a PostgreSQL preference record; cross-host authority is not yet implemented |
 
 The frontend treats the backend conversation API as the source of truth. Conversation/session data is not persisted in browser storage.
 
@@ -70,6 +71,10 @@ Distributed reindex hydrates remote uploads and excludes deletion barriers. It *
 
 Snapshot artifacts from previous revisions are retained to protect in-flight readers. Garbage collection is not automated yet: schedule retention cleanup only after old readers/jobs have drained. Account deletion removes the user's index prefix. Do not delete `current.json` as a substitute for publishing an empty index.
 
+Account cleanup now writes a durable UUID-only barrier under `account-deletions/<user>.json` before removing active artifacts, and removes credentials last. Failure returns503 with the account retained for retry; normal writes are blocked with409. The account marker intentionally survives cleanup of per-user prefixes. Read-cache hydration and writes share the user lock, so a paused old download cannot recreate an account's cache after cleanup. Nested synchronous operations on one thread reuse the Redis lease; there is no automatic lease renewal. The worker uses a validated storage ID under its own upload root rather than the API container's absolute path.
+
+Account deletion addresses active local/B2 content; independent backups/provider object versions and security metadata need their own retention policy. See [operations and recovery](OPERATIONS.md) for the full boundary and failure workflow.
+
 When `REDIS_URL` is configured, uploads must be durably copied to B2 before enqueueing because a separate worker cannot rely on the API container's ephemeral filesystem. Configure the B2 variables in both services.
 
 ## Deployment sequence
@@ -109,7 +114,7 @@ shell before enabling `DATABASE_URL`.
 
 Rebuild existing indexes after this upgrade. Legacy indexes remain readable, but only reindexing adds page/line numbers and the shared 220-word / 40-word ingestion policy. Old conversation answers cannot gain evidence retroactively. New answers persist the evidence sent to the model. Citations show the uploaded filename, page and extracted line range as plain text, without a link or PDF-serving endpoint. PDF line numbers count the extracted lines on each page, including blank lines; whitespace/ligature normalization and dehyphenation retain those source offsets. Non-PDF text uses extracted-text line numbers without inventing a page. Context truncation also narrows the cited line range.
 
-Default prompt budgets are now `MAX_CHUNK_CHARS=2400` and `MAX_CONTEXT_CHARS=10000` to preserve typical top-5, 220-word passages. Ollama defaults to `NUM_CTX=8192`. Remove older overrides or update them explicitly during deployment. Smaller budgets select a contiguous query-relevant window and cite only overlapping extracted lines; they may retain less evidence. Character budgets are not exact model token counts, especially for multilingual text. The offline gate measures verbatim annotated evidence retention after production packing, separately from page Hit@5 and generated-answer accuracy.
+Default prompt budgets are now `MAX_CHUNK_CHARS=2400` and `MAX_CONTEXT_CHARS=10000` to preserve typical top-5, 220-word passages. Ollama defaults to `NUM_CTX=8192`. Remove older overrides or update them explicitly during deployment. Smaller budgets select a contiguous query-relevant window and cite only overlapping extracted lines; they may retain less evidence. Character budgets are not exact model token counts, especially for multilingual text. The offline gate measures annotated character-span retention (case/whitespace insensitive) after production packing, separately from page Hit@5 and generated-answer accuracy.
 
 Copy, native Share and conversation TXT export use the same plain filename/page/line formatter as displayed answers. Structured account JSON exports retain original message IDs plus their evidence metadata for data portability.
 
