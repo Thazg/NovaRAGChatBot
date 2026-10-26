@@ -11,7 +11,7 @@ export function formatSource(source: Source): string {
   if (source.page) location.push(`Page ${source.page}`);
   if (source.line_start) location.push(`Lines ${source.line_start}–${source.line_end || source.line_start}`);
   if (!source.page && !source.line_start) location.push('location unavailable; reindex this document');
-  return `Source: ${location.join(' · ')}`;
+  return `Source: ${location.join(', ')}`;
 }
 
 /** The same readable citations for display, clipboard, sharing and text export. */

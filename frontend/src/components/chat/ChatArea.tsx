@@ -11,7 +11,7 @@ import { FolderOpen, Globe2, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : 'Unknown error';
-const errorName = (error: unknown): string => error instanceof DOMException ? error.name : '';
+type ActiveRequest = { controller: AbortController; conversationId: string; messageId: string };
 
 export const ChatArea = () => {
   const {
@@ -25,6 +25,7 @@ export const ChatArea = () => {
     createConversation,
     regenerateLastMessage,
     isStreaming,
+    isLoading,
     customInstructions,
     characterStyle,
     nickname,
@@ -36,9 +37,10 @@ export const ChatArea = () => {
   } = useChatStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRequestRef = useRef<ActiveRequest | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchOffer, setSearchOffer] = useState<{ query: string; loading: boolean } | null>(null);
+  const showSearchOffer = Boolean(searchOffer && !searchOffer.loading && !isStreaming);
 
   const currentConversation = conversations.find(c => c.id === currentConversationId);
   const messages = currentConversation?.messages || [];
@@ -66,7 +68,7 @@ export const ChatArea = () => {
       const { scrollHeight, clientHeight } = scrollRef.current;
       scrollRef.current.scrollTo({
         top: scrollHeight - clientHeight,
-        behavior: 'smooth',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
       });
     }
   }, []);
@@ -75,16 +77,28 @@ export const ChatArea = () => {
   useEffect(() => {
     const frame = requestAnimationFrame(scrollToBottom);
     return () => cancelAnimationFrame(frame);
-  }, [messages.length, latestMessageLength, scrollToBottom]);
+  }, [messages.length, latestMessageLength, showSearchOffer, scrollToBottom]);
 
   const handleStop = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    const active = activeRequestRef.current;
+    if (!active) return;
+    // Release ownership before aborting: its rejected promise may settle after
+    // a replacement request starts and must not clear that request's controls.
+    activeRequestRef.current = null;
+    active.controller.abort();
+    updateMessage(active.conversationId, active.messageId, { interrupted: true });
+    setSearchOffer(null);
     setIsStreaming(false);
     setIsLoading(false);
-  }, [setIsLoading, setIsStreaming]);
+  }, [setIsLoading, setIsStreaming, updateMessage]);
+
+  useEffect(() => {
+    if (activeRequestRef.current && activeRequestRef.current.conversationId !== currentConversationId) {
+      handleStop();
+    }
+  }, [currentConversationId, handleStop]);
+
+  useEffect(() => () => handleStop(), [handleStop]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -92,7 +106,6 @@ export const ChatArea = () => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
         createConversation();
-        toast.success('New conversation created');
       }
       
       // Ctrl + K: Global Search
@@ -115,7 +128,7 @@ export const ChatArea = () => {
         if (isSearchOpen) {
           e.preventDefault();
           setIsSearchOpen(false);
-        } else if (isStreaming) {
+        } else if (isStreaming || isLoading) {
           e.preventDefault();
           handleStop();
         }
@@ -124,166 +137,85 @@ export const ChatArea = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isStreaming, createConversation, isSearchOpen, handleStop]);
+  }, [isStreaming, isLoading, createConversation, isSearchOpen, handleStop]);
 
-  const handleSearchDownload = useCallback(async (query: string) => {
-    setSearchOffer({ query, loading: true });
-    try {
-      const result = await api.searchDownload(query);
-      if (result.status === 'success' && result.downloaded.length > 0) {
-        const newCount = result.downloaded.filter((document) => document.new).length;
-        toast.success(`Downloaded ${newCount} new documents about "${query}"`);
-        // Add a system message
-        const targetConvId = currentConversationId || createConversation();
-        addMessage(targetConvId, {
-          role: 'system',
-          content: `📥 Downloaded ${result.downloaded.length} PDF(s) about "${query}". Re-indexed. You can now ask questions about these documents.`,
-        });
-      } else {
-        toast.info(result.message || 'No documents found for that query.');
-      }
-    } catch (err: unknown) {
-      toast.error('Search failed: ' + errorMessage(err));
-    } finally {
-      setSearchOffer(null);
-    }
-  }, [currentConversationId, createConversation, addMessage]);
-
-  const handleSearchAndDownload = useCallback(async (targetConvId: string, topic: string) => {
-    const msgId = addMessage(targetConvId, { role: 'assistant', content: '' });
-    const append = (text: string) => appendStreamToMessage(targetConvId, msgId, text);
-    append(`🔍 Searching and downloading PDFs about "${topic}"...\n\n`);
-    try {
-      const result = await api.searchDownload(topic, 3);
-      append(`📥 ${result.message || 'Download complete.'}\n\n`);
-      if (result.downloaded?.length > 0) {
-        const files = result.downloaded.map((document) => `- ${document.file_name}`).join('\n');
-        append(`**Files added:**\n${files}\n\nYou can now ask questions about these documents.`);
-      } else {
-        append('No PDFs found for this topic. Try a different search term.');
-      }
-    } catch (err: unknown) {
-      append(`❌ Search failed: ${errorMessage(err)}`);
-    }
-  }, [addMessage, appendStreamToMessage]);
-
-  const handleSend = async (content: string) => {
-    if (!content.trim()) return;
-
-    let targetConvId = currentConversationId;
-    if (!targetConvId) {
-      targetConvId = createConversation();
-    }
-
-    addMessage(targetConvId, {
-      role: 'user',
-      content: content.trim(),
-    });
-
-    const trimmed = content.trim();
-    const searchMatch = trimmed.match(/^(?:search|tìm)\s+(?:for|kiếm)?\s*(.+)/i);
-
-    if (searchMatch) {
-      const topic = searchMatch[1].trim();
-      setIsLoading(true);
-      await handleSearchAndDownload(targetConvId, topic);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    abortControllerRef.current = new AbortController();
+  const runRequest = async (conversationId: string, question: string, regenerate = false) => {
+    const assistantMessageId = addMessage(conversationId, { role: 'assistant', content: '' });
+    const active: ActiveRequest = { controller: new AbortController(), conversationId, messageId: assistantMessageId };
+    activeRequestRef.current = active;
+    const ownsRequest = () => activeRequestRef.current === active && !active.controller.signal.aborted;
+    const append = (text: string) => {
+      if (ownsRequest()) appendStreamToMessage(conversationId, assistantMessageId, text);
+    };
+    const searchMatch = question.match(/^(?:search|tìm)\s+(?:for|kiếm)?\s*(.+)/i);
     setSearchOffer(null);
-    const assistantMessageId = addMessage(targetConvId, {
-      role: 'assistant',
-      content: '',
-    });
-
+    setIsLoading(Boolean(searchMatch));
+    setIsStreaming(!searchMatch);
     try {
-      setIsStreaming(true);
-      setIsLoading(false);
-
-      await api.streamMessage(
-        targetConvId,
-        trimmed,
-        (chunk) => {
-          appendStreamToMessage(targetConvId, assistantMessageId, chunk);
-        },
-        abortControllerRef.current.signal,
-        buildInstructions(),
-        (action) => {
-          if (action.type === 'search_offer') {
-            setSearchOffer({ query: action.query, loading: false });
+      if (searchMatch) {
+        const topic = searchMatch[1].trim();
+        setSearchOffer({ query: topic, loading: true });
+        append(`Searching for PDFs about "${topic}"…\n\n`);
+        const result = await api.searchDownload(topic, 3, active.controller.signal);
+        if (result.downloaded.length) {
+          append(`${result.message || 'Download complete.'}\n\n`);
+          const files = result.downloaded.map(document => `- ${document.file_name}`).join('\n');
+          append(`**Documents:**\n${files}\n\n`);
+          if (result.job_id) {
+            append('Indexing the documents. They are not ready for questions yet…\n\n');
+            await api.waitForIndexJob(result.job_id, undefined, active.controller.signal);
+            append('Indexing completed. You can now ask questions about these documents.');
+          } else {
+            append('These documents are already in your library. Check their index status before asking questions.');
           }
-        },
-        language,
-        false,
-        selectedDocument?.id,
-        (retrievedDocs) => updateMessage(targetConvId, assistantMessageId, { retrievedDocs }),
-      );
-    } catch (error: unknown) {
-      if (errorName(error) === 'AbortError') {
-        toast.info('Generation stopped');
+          if (ownsRequest()) window.dispatchEvent(new Event('nova:documents-updated'));
+        } else {
+          append(result.message || 'No PDFs found for this topic. Try a different search term.');
+        }
       } else {
-        updateMessage(targetConvId, assistantMessageId, { interrupted: true });
-        toast.error('Failed to send message. Please try again.');
-        console.error(error);
+        await api.streamMessage(
+          conversationId, question, append, active.controller.signal,
+          buildInstructions(),
+          action => {
+            if (ownsRequest() && action.type === 'search_offer') {
+              setSearchOffer({ query: action.query, loading: false });
+            }
+          },
+          language, regenerate, selectedDocument?.id,
+          retrievedDocs => {
+            if (ownsRequest()) updateMessage(conversationId, assistantMessageId, { retrievedDocs });
+          },
+        );
       }
+    } catch (error: unknown) {
+      if (!ownsRequest()) return;
+      updateMessage(conversationId, assistantMessageId, { interrupted: true });
+      toast.error(errorMessage(error));
     } finally {
-      setIsStreaming(false);
-      setIsLoading(false);
-      abortControllerRef.current = null;
+      if (activeRequestRef.current === active) {
+        activeRequestRef.current = null;
+        setIsStreaming(false);
+        setIsLoading(false);
+        if (searchMatch) setSearchOffer(null);
+      }
     }
   };
 
+  const handleSend = async (content: string) => {
+    const question = content.trim();
+    if (!question || activeRequestRef.current || useChatStore.getState().isLoading) return;
+    const conversationId = currentConversationId || createConversation();
+    addMessage(conversationId, { role: 'user', content: question });
+    await runRequest(conversationId, question);
+  };
+
   const handleRegenerate = async () => {
-    if (!currentConversationId) return;
-    
-    const currentConversation = conversations.find(c => c.id === currentConversationId);
-    if (!currentConversation || currentConversation.messages.length < 2) return;
-    
-    const lastUserMessage = currentConversation.messages.filter(m => m.role === 'user').pop();
+    if (!currentConversationId || activeRequestRef.current || useChatStore.getState().isLoading) return;
+    const conversation = useChatStore.getState().conversations.find(item => item.id === currentConversationId);
+    const lastUserMessage = conversation?.messages.findLast(message => message.role === 'user');
     if (!lastUserMessage) return;
-    
     regenerateLastMessage(currentConversationId);
-    setIsLoading(true);
-    abortControllerRef.current = new AbortController();
-    const assistantMessageId = addMessage(currentConversationId, {
-      role: 'assistant',
-      content: '',
-    });
-
-    try {
-      setIsStreaming(true);
-      setIsLoading(false);
-
-      await api.streamMessage(
-        currentConversationId,
-        lastUserMessage.content,
-        (chunk) => {
-          appendStreamToMessage(currentConversationId, assistantMessageId, chunk);
-        },
-        abortControllerRef.current.signal,
-        buildInstructions(),
-        undefined,
-        language,
-        true,
-        selectedDocument?.id,
-        (retrievedDocs) => updateMessage(currentConversationId, assistantMessageId, { retrievedDocs }),
-      );
-    } catch (error: unknown) {
-      if (errorName(error) === 'AbortError') {
-        toast.info('Generation stopped');
-      } else {
-        updateMessage(currentConversationId, assistantMessageId, { interrupted: true });
-        toast.error('Failed to regenerate message. Please try again.');
-        console.error(error);
-      }
-    } finally {
-      setIsStreaming(false);
-      setIsLoading(false);
-      abortControllerRef.current = null;
-    }
+    await runRequest(currentConversationId, lastUserMessage.content, true);
   };
 
   return (
@@ -296,7 +228,7 @@ export const ChatArea = () => {
         {messages.length === 0 ? (
           <WelcomeScreen onSelectSuggestion={handleSend} />
         ) : (
-          <div className="mx-auto flex w-full max-w-[960px] flex-col px-4 pb-4 md:px-8 lg:px-10">
+          <div className="mx-auto flex w-full max-w-[960px] flex-col px-4 pb-24 md:px-8 lg:px-10">
             {messages.map((message, index) => {
               const isLastMessage = index === messages.length - 1;
               const messageIsStreaming = isLastMessage && message.role === 'assistant' && isStreaming;
@@ -306,12 +238,12 @@ export const ChatArea = () => {
                   key={message.id}
                   message={message}
                   isStreaming={messageIsStreaming}
-                  onRegenerate={isLastAssistantMessage ? handleRegenerate : undefined}
+                  onRegenerate={isLastAssistantMessage && !isStreaming && !isLoading ? handleRegenerate : undefined}
                 />
               );
             })}
 
-            {searchOffer && !searchOffer.loading && !isStreaming && (
+            {searchOffer && showSearchOffer && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -370,7 +302,7 @@ export const ChatArea = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleSearchDownload(searchOffer.query)}
+                    onClick={() => void handleSend(`search for ${searchOffer.query}`)}
                     className="h-9 rounded-[10px] px-3 text-xs text-muted-foreground"
                   >
                     <Globe2 className="h-4 w-4" />

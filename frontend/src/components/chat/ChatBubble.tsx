@@ -10,7 +10,7 @@ import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
 import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
 import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
-import { User, Copy, Check, ThumbsUp, ThumbsDown, RotateCcw, Sparkles, Share2 } from 'lucide-react';
+import { Copy, Check, ThumbsUp, ThumbsDown, RotateCcw, Share2 } from 'lucide-react';
 import type { Message } from '../../types';
 import { formatAnswerWithSources } from '../../services/sources';
 import { cn } from '../../lib/utils';
@@ -18,6 +18,7 @@ import { Button } from '../ui/button';
 import { motion } from 'framer-motion';
 import { useChatStore } from '../../store/useChatStore';
 import { toast } from 'sonner';
+import { productInfo } from '../../lib/productInfo';
 
 SyntaxHighlighter.registerLanguage('javascript', javascript);
 SyntaxHighlighter.registerLanguage('js', javascript);
@@ -43,7 +44,10 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
   const evidence = message.retrievedDocs || [];
   const plainContent = formatAnswerWithSources(message.content, evidence);
   const citedContent = formatAnswerWithSources(message.content, evidence, true);
-  const { avatar, setMessageFeedback, currentConversationId } = useChatStore();
+  // Evidence arrives before answer tokens. Keep sources and partial evidence
+  // markers out of the streaming preview; render saved citations on completion.
+  const streamingContent = message.content.replace(/\[E\d+\]|\[E\d*$/g, '');
+  const { setMessageFeedback, currentConversationId } = useChatStore();
   const isUser = message.role === 'user';
 
   const handleCopy = async (text: string) => {
@@ -66,7 +70,7 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
   const handleShare = async () => {
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Nova AI response', text: plainContent });
+        await navigator.share({ title: `${productInfo.name} response`, text: plainContent });
       } else {
         await handleCopy(plainContent);
       }
@@ -82,39 +86,22 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className={cn("group my-4 flex w-full gap-3", isUser ? "justify-end" : "justify-start")}
+      data-message-role={message.role}
     >
-      <div className={cn("flex w-full max-w-[880px] gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
-        
-        {/* Avatar */}
-        <div className={cn(
-          "z-10 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border",
-          isUser
-            ? "border-border/50 bg-muted text-muted-foreground"
-            : "border-primary/25 bg-primary/10 text-primary"
-        )}>
-          {isUser ? (
-            avatar ? (
-              <img src={avatar} alt="User" className="h-full w-full object-cover" />
-            ) : (
-              <User className="h-3.5 w-3.5" />
-            )
-          ) : (
-            <Sparkles className="h-4 w-4" />
-          )}
-        </div>
+      <div className={cn("flex w-full max-w-[880px]", isUser && "justify-end")}>
 
         {/* Message bubble container */}
         <div className={cn(
           "group relative flex min-w-0 flex-col",
-          isUser ? "w-auto max-w-[76%] items-end" : "w-full max-w-[800px] items-start"
+          isUser ? "w-auto max-w-[85%] items-end sm:max-w-[76%]" : "w-full items-start"
         )}>
           
           {/* Bubble */}
           <div className={cn(
-            "prose prose-sm dark:prose-invert w-full max-w-none break-words rounded-[14px] px-4 py-3 shadow-sm transition-colors",
+            "prose prose-sm dark:prose-invert w-full max-w-none break-words text-left transition-colors",
             isUser
-              ? "rounded-tr-[5px] border border-primary/20 bg-primary/10 text-foreground"
-              : "rounded-tl-[5px] border border-border/50 bg-card/90 text-foreground"
+              ? "rounded-3xl bg-primary/10 px-5 py-3 text-foreground"
+              : "py-2 text-foreground"
           )}>
             {isUser || !isStreaming ? (
               <ReactMarkdown
@@ -180,12 +167,12 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                   ),
                   thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
                   th: ({ children }) => (
-                    <th className="border-b border-border/40 px-4 py-2.5 text-left text-[13px] font-semibold text-foreground/90">
+                    <th className="border-b border-border/40 px-4 py-2.5 text-left text-sm font-semibold text-foreground/90">
                       {children}
                     </th>
                   ),
                   td: ({ children }) => (
-                    <td className="border-b border-border/25 px-4 py-2.5 text-[13px] text-foreground/80">
+                    <td className="border-b border-border/25 px-4 py-2.5 text-sm text-foreground/80">
                       {children}
                     </td>
                   ),
@@ -193,16 +180,16 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                     <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
                   ),
                   p: ({ children }) => (
-                    <p className="mb-3.5 last:mb-0 leading-[1.8] text-[14.5px] text-foreground/92">
+                    <p className="mb-3.5 last:mb-0 text-base leading-7 text-left text-foreground/92">
                       {children}
                     </p>
                   ),
                   h1: ({ children }) => <h1 className="text-xl font-bold mt-5 mb-3 text-foreground">{children}</h1>,
                   h2: ({ children }) => <h2 className="text-lg font-semibold mt-4 mb-2.5 text-foreground">{children}</h2>,
                   h3: ({ children }) => <h3 className="text-base font-semibold mt-3.5 mb-2 text-foreground">{children}</h3>,
-                  ul: ({ children }) => <ul className="my-3 space-y-1.5 pl-5 list-disc marker:text-primary/60">{children}</ul>,
+                  ul: ({ children }) => <ul className="chat-dash-list my-3 space-y-1.5 pl-5">{children}</ul>,
                   ol: ({ children }) => <ol className="my-3 space-y-1.5 pl-5 list-decimal marker:text-primary/60">{children}</ol>,
-                  li: ({ children }) => <li className="text-[14px] text-foreground/88 leading-relaxed">{children}</li>,
+                  li: ({ children }) => <li className="text-base leading-7 text-foreground/88">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
                   a: ({ href, children }) => (
                     <a
@@ -215,7 +202,7 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
                     </a>
                   ),
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-[3px] border-primary/40 pl-4 py-1 my-4 bg-primary/5 rounded-r-xl italic text-foreground/75 text-[14px]">
+                    <blockquote className="border-l-[3px] border-primary/40 pl-4 py-1 my-4 bg-primary/5 rounded-r-xl text-base leading-7 italic text-foreground/75">
                       {children}
                     </blockquote>
                   ),
@@ -224,15 +211,15 @@ export const ChatBubble = memo(({ message, isStreaming, onRegenerate }: ChatBubb
               >
                 {citedContent || (isStreaming ? '\u200b' : '')}
               </ReactMarkdown>
-            ) : (
-              <p className="leading-[1.8] text-[14.5px] text-foreground/92 whitespace-pre-wrap">
-                {plainContent || '\u200b'}
+            ) : streamingContent.trim() ? (
+              <p className="text-base leading-7 text-foreground/92 whitespace-pre-wrap text-left">
+                {streamingContent}
               </p>
-            )}
+            ) : null}
 
             {/* Streaming indicator */}
             {isStreaming && (
-              <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-border/30">
+              <div className={cn("flex items-center gap-2", streamingContent.trim() && "mt-2.5 pt-2 border-t border-border/30")}>
                 <motion.div className="flex items-center gap-1">
                   {[0, 1, 2].map((i) => (
                     <motion.div

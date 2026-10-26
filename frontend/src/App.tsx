@@ -8,6 +8,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { motion } from 'framer-motion';
 import { NovaMark } from './components/brand/NovaMark';
 import { RefreshCw, LogIn } from 'lucide-react';
+import { productInfo } from './lib/productInfo';
 
 function App() {
   const token = useChatStore((s) => s.token);
@@ -53,7 +54,7 @@ function App() {
           className="relative z-10 flex flex-col items-center gap-4"
         >
           <div className="nova-logo-orbit">
-            <NovaMark className="h-7 w-7" title="Nova AI" />
+            <NovaMark className="h-7 w-7" title={productInfo.name} />
           </div>
           <p className="text-sm font-medium text-muted-foreground">Securing your workspace…</p>
         </motion.div>
@@ -72,7 +73,7 @@ function App() {
           role="alert"
         >
           <div className="nova-logo-orbit mx-auto mb-5">
-            <NovaMark className="h-7 w-7" title="Nova AI" />
+            <NovaMark className="h-7 w-7" title={productInfo.name} />
           </div>
           <h1 className="text-xl font-semibold text-foreground">Your session is still recoverable</h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">

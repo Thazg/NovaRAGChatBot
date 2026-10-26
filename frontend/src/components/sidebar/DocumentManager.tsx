@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Database, ExternalLink, File, FolderOpen, HardDrive, MessageSquareText, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Database, Download, ExternalLink, File, FolderOpen, HardDrive, Loader2, MessageSquareText, Plus, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,7 +14,7 @@ interface Document {
   type: 'pdf' | 'txt' | 'docx';
   size: string;
   uploadedAt: number;
-  status: 'indexed' | 'processing' | 'failed';
+  status: 'indexed' | 'not-indexed';
   indexed: boolean;
   chunks: number;
   source_url?: string;
@@ -41,19 +41,25 @@ export const DocumentManager = ({
 }) => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+  const loadSequence = useRef(0);
   const selectedDocument = useChatStore((state) => state.selectedDocument);
   const setSelectedDocument = useChatStore((state) => state.setSelectedDocument);
   const setSidebarActiveTab = useChatStore((state) => state.setSidebarActiveTab);
 
   const loadDocuments = useCallback(async () => {
+    const request = ++loadSequence.current;
     try {
       setLoading(true);
+      setLoadError('');
       const docs = await api.getDocuments();
+      if (request !== loadSequence.current) return;
       const formattedDocs: Document[] = docs.map((doc) => ({
         id: doc.id,
         name: doc.name,
@@ -64,7 +70,9 @@ export const DocumentManager = ({
           : 'docx',
         size: formatFileSize(doc.size),
         uploadedAt: Date.now(),
-        status: doc.indexed ? 'indexed' : 'processing',
+        // Listing does not expose a job ID/state. Do not infer that an
+        // unindexed document has a running job; a previous job may have failed.
+        status: doc.indexed ? 'indexed' : 'not-indexed',
         indexed: doc.indexed ?? false,
         chunks: doc.chunks ?? 0,
         source_url: doc.source_url
@@ -75,15 +83,21 @@ export const DocumentManager = ({
         setSelectedDocument(null);
       }
     } catch (error) {
-      console.error('Failed to load documents:', error);
-      toast.error('Failed to load documents');
+      if (request !== loadSequence.current) return;
+      setLoadError(error instanceof Error ? error.message : 'Could not load documents.');
     } finally {
-      setLoading(false);
+      if (request === loadSequence.current) setLoading(false);
     }
   }, [setSelectedDocument]);
 
   useEffect(() => {
     void loadDocuments();
+    const refresh = () => { void loadDocuments(); };
+    window.addEventListener('nova:documents-updated', refresh);
+    return () => {
+      loadSequence.current += 1;
+      window.removeEventListener('nova:documents-updated', refresh);
+    };
   }, [loadDocuments]);
 
   const handleUpload = async (file: File) => {
@@ -103,7 +117,7 @@ export const DocumentManager = ({
       }
     } catch (error) {
       console.error('Failed to upload document:', error);
-      toast.error('Failed to upload document');
+      toast.error(error instanceof Error ? error.message : 'Failed to upload document');
     } finally {
       setUploading(false);
     }
@@ -122,6 +136,29 @@ export const DocumentManager = ({
     if (file) handleUpload(file);
   };
 
+  const handleDownload = async (document: Document) => {
+    setDownloadingIds(ids => new Set(ids).add(document.id));
+    try {
+      const blob = await api.downloadDocument(document.id);
+      const url = URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = document.name;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not download document');
+    } finally {
+      setDownloadingIds(ids => {
+        const next = new Set(ids);
+        next.delete(document.id);
+        return next;
+      });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await api.deleteDocument(id);
@@ -130,7 +167,8 @@ export const DocumentManager = ({
       toast.success('Document deleted');
     } catch (error) {
       console.error('Failed to delete document:', error);
-      toast.error('Failed to delete document');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete document');
+      await loadDocuments();
     }
   };
 
@@ -144,7 +182,7 @@ export const DocumentManager = ({
       await loadDocuments();
     } catch (error) {
       console.error('Failed to re-index:', error);
-      toast.error('Re-indexing failed');
+      toast.error(error instanceof Error ? error.message : 'Re-indexing failed');
     }
   };
 
@@ -206,6 +244,7 @@ export const DocumentManager = ({
               className="h-9 w-9 rounded-[10px] text-muted-foreground hover:text-foreground"
               onClick={handleReindex}
               title="Re-index all"
+              aria-label="Re-index all documents"
             >
               <RefreshCw className="h-3 w-3" />
             </Button>
@@ -214,6 +253,7 @@ export const DocumentManager = ({
               className="h-9 w-9 rounded-[10px] bg-primary text-white shadow-sm hover:bg-primary/90"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
+              aria-label="Upload document to library"
             >
               {uploading ? (
                 <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}>
@@ -229,7 +269,7 @@ export const DocumentManager = ({
             type="file"
             className="hidden"
             onChange={handleFileInput}
-            accept=".pdf,.txt,.docx,.md,.markdown,.py,.ipynb"
+            accept=".pdf,.txt,.docx,.md,.markdown,.rst,.py,.ipynb"
           />
         </div>
 
@@ -248,6 +288,10 @@ export const DocumentManager = ({
       </div>
 
       {/* Document list — scrollable */}
+      {loadError && <div role="alert" className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5">
+        <p>{loadError}</p>
+        <Button variant="outline" className="mt-2 min-h-11" onClick={() => void loadDocuments()}>Retry loading documents</Button>
+      </div>}
       <div className="-mx-1 min-h-0 min-w-0 flex-1 space-y-1.5 overflow-x-hidden overflow-y-auto px-1">
         <AnimatePresence mode="popLayout">
           {loading ? (
@@ -260,7 +304,7 @@ export const DocumentManager = ({
               </motion.div>
               <p className="text-[12px] text-muted-foreground/50">Loading documents...</p>
             </div>
-          ) : filteredDocs.length === 0 ? (
+          ) : !loadError && filteredDocs.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -299,26 +343,26 @@ export const DocumentManager = ({
                       : "border-border/35 bg-muted/20 hover:border-border/60 hover:bg-muted/35",
                   )}
                 >
-                  <div className="flex items-start gap-2.5">
+                  <div className="flex flex-wrap items-start gap-2.5">
                     {/* File icon */}
                     <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", typeStyle.bg)}>
                       <File className={cn("h-4 w-4", typeStyle.text)} />
                     </div>
 
                     {/* File info */}
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1 basis-28">
                       <p className="truncate text-[13px] font-medium leading-tight text-foreground" title={doc.name}>{doc.name}</p>
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className="text-xs font-medium uppercase text-muted-foreground/70">{doc.type}</span>
                         <span className="text-xs text-muted-foreground/45">·</span>
-                        <span className="text-xs text-muted-foreground/70">{doc.size}</span>
+                        <span className="whitespace-nowrap text-xs text-muted-foreground/70">{doc.size}</span>
                         <span className="text-xs text-muted-foreground/45">·</span>
-                        <span className="text-xs text-muted-foreground/70">{doc.chunks} chunks</span>
+                        <span className="whitespace-nowrap text-xs text-muted-foreground/70">{doc.chunks} chunks</span>
                       </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="ml-auto flex shrink-0 items-center gap-1">
                       <Button
                         variant={selectedDocument?.id === doc.id ? 'secondary' : 'ghost'}
                         size="sm"
@@ -329,6 +373,19 @@ export const DocumentManager = ({
                       >
                         <MessageSquareText className="h-4 w-4" />
                         <span className="hidden min-[300px]:inline">Ask</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 rounded-[10px] text-muted-foreground hover:text-foreground"
+                        onClick={() => void handleDownload(doc)}
+                        disabled={downloadingIds.has(doc.id)}
+                        title="Download original file"
+                        aria-label={`Download ${doc.name}`}
+                      >
+                        {downloadingIds.has(doc.id)
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Download className="h-3.5 w-3.5" />}
                       </Button>
                       <Button
                         variant="ghost"
@@ -346,18 +403,14 @@ export const DocumentManager = ({
                   <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-border/15">
                     {doc.status === 'indexed' ? (
                       <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                    ) : doc.status === 'processing' ? (
-                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
-                        <RefreshCw className="h-3 w-3 text-primary" />
-                      </motion.div>
                     ) : (
                       <AlertCircle className="h-3 w-3 text-red-400" />
                     )}
                     <span className={cn(
                       "text-xs font-medium",
-                      doc.status === 'indexed' ? "text-emerald-400/70" : doc.status === 'processing' ? "text-primary/70" : "text-red-400/70"
+                      doc.status === 'indexed' ? "text-emerald-400/70" : "text-muted-foreground"
                     )}>
-                      {doc.status === 'indexed' ? 'Indexed' : doc.status === 'processing' ? 'Processing...' : 'Failed'}
+                      {doc.status === 'indexed' ? 'Indexed' : 'Not indexed — re-index to retry'}
                     </span>
                     {doc.source_url && (
                       <a

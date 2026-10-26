@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from 'sonner';
 import type { Conversation, Message } from '../types';
-import { auth, api, type UserPreferences } from '../services/api';
+import { auth, api, getSessionRevision, type UserPreferences } from '../services/api';
 
 const preferenceState = (preferences: UserPreferences): Partial<ChatState> => ({
   displayName: preferences.display_name,
@@ -36,7 +37,7 @@ interface ChatState {
   language: 'auto' | 'english' | 'vietnamese';
   sidebarActiveTab: 'conversations' | 'documents';
   selectedDocument: { id: string; name: string } | null;
-  
+
   // Actions
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
@@ -58,16 +59,16 @@ interface ChatState {
   setSelectedDocument: (document: { id: string; name: string } | null) => void;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
-  
+
   // Conversation actions
   createConversation: () => string;
   setCurrentConversation: (id: string) => void;
-  deleteConversation: (id: string) => void;
-  renameConversation: (id: string, title: string) => void;
-  pinConversation: (id: string) => void;
-  duplicateConversation: (id: string) => void;
+  deleteConversation: (id: string) => Promise<void>;
+  renameConversation: (id: string, title: string) => Promise<void>;
+  pinConversation: (id: string) => Promise<void>;
+  duplicateConversation: (id: string) => Promise<void>;
   clearAllConversations: () => Promise<void>;
-  
+
   // Message actions
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'createdAt'>) => string;
   appendStreamToMessage: (conversationId: string, messageId: string, textChunk: string) => void;
@@ -79,19 +80,19 @@ interface ChatState {
   regenerateLastMessage: (conversationId: string) => void;
 }
 
-type PersistedChatState = Pick<ChatState,
-  | 'theme'
-  | 'sidebarOpen'
-  | 'avatar'
-  | 'displayName'
-  | 'customInstructions'
-  | 'characterStyle'
-  | 'nickname'
-  | 'developerMode'
-  | 'language'
-  | 'sidebarActiveTab'
-  | 'selectedDocument'
->;
+// Browser storage is shared across accounts on this device. Keep account
+// context on the server/in memory, never in the persisted UI preference blob.
+type PersistedChatState = Pick<ChatState, 'theme' | 'sidebarOpen' | 'developerMode' | 'sidebarActiveTab'>;
+
+const accountDefaults = {
+  avatar: null,
+  displayName: 'User',
+  nickname: '',
+  customInstructions: '',
+  characterStyle: 'warm',
+  language: 'auto' as const,
+  selectedDocument: null,
+};
 
 export const useChatStore = create<ChatState>()(
   persist<ChatState, [], [], PersistedChatState>(
@@ -119,7 +120,8 @@ export const useChatStore = create<ChatState>()(
 
       login: async (username: string, password: string) => {
         const res = await auth.login(username, password);
-        set({ token: res.access_token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
+        const revision = getSessionRevision();
+        set({ ...accountDefaults, token: res.access_token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
         try {
           const convs = await api.getConversations();
           const mapped: Conversation[] = convs.map((c) => ({
@@ -137,20 +139,22 @@ export const useChatStore = create<ChatState>()(
             updatedAt: c.updatedAt || Date.now(),
             pinned: c.pinned || false,
           }));
-          set({ conversations: mapped, currentConversationId: mapped.length > 0 ? mapped[0].id : null });
+          if (revision === getSessionRevision()) set({ conversations: mapped, currentConversationId: mapped.length > 0 ? mapped[0].id : null });
         } catch {
-          set({ conversations: [], currentConversationId: null });
+          if (revision === getSessionRevision()) set({ conversations: [], currentConversationId: null });
         }
         const preferences = await api.getPreferences().catch(() => null);
-        if (preferences) set(preferenceState(preferences));
+        if (preferences && revision === getSessionRevision()) set(preferenceState(preferences));
       },
       register: async (username: string, password: string) => {
         const res = await auth.register(username, password);
-        set({ token: res.access_token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
+        const revision = getSessionRevision();
+        set({ ...accountDefaults, token: res.access_token, userId: res.user_id, username, displayName: username, conversations: [], currentConversationId: null });
         const preferences = await api.getPreferences().catch(() => null);
-        if (preferences) set(preferenceState(preferences));
+        if (preferences && revision === getSessionRevision()) set(preferenceState(preferences));
       },
       bootstrapSession: async () => {
+        const revision = getSessionRevision();
         const res = await auth.refresh();
         const username = res.username || 'User';
         const convs = await api.getConversations();
@@ -170,7 +174,9 @@ export const useChatStore = create<ChatState>()(
           updatedAt: c.updatedAt || Date.now(),
           pinned: c.pinned || false,
         }));
+        if (revision !== getSessionRevision()) return;
         set({
+          ...accountDefaults,
           token: res.access_token,
           userId: res.user_id,
           username,
@@ -182,7 +188,10 @@ export const useChatStore = create<ChatState>()(
       },
       logout: async () => {
         set({
+          ...accountDefaults,
           token: null,
+          isStreaming: false,
+          isLoading: false,
           userId: null,
           username: null,
           conversations: [],
@@ -198,10 +207,12 @@ export const useChatStore = create<ChatState>()(
 
       setLanguage: (language: 'auto' | 'english' | 'vietnamese') => set({ language }),
       syncPreferences: async () => {
+        const revision = getSessionRevision();
         const preferences = await api.getPreferences();
-        set(preferenceState(preferences));
+        if (revision === getSessionRevision()) set(preferenceState(preferences));
       },
       savePreferences: async () => {
+        const revision = getSessionRevision();
         const state = get();
         const preferences = await api.updatePreferences({
           display_name: state.displayName.trim().slice(0, 80),
@@ -211,7 +222,7 @@ export const useChatStore = create<ChatState>()(
           nickname: state.nickname.trim().slice(0, 80),
           custom_instructions: state.customInstructions.trim().slice(0, 4000),
         });
-        set(preferenceState(preferences));
+        if (revision === getSessionRevision()) set(preferenceState(preferences));
       },
       setSidebarActiveTab: (sidebarActiveTab: 'conversations' | 'documents') => set({ sidebarActiveTab }),
       setSelectedDocument: (selectedDocument) => set({ selectedDocument }),
@@ -233,7 +244,7 @@ export const useChatStore = create<ChatState>()(
       },
       setAvatar: (avatar: string | null) => set({ avatar }),
       setDisplayName: (displayName: string) => set({ displayName }),
-      
+
       toggleSidebar: () => set((state: ChatState) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
 
@@ -250,70 +261,66 @@ export const useChatStore = create<ChatState>()(
           conversations: [newConversation, ...state.conversations],
           currentConversationId: newId,
         }));
-        api.createConversation(newId, newConversation).catch(() => {});
+        const revision = getSessionRevision();
+        void api.createConversation(newId, newConversation).catch((error: unknown) => {
+          if (revision === getSessionRevision()) toast.error(error instanceof Error ? error.message : 'Could not save the new conversation');
+        });
         return newId;
       },
 
       setCurrentConversation: (id: string) => set({ currentConversationId: id }),
 
-      deleteConversation: (id: string) => {
-        api.deleteConversation(id).catch(() => {});
+      deleteConversation: async (id: string) => {
+        const revision = getSessionRevision();
+        await api.deleteConversation(id);
+        if (revision !== getSessionRevision()) return;
         set((state: ChatState) => {
-          const filtered = state.conversations.filter((c: Conversation) => c.id !== id);
-          return {
-            conversations: filtered,
-            currentConversationId: state.currentConversationId === id 
-              ? (filtered.length > 0 ? filtered[0].id : null) 
-              : state.currentConversationId
-          };
+          const filtered = state.conversations.filter(c => c.id !== id);
+          return { conversations: filtered,
+            currentConversationId: state.currentConversationId === id ? filtered[0]?.id || null : state.currentConversationId };
         });
       },
 
-      renameConversation: (id: string, title: string) => {
+      renameConversation: async (id: string, title: string) => {
+        const revision = getSessionRevision();
         const safeTitle = title.trim().slice(0, 120) || 'New Chat';
-        api.updateConversation(id, { title: safeTitle }).catch(() => {});
-        set((state: ChatState) => ({
-          conversations: state.conversations.map((c: Conversation) => 
-            c.id === id ? { ...c, title: safeTitle, updatedAt: Date.now() } : c
-          )
-        }));
+        await api.updateConversation(id, { title: safeTitle });
+        if (revision !== getSessionRevision()) return;
+        set(state => ({ conversations: state.conversations.map(c =>
+          c.id === id ? { ...c, title: safeTitle, updatedAt: Date.now() } : c) }));
       },
 
-      pinConversation: (id: string) => set((state: ChatState) => {
-        const current = state.conversations.find((c: Conversation) => c.id === id);
-        const pinned = !current?.pinned;
-        api.updateConversation(id, { pinned }).catch(() => {});
-        return {
-          conversations: state.conversations.map((c: Conversation) =>
-            c.id === id ? { ...c, pinned, updatedAt: Date.now() } : c
-          ),
-        };
-      }),
+      pinConversation: async (id: string) => {
+        const current = get().conversations.find(c => c.id === id);
+        if (!current) throw new Error('Conversation is no longer available');
+        const pinned = !current.pinned;
+        const revision = getSessionRevision();
+        await api.updateConversation(id, { pinned });
+        if (revision !== getSessionRevision()) return;
+        set(state => ({ conversations: state.conversations.map(c =>
+          c.id === id ? { ...c, pinned, updatedAt: Date.now() } : c) }));
+      },
 
-      duplicateConversation: (id: string) => set((state: ChatState) => {
-        const original = state.conversations.find((c: Conversation) => c.id === id);
-        if (!original) return state;
+      duplicateConversation: async (id: string) => {
+        const original = get().conversations.find(c => c.id === id);
+        if (!original) throw new Error('Conversation is no longer available');
+        const revision = getSessionRevision();
         const newId = uuidv4();
-        const duplicate: Conversation = {
-          ...original,
-          id: newId,
+        const duplicate: Conversation = { ...original, id: newId,
           title: `${original.title} (Copy)`.slice(0, 120),
-          messages: original.messages.map((m: Message) => ({ ...m, id: uuidv4() })),
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          pinned: false,
-        };
-        api.createConversation(newId, duplicate).catch(() => {});
-        return {
-          conversations: [duplicate, ...state.conversations],
-          currentConversationId: newId,
-        };
-      }),
+          messages: original.messages.map(m => ({ ...m, id: uuidv4() })),
+          createdAt: Date.now(), updatedAt: Date.now(), pinned: false };
+        await api.createConversation(newId, duplicate);
+        if (revision !== getSessionRevision()) return;
+        set(state => ({ conversations: [duplicate, ...state.conversations], currentConversationId: newId }));
+      },
 
       clearAllConversations: async () => {
+        const revision = getSessionRevision();
         await api.clearConversations();
-        set({ conversations: [], currentConversationId: null });
+        if (revision === getSessionRevision()) set({ conversations: [], currentConversationId: null });
       },
+
 
       addMessage: (conversationId: string, message: Omit<Message, 'id' | 'createdAt'>) => {
         const messageId = uuidv4();
@@ -330,7 +337,7 @@ export const useChatStore = create<ChatState>()(
                 ...c,
                 messages: [...c.messages, newMessage],
                 updatedAt: Date.now(),
-                title: c.title === 'New Chat' && newMessage.role === 'user' 
+                title: c.title === 'New Chat' && newMessage.role === 'user'
                   ? newMessage.content.slice(0, 30) + (newMessage.content.length > 30 ? '...' : '')
                   : c.title
               };
@@ -339,7 +346,7 @@ export const useChatStore = create<ChatState>()(
           });
           return { conversations };
         });
-        
+
         return messageId;
       },
 
@@ -349,9 +356,9 @@ export const useChatStore = create<ChatState>()(
             if (c.id === conversationId) {
               return {
                 ...c,
-                messages: c.messages.map((m: Message) => 
-                  m.id === messageId 
-                    ? { ...m, content: m.content + textChunk } 
+                messages: c.messages.map((m: Message) =>
+                  m.id === messageId
+                    ? { ...m, content: m.content + textChunk }
                     : m
                 ),
                 updatedAt: Date.now(),
@@ -361,16 +368,16 @@ export const useChatStore = create<ChatState>()(
           })
         }));
       },
-      
+
       updateMessageContent: (conversationId: string, messageId: string, content: string) => {
         set((state: ChatState) => ({
           conversations: state.conversations.map((c: Conversation) => {
             if (c.id === conversationId) {
               return {
                 ...c,
-                messages: c.messages.map((m: Message) => 
-                  m.id === messageId 
-                    ? { ...m, content } 
+                messages: c.messages.map((m: Message) =>
+                  m.id === messageId
+                    ? { ...m, content }
                     : m
                 ),
                 updatedAt: Date.now(),
@@ -395,9 +402,9 @@ export const useChatStore = create<ChatState>()(
             if (c.id === conversationId) {
               return {
                 ...c,
-                messages: c.messages.map((m: Message) => 
-                  m.id === messageId 
-                    ? { ...m, feedback } 
+                messages: c.messages.map((m: Message) =>
+                  m.id === messageId
+                    ? { ...m, feedback }
                     : m
                 ),
                 updatedAt: Date.now(),
@@ -428,34 +435,23 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'rag-chat-storage',
-      version: 4,
+      version: 5,
       migrate: (persistedState: unknown, version: number) => {
-        const unsafeState = persistedState as PersistedChatState & Record<string, unknown>;
-        const {
-          token: _token,
-          userId: _userId,
-          username: _username,
-          conversations: _conversations,
-          currentConversationId: _currentConversationId,
-          ...state
-        } = unsafeState;
-        if (version < 2 && (!state.theme || state.theme === 'system')) {
-          return { ...state, theme: 'dark' };
-        }
-        return state as PersistedChatState;
+        const previous = (persistedState && typeof persistedState === 'object' ? persistedState : {}) as Record<string, unknown>;
+        const theme = ['light', 'dark', 'system'].includes(String(previous.theme))
+          ? previous.theme as ChatState['theme'] : 'dark';
+        return {
+          theme: version < 2 && theme === 'system' ? 'dark' : theme,
+          sidebarOpen: typeof previous.sidebarOpen === 'boolean' ? previous.sidebarOpen : true,
+          developerMode: previous.developerMode === true,
+          sidebarActiveTab: previous.sidebarActiveTab === 'documents' ? 'documents' : 'conversations',
+        };
       },
       partialize: (state: ChatState) => ({
         theme: state.theme,
         sidebarOpen: state.sidebarOpen,
-        avatar: state.avatar,
-        displayName: state.displayName,
-        customInstructions: state.customInstructions,
-        characterStyle: state.characterStyle,
-        nickname: state.nickname,
         developerMode: state.developerMode,
-        language: state.language,
         sidebarActiveTab: state.sidebarActiveTab,
-        selectedDocument: state.selectedDocument,
       }),
     }
   )

@@ -139,6 +139,7 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -212,7 +213,7 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={selectedDocument ? `Ask about ${selectedDocument.name}...` : 'Ask Nova anything...'}
-            className="min-h-9 max-h-[200px] w-full resize-none border-0 bg-transparent px-0 py-1.5 text-[15px] font-normal leading-relaxed shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0"
+            className="min-h-9 max-h-[200px] w-full resize-none border-0 bg-transparent px-0 py-1.5 text-base font-normal leading-7 shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 md:text-base md:leading-7"
             disabled={isBusy}
             rows={1}
             maxLength={4000}
@@ -312,7 +313,7 @@ export const ChatInput = ({ onSend, onStop }: ChatInputProps) => {
         </span>
         {showCharCount && (
           <span className={cn(
-            "font-mono text-xs tabular-nums",
+            "text-xs tabular-nums",
             charCount > 1800 ? "text-destructive" : charCount > 1200 ? "text-amber-500" : "text-muted-foreground/70"
           )}>
             {charCount.toLocaleString()}/4000

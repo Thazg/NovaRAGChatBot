@@ -8,6 +8,7 @@ import { useChatStore } from '../../store/useChatStore';
 import { SettingsDrawer } from './SettingsDrawer';
 import { cn } from '../../lib/utils';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { productInfo } from '../../lib/productInfo';
 
 export const Layout = () => {
   const { theme, avatar, sidebarActiveTab, setSidebarActiveTab, createConversation, setSettingsOpen } = useChatStore();
@@ -56,11 +57,11 @@ export const Layout = () => {
                 </SheetContent>
               </Sheet>
 
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary/30 via-primary/20 to-violet-500/20 border border-primary/25 flex items-center justify-center shadow-sm shrink-0">
                   <Sparkles className="h-3 w-3 text-primary" />
                 </div>
-                <span className="font-bold tracking-tight text-[14px] text-foreground">Nova AI</span>
+                <span className="truncate font-bold tracking-tight text-[14px] text-foreground">{productInfo.name}</span>
               </div>
             </div>
 
@@ -130,8 +131,7 @@ export const Layout = () => {
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
               </div>
               <div>
-                <span className="font-bold tracking-tight text-[14px] text-foreground">Nova AI</span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground/60 font-medium">Knowledge OS</span>
+                <span className="font-bold tracking-tight text-[14px] text-foreground">{productInfo.name}</span>
               </div>
             </div>
           </div>

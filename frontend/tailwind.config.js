@@ -20,8 +20,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "Fira Code", "monospace"],
+        sans: ["var(--font-ui)"],
+        mono: ["var(--font-code)"],
       },
       colors: {
         border: "hsl(var(--border))",

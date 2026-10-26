@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MotionConfig } from 'framer-motion';
 import './index.css';
 import App from './App.tsx';
 import { AppErrorBoundary } from './components/system/AppErrorBoundary.tsx';
@@ -29,8 +30,10 @@ document.documentElement.classList.add(resolveInitialTheme());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppErrorBoundary>
-      <App />
-    </AppErrorBoundary>
+    <MotionConfig reducedMotion="user">
+      <AppErrorBoundary>
+        <App />
+      </AppErrorBoundary>
+    </MotionConfig>
   </StrictMode>,
 );

@@ -38,6 +38,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
+import { GitHubMark } from '../brand/GitHubMark';
+import { productInfo } from '../../lib/productInfo';
 import { Input } from '../ui/input';
 import {
   Sheet,
@@ -150,7 +152,7 @@ const Metric = ({ label, value, icon: Icon }: { label: string; value: string; ic
       <Icon className="h-3.5 w-3.5" />
       <span className="text-[10px] font-bold uppercase tracking-[0.12em]">{label}</span>
     </div>
-    <p className="mt-2 truncate font-mono text-sm font-semibold text-foreground">{value}</p>
+    <p className="mt-2 truncate text-sm font-semibold tabular-nums text-foreground">{value}</p>
   </div>
 );
 
@@ -334,7 +336,10 @@ export const SettingsDrawer = () => {
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => setAvatar(String(reader.result));
+    const owner = useChatStore.getState().userId;
+    reader.onloadend = () => {
+      if (owner && owner === useChatStore.getState().userId) setAvatar(String(reader.result));
+    };
     reader.readAsDataURL(file);
     event.target.value = '';
   };
@@ -545,7 +550,7 @@ export const SettingsDrawer = () => {
               <p className="mt-1 truncate text-sm text-muted-foreground">@{username || 'user'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-xs font-medium text-muted-foreground">Private workspace</span>
-                <span className="rounded-full border border-border/50 bg-background/55 px-2.5 py-1 text-xs text-muted-foreground">Avatar stays on this device</span>
+                <span className="rounded-full border border-border/50 bg-background/55 px-2.5 py-1 text-xs text-muted-foreground">Avatar lasts for this session</span>
               </div>
             </div>
           </div>
@@ -649,7 +654,7 @@ export const SettingsDrawer = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <label htmlFor="custom-instructions" className="text-xs font-semibold">Custom instructions</label>
-              <span className="font-mono text-[10px] text-muted-foreground">{customInstructions.length}/4000</span>
+              <span className="text-[10px] tabular-nums text-muted-foreground">{customInstructions.length}/4000</span>
             </div>
             <textarea
               id="custom-instructions"
@@ -855,7 +860,7 @@ export const SettingsDrawer = () => {
             <div className="space-y-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
               <div>
                 <p className="text-sm font-semibold text-destructive">Permanently delete this account</p>
-                <p className="mt-1 text-xs text-muted-foreground">Type <span className="font-mono font-semibold text-foreground">{username}</span> to confirm.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Type <span className="font-semibold text-foreground">{username}</span> to confirm.</p>
               </div>
               <Input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder={username || 'username'} className="nova-settings-field h-10 rounded-xl bg-background/70" />
               <div className="flex justify-end gap-2">
@@ -935,7 +940,7 @@ export const SettingsDrawer = () => {
             {infrastructure.length ? infrastructure.map(([key, value]) => (
               <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-border/45 bg-background/55 px-3.5 py-3">
                 <span className="text-xs capitalize text-muted-foreground">{key.replaceAll('_', ' ')}</span>
-                <span className="truncate font-mono text-[11px] font-semibold text-foreground">{String(value)}</span>
+                <span className="truncate text-[11px] font-semibold tabular-nums text-foreground">{String(value)}</span>
               </div>
             )) : <p className="text-xs text-muted-foreground">Diagnostics have not loaded yet.</p>}
           </div>
@@ -970,26 +975,26 @@ export const SettingsDrawer = () => {
     <div className="space-y-5">
       <SectionHeading
         icon={Info}
-        eyebrow="Nova knowledge OS"
+        eyebrow={productInfo.name}
         title="Private knowledge, grounded answers"
-        description="Nova turns your uploaded documents into traceable context for private, citation-aware conversations."
+        description="Nova turns your uploaded documents into traceable context for private, citation-aware conversations"
       />
 
       <SettingsCard className="overflow-hidden">
         <div className="relative bg-gradient-to-br from-primary/16 via-violet-500/7 to-sky-500/5 p-6 text-center sm:p-8">
           <div className="pointer-events-none absolute left-1/2 top-0 h-36 w-72 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
           <div className="relative mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-primary/25 bg-background/65 text-primary shadow-xl shadow-primary/10"><Sparkles className="h-6 w-6" /></div>
-          <h3 className="relative mt-4 text-xl font-bold tracking-tight">Nova AI Knowledge OS</h3>
+          <h3 className="relative mt-4 text-xl font-bold tracking-tight">{productInfo.name}</h3>
           <p className="relative mx-auto mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-            A private, document-grounded workspace for searchable and citation-aware conversations.
+            {productInfo.description}
           </p>
-          <p className="relative mt-2 text-xs font-medium text-muted-foreground">Version {systemInfo?.version || '2.1.0'} · {systemInfo?.environment || 'workspace'}</p>
+          <p className="relative mt-2 text-xs font-medium text-muted-foreground">Version {systemInfo?.version || '—'} – {systemInfo?.environment || 'workspace'}</p>
         </div>
         <div className="grid gap-2 p-4 sm:grid-cols-3 sm:p-5">
           {[
-            { icon: LockKeyhole, title: 'Account isolated', description: 'Documents, indexes and conversations are scoped to your account.' },
-            { icon: Database, title: 'Grounded retrieval', description: 'Answers are built from indexed document chunks, not hidden placeholders.' },
-            { icon: ShieldCheck, title: 'Data controls', description: 'Export, clear or permanently delete your account data.' },
+            { icon: LockKeyhole, title: 'Account isolated', description: 'Documents, indexes and conversations are scoped to your account' },
+            { icon: Database, title: 'Grounded retrieval', description: 'Find relevant passages in your indexed documents to support answers' },
+            { icon: ShieldCheck, title: 'Data controls', description: 'Export, clear or permanently delete your account data' },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -1002,9 +1007,12 @@ export const SettingsDrawer = () => {
           })}
         </div>
         <div className="flex flex-col gap-2 border-t border-border/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-          <p className="text-xs text-muted-foreground">React · TypeScript · FastAPI · Hybrid retrieval</p>
+          <div className="space-y-1.5 text-xs text-muted-foreground">
+            <p>{productInfo.technologies}</p>
+            <p>{productInfo.copyright}</p>
+          </div>
           <Button asChild variant="outline" size="sm" className="rounded-xl">
-            <a href="https://github.com/Thazg/NovaRAGChatBot" target="_blank" rel="noopener noreferrer">GitHub <ExternalLink /></a>
+            <a href={productInfo.repositoryUrl} target="_blank" rel="noopener noreferrer"><GitHubMark className="h-4 w-4" /> GitHub</a>
           </Button>
         </div>
       </SettingsCard>

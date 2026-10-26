@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NovaMark } from '../brand/NovaMark';
 import { api } from '../../services/api';
+import { productInfo } from '../../lib/productInfo';
 
 interface StartupScreenProps {
   onReady: () => void;
 }
 
 const STEPS = [
-  { label: 'Initializing Nova AI...', progress: 15 },
+  { label: `Initializing ${productInfo.name}...`, progress: 15 },
   { label: 'Connecting to backend...', progress: 35 },
   { label: 'Loading AI model...', progress: 65 },
   { label: 'Loading knowledge base...', progress: 85 },
@@ -113,15 +114,15 @@ export const StartupScreen = ({ onReady }: StartupScreenProps) => {
               transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
               className="nova-logo-orbit"
             >
-              <NovaMark className="h-9 w-9" title="Nova AI" />
+              <NovaMark className="h-9 w-9" title={productInfo.name} />
             </motion.div>
 
             <div className="text-center">
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Nova AI Agent
+                {productInfo.name}
               </h1>
               <p className="text-sm text-muted-foreground/60 mt-1 font-medium">
-                Private RAG Workspace
+                {productInfo.tagline}
               </p>
             </div>
           </div>

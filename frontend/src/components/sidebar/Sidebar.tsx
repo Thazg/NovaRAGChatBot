@@ -4,6 +4,8 @@ import { Copy, Download, Edit2, FolderOpen, LogOut, MessageSquare, Moon, MoreHor
 import { toast } from 'sonner';
 import { useChatStore } from '../../store/useChatStore';
 import { Button } from '../ui/button';
+import { GitHubMark } from '../brand/GitHubMark';
+import { productInfo } from '../../lib/productInfo';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -226,13 +228,16 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
     setSidebarOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (conversationToDelete) {
-      deleteConversation(conversationToDelete);
+  const showMutationError = (error: unknown) => toast.error(error instanceof Error ? error.message : 'Could not save the conversation change');
+
+  const confirmDelete = async () => {
+    if (!conversationToDelete) return;
+    try {
+      await deleteConversation(conversationToDelete);
       setDeleteDialogOpen(false);
       setConversationToDelete(null);
       toast.success('Conversation deleted');
-    }
+    } catch (error) { showMutationError(error); }
   };
 
   const handleRename = (id: string, currentTitle: string) => {
@@ -240,21 +245,26 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
     setEditTitle(currentTitle);
   };
 
-  const submitRename = () => {
-    if (editingId && editTitle.trim()) {
-      renameConversation(editingId, editTitle.trim());
-    }
-    setEditingId(null);
+  const submitRename = async () => {
+    if (!editingId || !editTitle.trim()) return;
+    try {
+      await renameConversation(editingId, editTitle.trim());
+      setEditingId(null);
+    } catch (error) { showMutationError(error); }
   };
 
-  const handlePin = (id: string) => {
-    pinConversation(id);
-    toast.success('Updated pin status');
+  const handlePin = async (id: string) => {
+    try {
+      await pinConversation(id);
+      toast.success('Updated pin status');
+    } catch (error) { showMutationError(error); }
   };
 
-  const handleDuplicate = (id: string) => {
-    duplicateConversation(id);
-    toast.success('Conversation duplicated');
+  const handleDuplicate = async (id: string) => {
+    try {
+      await duplicateConversation(id);
+      toast.success('Conversation duplicated');
+    } catch (error) { showMutationError(error); }
   };
 
   const handleExport = (conv: Conversation) => {
@@ -316,7 +326,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button 
-                  onClick={() => { createConversation(); toast.success('New chat created'); }}
+                  onClick={() => { createConversation(); }}
                   className={cn(
                     "h-10 rounded-[10px] border border-primary/25 bg-primary/10 font-semibold text-primary shadow-none transition-colors hover:bg-primary/15",
                     sidebarOpen ? "w-full min-w-0 max-w-full justify-start gap-2.5 px-4" : "w-10 justify-center p-0"
@@ -580,6 +590,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
             <DialogTitle className="text-lg">Rename Conversation</DialogTitle>
           </DialogHeader>
           <Input 
+            aria-label="Conversation title"
             value={editTitle}
             className="rounded-xl border-border/50 h-11"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditTitle(e.target.value)}
@@ -623,17 +634,21 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <p className="text-sm font-semibold text-foreground">Nova AI Knowledge OS</p>
+              <p className="text-sm font-semibold text-foreground">{productInfo.name}</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                A private, document-grounded workspace for searchable and citation-aware conversations.
+                {productInfo.description}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-md border border-border/60 bg-muted/60 px-2 py-1 font-mono">v2.1.0</span>
-              <span>React · TypeScript · FastAPI · Hybrid retrieval</span>
+              <span className="rounded-md border border-border/60 bg-muted/60 px-2 py-1 tabular-nums">v2.1.0</span>
+              <span>{productInfo.technologies}</span>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">{productInfo.copyright}</p>
           <DialogFooter>
+            <Button asChild variant="outline" className="rounded-xl">
+              <a href={productInfo.repositoryUrl} target="_blank" rel="noopener noreferrer"><GitHubMark className="h-4 w-4" /> GitHub</a>
+            </Button>
             <Button className="rounded-xl" onClick={() => setAboutOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>

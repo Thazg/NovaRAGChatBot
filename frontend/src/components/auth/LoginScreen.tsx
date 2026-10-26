@@ -10,13 +10,14 @@ import {
   LogIn,
   Quote,
   Search,
-  ShieldCheck,
+  LockKeyhole,
   UserPlus,
 } from 'lucide-react';
 
 import { NovaMark } from '../brand/NovaMark';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { useChatStore } from '../../store/useChatStore';
+import { productInfo } from '../../lib/productInfo';
 
 const atlasStyles = `
   @keyframes nova-scan {
@@ -69,9 +70,9 @@ function FlowNode({
         <span className="grid h-7 w-7 place-items-center rounded-md border border-indigo-400/20 bg-indigo-400/10 text-indigo-300">
           {icon}
         </span>
-        <span className="font-mono text-[8px] tracking-[0.2em] text-emerald-300/70">LIVE</span>
+        <span className="font-sans text-[8px] tracking-[0.2em] text-indigo-300/70">STEP</span>
       </div>
-      <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-500">{eyebrow}</div>
+      <div className="font-sans text-[9px] uppercase tracking-[0.22em] text-slate-500">{eyebrow}</div>
       <div className="mt-1 text-xs font-semibold text-slate-100">{label}</div>
     </motion.div>
   );
@@ -82,10 +83,9 @@ function NeuralAtlas() {
     <div className="relative mt-8 h-[300px] overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#090b16]/70 shadow-2xl shadow-black/20">
       <div className="nova-atlas-grid absolute inset-0" />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/70 to-transparent" />
-      <div className="absolute left-5 top-4 font-mono text-[9px] tracking-[0.3em] text-slate-600">KNOWLEDGE MAP / 03</div>
-      <div className="absolute right-5 top-4 flex items-center gap-2 font-mono text-[9px] tracking-[0.18em] text-emerald-300/70">
-        <span className="h-1.5 w-1.5 rounded-sm bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,.9)]" />
-        SYSTEM ONLINE
+      <div className="absolute left-5 top-4 font-sans text-[9px] tracking-[0.3em] text-slate-600">KNOWLEDGE MAP / 03</div>
+      <div className="absolute right-5 top-4 font-sans text-[9px] tracking-[0.18em] text-indigo-300/70">
+        DOCUMENT WORKFLOW
       </div>
 
       <svg className="absolute inset-0 h-full w-full" viewBox="0 0 620 300" fill="none" aria-hidden="true">
@@ -122,7 +122,7 @@ function NeuralAtlas() {
       </svg>
 
       <FlowNode className="left-[6%] top-[42%]" icon={<FileText className="h-3.5 w-3.5" />} eyebrow="01 / Ingest" label="Private documents" delay={0.2} />
-      <FlowNode className="left-1/2 top-[24%] -translate-x-1/2" icon={<Search className="h-3.5 w-3.5" />} eyebrow="02 / Retrieve" label="Hybrid evidence" delay={0.35} />
+      <FlowNode className="left-1/2 top-[24%] -translate-x-1/2" icon={<Search className="h-3.5 w-3.5" />} eyebrow="02 / Retrieve" label="Relevant passages" delay={0.35} />
       <FlowNode className="right-[5%] top-[49%]" icon={<Quote className="h-3.5 w-3.5" />} eyebrow="03 / Ground" label="Cited answers" delay={0.5} />
 
       <motion.div
@@ -131,7 +131,7 @@ function NeuralAtlas() {
         transition={{ delay: 0.55, type: 'spring', stiffness: 130 }}
         className="absolute bottom-5 left-1/2 z-10 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-2xl border border-indigo-300/20 bg-[#0d1020]/95 shadow-[0_0_45px_rgba(129,140,248,.24)] backdrop-blur-xl"
       >
-        <NovaMark className="h-10 w-10" title="Nova AI" />
+        <NovaMark className="h-10 w-10" title={productInfo.name} />
       </motion.div>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-indigo-400/[0.06] to-transparent [animation:nova-scan_5s_ease-in-out_infinite]" />
@@ -164,7 +164,7 @@ function InputField({
 
   return (
     <div>
-      <label className="mb-2 block font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
+      <label className="mb-2 block font-sans text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
         {label}
       </label>
       <div className="group relative">
@@ -262,9 +262,9 @@ export function LoginScreen() {
         <div className="grid w-full items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(380px,.75fr)] lg:gap-16">
           <section className="hidden min-w-0 lg:block" aria-label="Nova knowledge pipeline">
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-              <div className="mb-5 flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-indigo-300/80">
+              <div className="mb-5 flex items-center gap-3 font-sans text-[10px] uppercase tracking-[0.3em] text-indigo-300/80">
                 <span className="h-px w-8 bg-indigo-400" />
-                Nova / Private knowledge OS
+                {productInfo.name}
               </div>
               <h1 className="max-w-[660px] text-5xl font-semibold leading-[1.02] tracking-[-0.045em] text-white xl:text-6xl">
                 Your knowledge,
@@ -281,12 +281,12 @@ export function LoginScreen() {
 
             <div className="mt-5 flex items-center gap-7 border-t border-white/[0.07] pt-5">
               {[
-                ['HYBRID', 'BM25 + Vector'],
+                ['RETRIEVE', 'Document search'],
                 ['STREAM', 'Live generation'],
                 ['GROUND', 'Source citations'],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <div className="font-mono text-[9px] tracking-[0.22em] text-slate-600">{label}</div>
+                  <div className="font-sans text-[9px] tracking-[0.22em] text-slate-600">{label}</div>
                   <div className="mt-1 text-xs font-medium text-slate-300">{value}</div>
                 </div>
               ))}
@@ -301,11 +301,11 @@ export function LoginScreen() {
           >
             <div className="mb-6 flex items-center gap-3 lg:hidden">
               <div className="grid h-11 w-11 place-items-center rounded-xl border border-indigo-400/20 bg-[#0d1020] shadow-[0_0_24px_rgba(129,140,248,.16)]">
-                <NovaMark className="h-7 w-7" title="Nova AI" />
+                <NovaMark className="h-7 w-7" title={productInfo.name} />
               </div>
               <div>
-                <div className="text-lg font-semibold tracking-tight">Nova AI</div>
-                <div className="font-mono text-[9px] tracking-[0.2em] text-indigo-300/70">PRIVATE KNOWLEDGE OS</div>
+                <div className="text-lg font-semibold tracking-tight">{productInfo.name}</div>
+                <div className="font-sans text-[9px] uppercase tracking-[0.2em] text-indigo-300/70">{productInfo.tagline}</div>
               </div>
             </div>
 
@@ -315,12 +315,12 @@ export function LoginScreen() {
 
               <div className="relative mb-7">
                 <div className="mb-6 flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-mono text-[9px] tracking-[0.22em] text-slate-500">
+                  <div className="flex items-center gap-2 font-sans text-[9px] tracking-[0.22em] text-slate-500">
                     <Database className="h-3.5 w-3.5 text-indigo-300" />
                     SECURE ACCESS
                   </div>
-                  <div className="flex items-center gap-1.5 rounded-md border border-emerald-300/10 bg-emerald-300/[0.05] px-2 py-1 font-mono text-[8px] tracking-[0.16em] text-emerald-300/70">
-                    <ShieldCheck className="h-3 w-3" /> ENCRYPTED
+                  <div className="flex items-center gap-1.5 rounded-md border border-indigo-300/10 bg-indigo-300/[0.05] px-2 py-1 font-sans text-[8px] tracking-[0.16em] text-indigo-300/70">
+                    <LockKeyhole className="h-3 w-3" /> ACCOUNT ACCESS
                   </div>
                 </div>
                 <h2 className="text-3xl font-semibold tracking-[-0.035em] text-white">
@@ -405,8 +405,7 @@ export function LoginScreen() {
               </div>
             </div>
 
-            <div className="mt-5 flex items-center justify-between px-1 font-mono text-[8px] uppercase tracking-[0.19em] text-slate-700">
-              <span>Nova protocol 2.1</span>
+            <div className="mt-5 flex items-center justify-end px-1 font-sans text-[8px] uppercase tracking-[0.19em] text-slate-700">
               <span>Private by design</span>
             </div>
           </motion.section>

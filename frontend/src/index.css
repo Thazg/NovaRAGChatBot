@@ -4,6 +4,9 @@
 
 @layer base {
   :root {
+    /* Match the platform font stack observed on ChatGPT Web. */
+    --font-ui: -apple-system-body, ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+    --font-code: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     --background: 224 44% 98%;
     --foreground: 229 47% 9%;
     --card: 0 0% 100%;
@@ -70,9 +73,8 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased overflow-hidden;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    letter-spacing: -0.011em;
+    @apply bg-background text-foreground font-sans antialiased overflow-hidden;
+    letter-spacing: normal;
     background-image: radial-gradient(ellipse 90% 60% at 50% -20%, var(--glow-primary), transparent 65%);
     background-attachment: fixed;
   }
@@ -125,10 +127,10 @@
 
   /* Prose styles for AI messages */
   .prose {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.9375rem;
+    font-family: var(--font-ui);
+    font-size: 1rem;
     line-height: 1.75;
-    letter-spacing: -0.005em;
+    letter-spacing: normal;
   }
 
   .prose p {
@@ -140,20 +142,29 @@
     margin-bottom: 0;
   }
 
+  .prose ul.chat-dash-list {
+    list-style-type: "-  ";
+  }
+
+  .prose ul.chat-dash-list > li::marker {
+    color: currentColor;
+    font-weight: 400;
+  }
+
   .prose strong {
     font-weight: 600;
     color: hsl(var(--foreground));
   }
 
   .prose code {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-code);
     font-size: 0.84em;
     font-weight: 500;
   }
 
   /* Code blocks */
   pre {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-code);
   }
 }
 
@@ -406,7 +417,7 @@
     padding: 0.28rem 0.55rem;
     border-radius: 0.55rem;
     color: hsl(var(--foreground));
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-code);
     font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: -0.01em;

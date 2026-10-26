@@ -299,6 +299,8 @@ test('login visual regression', async ({ page }) => {
   await mockPortfolioApi(page);
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+  await expect(page.getByText('DOCUMENT WORKFLOW', { exact: true })).toBeVisible();
+  await expect(page.getByText('ACCOUNT ACCESS', { exact: true })).toBeVisible();
   await expect(page).toHaveScreenshot('login-dark.png', {
     fullPage: true,
     animations: 'disabled',
@@ -421,7 +423,7 @@ test('scopes chat requests to a selected document and keeps settings usable', as
   await expect(page.getByText('Preferences save automatically')).toBeVisible();
   await expect.poll(() => apiMock.preferences().theme).toBe('light');
   await page.getByRole('button', { name: /About Nova/ }).click();
-  await expect(page.getByText('Nova AI Knowledge OS')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nova RAG Workspace', exact: true })).toBeVisible();
   await expect(page.getByText(/powered by Groq/i)).toHaveCount(0);
 });
 
@@ -475,10 +477,10 @@ test('shows plain page and line sources on mobile without document links', async
   await (await chooserPromise).setFiles(path.join(process.cwd(), 'e2e/fixtures/portfolio.txt'));
   await page.getByLabel('Message input').fill('Where is beta evidence?');
   await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.getByText('Beta evidence is on page two (Source: paper.pdf · Page 2 · Lines 6–9).')).toBeVisible();
+  await expect(page.getByText('Beta evidence is on page two (Source: paper.pdf, Page 2, Lines 6–9).')).toBeVisible();
   await expect(page.getByRole('link', { name: /paper\.pdf/ })).toHaveCount(0);
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  const expected = 'Beta evidence is on page two (Source: paper.pdf · Page 2 · Lines 6–9).';
+  const expected = 'Beta evidence is on page two (Source: paper.pdf, Page 2, Lines 6–9).';
   await page.getByRole('button', { name: 'Copy', exact: true }).click();
   expect(await page.evaluate(() => sessionStorage.getItem('test-clipboard'))).toBe(expected);
   await page.getByRole('button', { name: 'Share', exact: true }).click();
@@ -494,4 +496,397 @@ test('shows plain page and line sources on mobile without document links', async
   const exported = await readFile((await download.path())!, 'utf-8');
   expect(exported).toContain(`ASSISTANT: ${expected}`);
   expect(exported).not.toContain('[E1]');
+});
+
+
+async function openLifecycleWorkspace(page: Page) {
+  await mockPortfolioApi(page, { activeSession: true });
+  await page.goto('/');
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Upload a document', exact: true }).click();
+  await (await chooser).setFiles(path.join(process.cwd(), 'e2e/fixtures/portfolio.txt'));
+  await expect(page.getByLabel('Message input')).toBeVisible();
+}
+
+test('renders chat without avatars using left-aligned text and dash lists', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.route('**/chat/stream', async (route) => {
+    const answer = 'Here are the findings:\n\n- First finding\n- Second finding\n\n1. First step\n2. Second step';
+    await route.fulfill({
+      contentType: 'text/event-stream', headers: CORS_HEADERS,
+      body: `data: ${JSON.stringify({ token: answer })}\n\ndata: [DONE]\n\n`,
+    });
+  });
+  await page.getByLabel('Message input').fill('List the findings');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  const assistant = page.locator('[data-message-role="assistant"]');
+  const user = page.locator('[data-message-role="user"]');
+  await expect(assistant.getByText('First finding', { exact: true })).toBeVisible();
+  await expect(assistant.locator('p').first()).toHaveCSS('text-align', 'left');
+  await expect(assistant.locator('ul')).toHaveCSS('list-style-type', '"-  "');
+  await expect(assistant.locator('ol')).toHaveCSS('list-style-type', 'decimal');
+  await expect(assistant.locator('.lucide-sparkles')).toHaveCount(0);
+  await expect(user.locator('.lucide-user, img')).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/chat-layout-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(assistant.getByText('Second finding', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/chat-layout-mobile.png', fullPage: true });
+});
+
+test('hides source locations until streaming completes while preserving answer tokens', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.evaluate(() => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!url.endsWith('/chat/stream')) return nativeFetch(input, init);
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        const enqueue = (event: unknown) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+        enqueue({ evidence: [{ id: 'E1', document_id: 'portfolio.txt', file_name: 'portfolio.txt', page: 2,
+          line_start: 6, line_end: 9, chunk_index: 1, content: 'Supporting passage.' }] });
+        window.addEventListener('test:answer-token', () => enqueue({ token: 'Supported answer [E' }), { once: true });
+        window.addEventListener('test:citation-token', () => enqueue({ token: '1].' }), { once: true });
+        window.addEventListener('test:complete-answer', () => {
+          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+          controller.close();
+        }, { once: true });
+      } }), { headers: { 'Content-Type': 'text/event-stream' } });
+    };
+  });
+  await page.getByLabel('Message input').fill('Explain this document.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('Nova is thinking...', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Source:/)).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event('test:answer-token')));
+  await expect(page.getByText('Supported answer', { exact: true })).toBeVisible();
+  await expect(page.getByText('Supported answer', { exact: true })).toHaveCSS('text-align', 'left');
+  await expect(page.getByText(/Source:|\[E/)).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event('test:citation-token')));
+  await expect(page.getByText('Supported answer .', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Source:|\[E/)).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event('test:complete-answer')));
+  await expect(page.getByText('Supported answer (Source: portfolio.txt, Page 2, Lines 6–9).', { exact: true })).toBeVisible();
+  await expect(page.getByText('Nova is thinking...', { exact: true })).toHaveCount(0);
+});
+
+test('a late canceled stream cannot finish or append to its replacement', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.evaluate(() => {
+    const nativeFetch = window.fetch.bind(window);
+    let calls = 0;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!url.endsWith('/chat/stream')) return nativeFetch(input, init);
+      const call = ++calls;
+      const body = new ReadableStream<Uint8Array>({ start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ token: call === 1 ? 'First partial answer.' : 'Replacement partial answer.' })}\n\n`));
+        if (call === 1) {
+          // A transport can settle after AbortController.abort() returns.
+          window.addEventListener('test:finish-first', () => {
+            controller.enqueue(new TextEncoder().encode('data: {"token":" Stale output."}\n\n'));
+            queueMicrotask(() => controller.error(new DOMException('Delayed abort', 'AbortError')));
+          }, { once: true });
+        } else {
+          init?.signal?.addEventListener('abort', () => {
+            sessionStorage.setItem('replacement-aborted', 'true');
+            controller.error(new DOMException('Canceled', 'AbortError'));
+          }, { once: true });
+        }
+      } });
+      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+    };
+  });
+  await page.getByLabel('Message input').fill('Explain the first experiment.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('First partial answer.')).toBeVisible();
+  await page.getByRole('button', { name: 'Stop generation' }).click();
+  await expect(page.getByText('Response interrupted. This answer may be incomplete.')).toBeVisible();
+  await page.getByLabel('Message input').fill('Explain the replacement experiment.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('Replacement partial answer.')).toBeVisible();
+  await page.evaluate(async () => {
+    window.dispatchEvent(new Event('test:finish-first'));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await expect(page.getByText(/Stale output/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Stop generation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Stop generation' }).click();
+  expect(await page.evaluate(() => sessionStorage.getItem('replacement-aborted'))).toBe('true');
+  await expect(page.getByText('Response interrupted. This answer may be incomplete.')).toHaveCount(2);
+});
+
+test('changing conversations cancels generation without making the new chat busy', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.evaluate(() => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!url.endsWith('/chat/stream')) return nativeFetch(input, init);
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"token":"Pending old conversation."}\n\n'));
+        init?.signal?.addEventListener('abort', () => {
+          sessionStorage.setItem('conversation-request-aborted', 'true');
+          controller.error(new DOMException('Conversation changed', 'AbortError'));
+        }, { once: true });
+      } }), { headers: { 'Content-Type': 'text/event-stream' } });
+    };
+  });
+  await page.getByLabel('Message input').fill('Explain this document.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('Pending old conversation.')).toBeVisible();
+  await page.keyboard.press('Control+n');
+  await expect(page.getByLabel('Message input')).toBeEnabled();
+  expect(await page.evaluate(() => sessionStorage.getItem('conversation-request-aborted'))).toBe('true');
+  await expect(page.getByText('Pending old conversation.')).toHaveCount(0);
+});
+
+test('a delayed refresh cannot restore credentials after logout', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  const outcome = await page.evaluate(async () => {
+    const { auth, api } = await import('/src/services/api.ts');
+    const nativeFetch = window.fetch.bind(window);
+    let release: () => void = () => {};
+    let authorization: string | null = 'not-checked';
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.endsWith('/auth/refresh')) return new Promise<Response>(resolve => {
+        // Deliberately ignore abort to exercise stale-response protection too.
+        release = () => resolve(new Response(JSON.stringify({
+          access_token: 'late-refresh-token-that-must-not-be-restored',
+          user_id: '6ab4ef03-50ba-4782-95db-ecc55d64c53d', username: 'old.user',
+        }), { headers: { 'Content-Type': 'application/json' } }));
+      });
+      if (url.endsWith('/documents')) {
+        authorization = new Headers(init?.headers).get('Authorization');
+        return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+      }
+      return nativeFetch(input, init);
+    };
+    const pending = auth.refresh().then(() => 'restored', () => 'rejected');
+    await auth.logout();
+    release();
+    const refresh = await pending;
+    await api.getDocuments();
+    window.fetch = nativeFetch;
+    return { refresh, authorization };
+  });
+  expect(outcome).toEqual({ refresh: 'rejected', authorization: null });
+});
+
+for (const terminal of ['finished', 'failed'] as const) {
+  test(`web search waits for indexing and handles a ${terminal} job honestly`, async ({ page }) => {
+    await openLifecycleWorkspace(page);
+    let settled = false;
+    await page.route('**/documents/search-download', route => fulfillJson(route, {
+      status: 'success', downloaded: [{ id: 'paper.pdf', file_name: 'paper.pdf', new: true }],
+      message: 'Downloaded one PDF.', job_id: 'index-job-123',
+    }));
+    await page.route('**/documents/jobs/index-job-123', route => fulfillJson(route, {
+      id: 'index-job-123', status: settled ? terminal : 'started', progress: settled ? 100 : 40,
+      result: settled && terminal === 'finished' ? { indexed: true, chunks: 4 } : null,
+      error: settled && terminal === 'failed' ? 'Document parsing failed; try another PDF.' : null,
+    }));
+    await page.getByLabel('Message input').fill('search for denoising experiments');
+    await page.getByRole('button', { name: 'Send message' }).click();
+    await expect(page.getByText(/They are not ready for questions yet/)).toBeVisible();
+    await expect(page.getByText(/Indexing completed\. You can now ask/)).toHaveCount(0);
+    await expect(page.getByLabel('Message input')).toBeDisabled();
+    settled = true;
+    if (terminal === 'finished') {
+      await expect(page.getByText(/Indexing completed\. You can now ask/)).toBeVisible();
+    } else {
+      await expect(page.getByText('Document parsing failed; try another PDF.')).toBeVisible();
+      await expect(page.getByText('Response interrupted. This answer may be incomplete.')).toBeVisible();
+      await expect(page.getByText(/Indexing completed\. You can now ask/)).toHaveCount(0);
+    }
+    await expect(page.getByLabel('Message input')).toBeEnabled();
+  });
+}
+
+test('downloads original documents with authentication and allows retry after failure', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(/\/documents$/, route => fulfillJson(route, [{
+    id: 'storage-only.pdf', name: 'Báo cáo.pdf', size: 24, indexed: false, chunks: 0,
+  }]));
+  let unavailable = false;
+  let downloads = 0;
+  page.on('download', () => { downloads += 1; });
+  const original = '%PDF-1.4\nOriginal bytes\n';
+  await page.route('**/documents/storage-only.pdf/download', async route => {
+    expect(route.request().headers().authorization).toMatch(/^Bearer /);
+    expect(new URL(route.request().url()).search).toBe('');
+    if (unavailable) return fulfillJson(route, { detail: 'Document storage is temporarily unavailable' }, 503);
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, contentType: 'application/octet-stream', body: original });
+  });
+  await page.getByRole('button', { name: 'Docs', exact: true }).click();
+  const button = page.getByRole('button', { name: 'Download Báo cáo.pdf', exact: true });
+  await expect(button).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Ask questions about Báo cáo.pdf' })).toBeDisabled();
+  const downloaded = page.waitForEvent('download');
+  await button.click();
+  const download = await downloaded;
+  expect(download.suggestedFilename()).toBe('Báo cáo.pdf');
+  expect(await readFile((await download.path())!, 'utf-8')).toBe(original);
+  unavailable = true;
+  await button.click();
+  await expect(page.getByText('Document storage is temporarily unavailable', { exact: true })).toBeVisible();
+  await expect(button).toBeEnabled();
+  expect(downloads).toBe(1);
+  const box = await button.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+});
+
+test('document listing failures are recoverable and unindexed files are not called processing', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  let unavailable = true;
+  await page.route(/\/documents$/, route => unavailable
+    ? fulfillJson(route, { detail: 'Durable storage is temporarily unavailable.' }, 503)
+    : fulfillJson(route, [{ id: 'unindexed.txt', name: 'unindexed.txt', size: 42, indexed: false, chunks: 0 }]));
+  await page.getByRole('button', { name: 'Docs', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Durable storage is temporarily unavailable.');
+  await expect(page.getByText('No documents', { exact: true })).toHaveCount(0);
+  unavailable = false;
+  await page.getByRole('button', { name: 'Retry loading documents' }).click();
+  await expect(page.getByText('Not indexed — re-index to retry')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ask questions about unindexed.txt' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Refresh documents' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Re-index all documents' })).toBeVisible();
+});
+
+
+test('legacy browser preferences cannot leak document scope or instructions into a different account', async ({ page }) => {
+  await mockPortfolioApi(page, { activeSession: true });
+  await page.addInitScript(() => localStorage.setItem('rag-chat-storage', JSON.stringify({
+    version: 4,
+    state: { theme: 'light', sidebarOpen: true, customInstructions: 'PRIVATE PREVIOUS ACCOUNT INSTRUCTIONS',
+      nickname: 'Private nickname', displayName: 'Private profile', avatar: 'data:image/private',
+      selectedDocument: { id: 'private-document-id.txt', name: 'private-document-title.txt' } },
+  })));
+  await page.route('**/auth/preferences', route => fulfillJson(route, { detail: 'Preferences unavailable' }, 503));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Add your first document' })).toBeVisible({ timeout: 15_000 });
+  const result = await page.evaluate(async () => {
+    const { useChatStore } = await import('/src/store/useChatStore.ts');
+    return { scope: useChatStore.getState().selectedDocument,
+      instructions: useChatStore.getState().customInstructions,
+      persisted: localStorage.getItem('rag-chat-storage') };
+  });
+  expect(result.scope).toBeNull();
+  expect(result.instructions).toBe('');
+  expect(result.persisted).not.toContain('PRIVATE');
+  expect(result.persisted).not.toContain('private-document');
+  expect(result.persisted).not.toContain('Private profile');
+  expect(result.persisted).not.toContain('data:image/private');
+  await expect(page.locator('html')).toHaveClass(/light/);
+});
+
+test('failed account deletion preserves settings and session so the user can retry', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  let attempts = 0;
+  let logoutCalls = 0;
+  await page.route('**/auth/account', route => ++attempts === 1
+    ? fulfillJson(route, { detail: 'Account deletion is pending. Retry deleting the account.' }, 503)
+    : fulfillJson(route, { status: 'success', message: 'Account deleted' }));
+  await page.route('**/auth/logout', async route => {
+    logoutCalls += 1;
+    await route.fulfill({ status: 204, headers: CORS_HEADERS });
+  });
+  await page.getByRole('button', { name: 'Open settings' }).click();
+  await page.getByRole('button', { name: /Privacy & data/ }).click();
+  await page.getByRole('button', { name: 'Delete account', exact: true }).click();
+  await page.getByPlaceholder('portfolio.user').fill('portfolio.user');
+  await page.getByRole('button', { name: 'Delete permanently', exact: true }).click();
+  await expect(page.getByText('Account deletion is pending. Retry deleting the account.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete permanently', exact: true })).toBeEnabled();
+  expect(logoutCalls).toBe(0);
+  await page.getByRole('button', { name: 'Delete permanently', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
+  expect(logoutCalls).toBe(1);
+});
+
+test('Enter used to confirm IME composition does not submit the chat', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.getByLabel('Message input').fill('Tóm tắt tài liệu');
+  await page.getByLabel('Message input').dispatchEvent('keydown', { key: 'Enter', isComposing: true });
+  await expect(page.getByLabel('Message input')).toHaveValue('Tóm tắt tài liệu');
+  await expect(page.getByText(/Reciprocal rank fusion merges/)).toHaveCount(0);
+  await page.getByLabel('Message input').press('Enter');
+  await expect(page.getByText(/Reciprocal rank fusion merges/)).toBeVisible();
+});
+
+test('conversation changes preserve server-confirmed state after failures and can be retried', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.getByLabel('Message input').fill('Explain the retrieval experiment.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText(/Reciprocal rank fusion merges/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stop generation' })).toHaveCount(0);
+  const original = await page.evaluate(async () => {
+    const { useChatStore } = await import('/src/store/useChatStore.ts');
+    return useChatStore.getState().conversations[0];
+  });
+  let fail = true;
+  await page.route(`**/conversation/${original.id}`, async route => {
+    if (fail) return fulfillJson(route, { detail: 'Conversation storage is unavailable.' }, 503);
+    if (route.request().method() === 'DELETE') return fulfillJson(route, { status: 'success' });
+    return fulfillJson(route, { ...original, ...route.request().postDataJSON() });
+  });
+  await page.getByRole('button', { name: `Actions for ${original.title}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  const rename = page.getByRole('dialog', { name: 'Rename Conversation' });
+  await rename.getByRole('textbox', { name: 'Conversation title' }).fill('Saved conversation title');
+  await rename.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Conversation storage is unavailable.', { exact: true })).toBeVisible();
+  const unsavedTitle = await page.evaluate(async () => {
+    const { useChatStore } = await import('/src/store/useChatStore.ts');
+    return useChatStore.getState().conversations[0].title;
+  });
+  expect(unsavedTitle).toBe(original.title);
+  await expect(rename).toBeVisible();
+  fail = false;
+  await rename.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(rename).toBeHidden();
+  const actions = page.getByRole('button', { name: 'Actions for Saved conversation title', exact: true });
+  await expect(actions).toBeVisible();
+  fail = true;
+  await actions.click();
+  await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+  const deletion = page.getByRole('dialog', { name: 'Delete Conversation', exact: true });
+  await deletion.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(deletion).toBeVisible();
+  await expect(page.getByText('Conversation deleted', { exact: true })).toHaveCount(0);
+  const count = await page.evaluate(async () => {
+    const { useChatStore } = await import('/src/store/useChatStore.ts');
+    return useChatStore.getState().conversations.length;
+  });
+  expect(count).toBe(1);
+  fail = false;
+  await deletion.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(deletion).toBeHidden();
+  await expect(page.getByText('Conversation deleted', { exact: true })).toBeVisible();
+  await expect(actions).toHaveCount(0);
+});
+
+test('failed pin and duplicate requests do not invent saved conversations', async ({ page }) => {
+  await openLifecycleWorkspace(page);
+  await page.getByLabel('Message input').fill('Explain this document.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText(/Reciprocal rank fusion merges/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stop generation' })).toHaveCount(0);
+  await page.route('**/conversation/*', route => fulfillJson(route, { detail: 'Could not save conversation.' }, 503));
+  const result = await page.evaluate(async () => {
+    const { useChatStore } = await import('/src/store/useChatStore.ts');
+    const state = useChatStore.getState();
+    const id = state.conversations[0].id;
+    const failures: string[] = [];
+    for (const action of [state.pinConversation, state.duplicateConversation]) {
+      try { await action(id); } catch (error) { failures.push(error instanceof Error ? error.message : 'failed'); }
+    }
+    return { failures, count: useChatStore.getState().conversations.length, pinned: Boolean(useChatStore.getState().conversations[0].pinned) };
+  });
+  expect(result.failures).toEqual(['Could not save conversation.', 'Could not save conversation.']);
+  expect(result.count).toBe(1);
+  expect(result.pinned).toBe(false);
 });
