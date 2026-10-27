@@ -105,6 +105,8 @@ adjudication rules.
 
 ## Benchmark reproduction
 
+The optional neural experiment uses [requirements-evaluation.txt](../requirements-evaluation.txt): Sentence Transformers 5.7.0, Transformers 5.10.1 and PyTorch 2.13.0. These replace vulnerable experiment dependencies; `advanced_results.json` retains the original environment and has not been relabeled or regenerated. The [optional dependency workflow](../../.github/workflows/evaluation-dependencies.yml) audits the installed CPU stack and checks embedding/reranker APIs with tiny local models. A full quality rerun with the pinned research models is a separate experiment. Model loading explicitly disables remote code.
+
 For a complete clean-source recipe, use [reproduction](../../docs/REPRODUCIBILITY.md). Paper/excerpt permissions are separate from the project code license; see [third-party notices](../../THIRD_PARTY_NOTICES.md).
 
 From `backend`:

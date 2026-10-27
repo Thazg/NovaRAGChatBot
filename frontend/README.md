@@ -20,6 +20,8 @@ On PowerShell, use `Copy-Item .env.example .env`. Open the URL printed by Vite, 
 
 `VITE_*` values are public build inputs. Never place provider keys, signing secrets, or database credentials in them. Without an override, development uses the browser hostname on port 8000 (`127.0.0.1` stays `127.0.0.1`; `localhost` stays `localhost`); production deliberately uses `/api` even if a stale `VITE_API_BASE_URL` override exists. Vercel and nginx proxy that same-origin path to FastAPI. `npm run preview` serves static build output and does not create a backend proxy by itself.
 
+Both About views display the application version from `package.json`, injected by Vite at build time. The backend's independently deployed release label comes from `APP_VERSION`; changing a public release also requires updating any explicit backend deployment environment value. Dependency versions, browser-state schema versions and dated evaluation artifacts use their own versioning.
+
 ## Source map and ownership
 
 | Area | Responsibility |

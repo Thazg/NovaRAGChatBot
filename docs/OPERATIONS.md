@@ -15,7 +15,7 @@ Compose persists `/app/storage` and `/app/Dataset/uploads` through named volumes
 
 ## Hosted demo and deployment diagnostics
 
-The linked demo uses a Vercel frontend with a same-origin `/api` proxy to Render. It is a separate deployment and can lag the source branch; the public version string does not identify its Git commit. Render can require a cold start.
+The linked demo uses a Vercel frontend with a same-origin `/api` proxy to Render. It is a separate deployment and can lag the source branch; the public version string does not identify its Git commit. Render can require a cold start. The first public source release is labeled `1.0.0`; the dated observations below retain the demo's earlier label. Frontend About views use the version in `frontend/package.json` at build time; API health/OpenAPI use `APP_VERSION`. Update any explicitly set deployment environment value when changing the release label.
 
 Read-only observations on 2026-10-26 returned200 for the frontend, `/health` and `/health/ready`:
 

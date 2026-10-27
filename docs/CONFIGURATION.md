@@ -27,7 +27,7 @@ Defaults below are code defaults, not a promise about a running deployment. Dura
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
-| `APP_VERSION` | `2.1.0` | API/monitoring release label; not an automatic migration mechanism |
+| `APP_VERSION` | `1.0.0` | API/monitoring release label; not an automatic migration mechanism |
 | `ENVIRONMENT` | `development` | `development`, `test`, `staging`, `production`; production enables stricter startup checks. Use production security settings for staging with real data |
 | `LLM_PROVIDER` | `groq` | `groq` or `ollama` |
 | `GROQ_API_KEY` | empty | Server-side chat credential; only needed for Groq |

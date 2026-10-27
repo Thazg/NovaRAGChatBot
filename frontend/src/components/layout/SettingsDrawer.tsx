@@ -988,7 +988,7 @@ export const SettingsDrawer = () => {
           <p className="relative mx-auto mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
             {productInfo.description}
           </p>
-          <p className="relative mt-2 text-xs font-medium text-muted-foreground">Version {systemInfo?.version || '—'} – {systemInfo?.environment || 'workspace'}</p>
+          <p className="relative mt-2 text-xs font-medium text-muted-foreground">Version {productInfo.version} – {(systemInfo?.environment || 'workspace').replace(/^./, char => char.toUpperCase())}</p>
         </div>
         <div className="grid gap-2 p-4 sm:grid-cols-3 sm:p-5">
           {[

@@ -640,7 +640,7 @@ export const Sidebar = ({ forceShow, onClose }: { forceShow?: boolean; onClose?:
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-md border border-border/60 bg-muted/60 px-2 py-1 tabular-nums">v2.1.0</span>
+              <span className="rounded-md border border-border/60 bg-muted/60 px-2 py-1 tabular-nums">v{productInfo.version}</span>
               <span>{productInfo.technologies}</span>
             </div>
           </div>

@@ -7,7 +7,7 @@ load_dotenv(BACKEND_DIR / ".env")
 
 
 class Settings:
-    APP_VERSION: str = os.getenv("APP_VERSION", "2.1.0")
+    APP_VERSION: str = os.getenv("APP_VERSION", "1.0.0")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").strip().lower()
 
     # Provider: "ollama" (local) or "groq" (cloud-free, no GPU needed)

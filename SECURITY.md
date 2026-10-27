@@ -16,6 +16,10 @@ CI runs `python -m pip_audit` against the installed Python environment and `npm 
 
 Current controls include account-scoped routes/storage, hashed passwords, short-lived in-memory access tokens, rotating hashed refresh sessions, origin checks for cookie-backed endpoints, upload validation, bounded parsing, SSRF defenses and deletion barriers. The [session](docs/SESSION_SECURITY.md), [upload](docs/UPLOAD_SECURITY.md) and [persistence](docs/PRODUCTION_PERSISTENCE.md) documents describe their boundaries.
 
+## Optional evaluation dependencies
+
+The separate optional-evaluation workflow installs and audits `backend/requirements-evaluation.txt` on CPU, on relevant changes and weekly. It exercises embeddings and cross-encoder scoring with tiny local models without model downloads. This checks the optional neural experiment's dependencies; it is not a new quality benchmark. Evaluation model revisions are pinned and remote model code is explicitly disabled. Historical experiment artifacts retain their original package versions and are evidence records, not recommendations to reinstall vulnerable releases.
+
 ## Frontend build dependency policy
 
 The npm lockfile is audited with development dependencies included. `postcss-selector-parser` is overridden to the patched 7.1 line (minimum 7.1.6) for Tailwind 3 and its typography/nesting tools because their older dependency ranges otherwise retain the vulnerable parser. This changes the build dependency, not the Tailwind major or runtime styling API. Lint/type/build and the browser suite, including unchanged visual baselines, must pass before accepting an override update. Review or remove the override when upstream ranges support a patched parser. Vite's minimum supported dependency range is also raised to a patched release.
