@@ -4,7 +4,7 @@ export const productInfo = {
   version: import.meta.env.VITE_APP_VERSION as string,
   tagline: 'Private document workspace',
   description: 'A private, document-grounded workspace for searchable and citation-aware conversations',
-  technologies: 'React – TypeScript – FastAPI – Document retrieval',
+  technologies: 'React – TypeScript – FastAPI – Document Retrieval',
   copyright: '© 2026 Nguyen Tam Thang',
   repositoryUrl: 'https://github.com/Thazg/NovaRAGChatBot',
 };
