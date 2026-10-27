@@ -7,7 +7,7 @@
 <p align="center">
   <a href="backend/requirements.txt"><img alt="Python 3.12" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" /></a>
   <a href="backend/README.md"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" /></a>
-  <a href="https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml"><img alt="CI workflow" src="https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white" /></a>
+  <a href="https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml"><img alt="CI status on main" src="https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-64748B" /></a>
 </p>
 
@@ -151,7 +151,7 @@ npm run test
 npm run e2e
 ```
 
-[GitHub Actions](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml) checks documentation, installed Python dependencies, backend coverage/retrieval gates, frontend dependencies/build/unit tests and Chromium E2E. The CI badge links to the workflow; per-commit runs are the status evidence. Browser tests use controlled API fixtures, not a model-quality judge. Linux visual baselines use the pinned Playwright image. See [testing scopes](docs/TESTING.md).
+[GitHub Actions](https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml) checks documentation, installed Python dependencies, backend coverage/retrieval gates, frontend dependencies/build/unit tests and Chromium E2E. The CI badge reports the latest workflow status on `main`; inspect the linked runs for per-commit evidence. Browser tests use controlled API fixtures, not a model-quality judge. Linux visual baselines use the pinned Playwright image. See [testing scopes](docs/TESTING.md).
 
 ## Limitations
 
