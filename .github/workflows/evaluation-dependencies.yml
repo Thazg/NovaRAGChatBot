@@ -1,0 +1,59 @@
+name: Optional evaluation dependencies
+
+on:
+  pull_request:
+    paths:
+      - 'backend/requirements*.txt'
+      - 'backend/evaluation/advanced_retrieval_eval.py'
+      - 'scripts/check_evaluation_dependencies.py'
+      - 'scripts/audit_evaluation_dependencies.py'
+      - '.github/workflows/evaluation-dependencies.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/requirements*.txt'
+      - 'backend/evaluation/advanced_retrieval_eval.py'
+      - 'scripts/check_evaluation_dependencies.py'
+      - 'scripts/audit_evaluation_dependencies.py'
+      - '.github/workflows/evaluation-dependencies.yml'
+  schedule:
+    - cron: '31 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluation-dependencies:
+    name: Evaluation dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install CPU evaluation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+          requirement = next(
+              line for line in Path('backend/requirements-evaluation.txt').read_text().splitlines()
+              if line.startswith('torch==')
+          )
+          subprocess.run([
+              sys.executable, '-m', 'pip', 'install', requirement,
+              '--index-url', 'https://download.pytorch.org/whl/cpu',
+          ], check=True)
+          PY
+          python -m pip install -r backend/requirements-evaluation.txt
+      - run: python -m pip check
+      - run: python scripts/audit_evaluation_dependencies.py
+      - name: Verify local embedding and reranker APIs without model downloads
+        env:
+          HF_HUB_OFFLINE: '1'
+        run: python scripts/check_evaluation_dependencies.py

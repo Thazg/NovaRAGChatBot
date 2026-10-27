@@ -147,6 +147,7 @@ def evaluate(
         revision=DENSE_REVISION,
         device="cpu",
         local_files_only=not allow_model_download,
+        trust_remote_code=False,
     )
     dense_model_load_ms = (time.perf_counter() - started) * 1000
     started = time.perf_counter()
@@ -167,6 +168,7 @@ def evaluate(
         revision=RERANKER_REVISION,
         device="cpu",
         local_files_only=not allow_model_download,
+        trust_remote_code=False,
     )
     reranker_load_ms = (time.perf_counter() - started) * 1000
 
