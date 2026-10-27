@@ -1,7 +1,7 @@
 {
   "name": "nova-ai-frontend",
   "private": true,
-  "version": "2.1.0",
+  "version": "1.0.0",
   "description": "Motion-rich React client for the Nova private RAG workspace",
   "type": "module",
   "scripts": {
