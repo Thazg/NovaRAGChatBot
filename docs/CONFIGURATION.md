@@ -17,9 +17,33 @@ COOKIE_SECURE=false
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-Set `JWT_SECRET` separately to your generated value. For local Ollama, use `LLM_PROVIDER=ollama`, `OLLAMA_URL=http://localhost:11434`, and an installed `MODEL_NAME`; a Groq key is then unnecessary. Starting a provider or downloading a model is a separate operator action.
+Set `JWT_SECRET` separately to your generated value. For local Ollama, use `LLM_PROVIDER=ollama`, `OLLAMA_URL=http://localhost:11434`, and an installed `MODEL_NAME`; a Groq key is then unnecessary. The [local launcher](#one-command-local-launcher) can start a local Ollama server automatically. Model downloads require the explicit `--pull-model` option or a separate `ollama pull` command.
 
 Use matching hostnames in the browser and API (`127.0.0.1` with `127.0.0.1`, or `localhost` with `localhost`) so refresh-cookie behavior is consistent. Different ports are separate origins and must be allowed by CORS; changing from `localhost` to `127.0.0.1` is also a cookie-host/site change.
+
+## One-command local launcher
+
+Complete the [one-time setup](../README.md#quick-start) first: install backend dependencies into `.venv`, run `npm ci` in `frontend`, and configure `backend/.env`. Python 3.12 and Node.js 22.12+ are the supported setup. No new launcher dependency, Docker daemon or root npm package is required.
+
+From the repository root, run `python scripts/dev.py`, or double-click [`start-local.cmd`](../start-local.cmd) on Windows. All child services use one console. The launcher:
+
+1. Loads settings using the backend's actual dotenv/default/environment precedence without displaying credentials.
+2. Checks that the API and UI ports are free; it does not kill existing services.
+3. In Ollama mode, reuses a reachable server or starts one for a local HTTP loopback `OLLAMA_URL`. It checks `/api/tags` for the selected model. Remote providers must already be reachable. In Groq mode, it leaves Ollama alone and uses the configured key.
+4. Starts Uvicorn on `127.0.0.1:8000`, waits for `/health/ready?refresh=true`, then starts Vite on `127.0.0.1:5173` with strict port selection. It overrides a stale frontend API URL for this child process and allows the selected UI origin without rewriting either `.env` file.
+5. Opens the browser after both services are ready. Ctrl+C, startup failure or an unexpected child exit cleans up only owned process trees. Ollama started before the launcher is not stopped; its model keep-alive behavior is unchanged.
+
+| Option | Behavior |
+| --- | --- |
+| `--pull-model` | Download the configured Ollama model only if missing; requires the Ollama CLI and may download several GB |
+| `--no-browser` | Leave the ready UI URL in the console without opening a browser |
+| `--reload` | Enable Uvicorn Python-source reload; frontend HMR is already enabled |
+| `--backend-port 8001 --frontend-port 5174` | Choose free local ports; align API URL/CORS automatically |
+| `--startup-timeout 180` | Allow more seconds per service for readiness, for example with a slow local model warmup; not a generation-quality check |
+
+Keep the console open while using Nova. Closing it forcibly is not a substitute for Ctrl+C on every platform. The Windows entry point pauses on errors so setup messages remain visible. It never installs packages, writes secrets or downloads a model implicitly. Restart the launcher after editing backend `.env`; normal frontend HMR and optional Python-source reload do not reload configuration reliably.
+
+This entry point requires `ENVIRONMENT=development` and an empty `REDIS_URL`, because local indexing runs inside the API. Existing configured databases/storage still have to be reachable. It does not start PostgreSQL, Redis, RQ workers, ClamAV, embedding services or containers; use the [operations](OPERATIONS.md) and [persistence](PRODUCTION_PERSISTENCE.md) guides for those deployments. Docker Compose remains a separate Groq-backed deployment option.
 
 ## Application, provider and retrieval
 

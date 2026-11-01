@@ -4,6 +4,8 @@ Nova's FastAPI service owns authentication, private document ingestion, retrieva
 
 ## Run locally
 
+For the complete local UI/API/provider stack after setup, run `python scripts/dev.py` from the repository root, or double-click [`start-local.cmd`](../start-local.cmd) on Windows. See the [launcher guide](../docs/CONFIGURATION.md#one-command-local-launcher). The commands below remain useful for running the API by itself.
+
 Use Python 3.12, matching CI. From the repository root:
 
 ```bash

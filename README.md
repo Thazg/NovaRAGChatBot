@@ -110,30 +110,28 @@ JWT_SECRET=replace_with_a_unique_random_secret
 
 Replace `JWT_SECRET` with a fresh value from `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Keep the real environment file local.
 
-Start Ollama in another terminal:
-
-```bash
-ollama pull qwen3:4b-instruct
-ollama serve
-```
-
-Skip `ollama serve` if the desktop app/server is already running. With the virtual environment active, start the API:
-
-```bash
-cd backend
-python -m uvicorn app:app --reload --host 127.0.0.1 --port 8000
-```
-
-In another terminal, from the repository root:
+Install the frontend dependencies once, from the repository root:
 
 ```bash
 cd frontend
 npm ci
 cp .env.example .env
-npm run dev -- --host 127.0.0.1
+cd ..
 ```
 
-Open [127.0.0.1:5173](http://127.0.0.1:5173), register a local account and upload a small text/PDF document. [Local API docs](http://127.0.0.1:8000/docs) and [readiness](http://127.0.0.1:8000/health/ready?refresh=true) help diagnose setup. Full environment and Docker instructions are in the [configuration reference](docs/CONFIGURATION.md) and [operations guide](docs/OPERATIONS.md).
+After this one-time setup, **start everything with one command** from the repository root:
+
+```bash
+python scripts/dev.py
+```
+
+On Windows, you can instead **double-click [`start-local.cmd`](start-local.cmd)** or run `.\start-local.cmd`. Virtual-environment activation is unnecessary: the launcher selects the repository's `.venv` interpreter. Install Ollama first when using the local provider. If the configured model is missing, run `python scripts/dev.py --pull-model` once to explicitly allow its download (potentially several GB).
+
+The launcher reads the existing backend settings, starts or reuses Ollama, verifies that the configured model is installed, waits for backend/provider readiness, then starts Vite and opens [127.0.0.1:5173](http://127.0.0.1:5173). Groq mode needs its key but no local model server. Logs share one terminal; **Ctrl+C stops only service trees started by that launcher**, including reload workers. A pre-existing Ollama server remains running. Occupied backend/frontend ports produce an error instead of stopping another application or silently selecting a different port.
+
+Use `--no-browser` to suppress the browser, `--reload` for backend source reload, or `--backend-port 8001 --frontend-port 5174` for different ports; the launcher aligns the frontend API URL and allowed origin automatically. Restart it after changing backend configuration. The launcher is for the development profile with in-process indexing; it does not provision PostgreSQL, Redis/RQ, B2, embedding servers or other shared infrastructure. See the [local launcher guide](docs/CONFIGURATION.md#one-command-local-launcher).
+
+Register a local account and upload a small text/PDF document. [Local API docs](http://127.0.0.1:8000/docs) and [readiness](http://127.0.0.1:8000/health/ready?refresh=true) help diagnose setup. Full environment and Docker instructions are in the [configuration reference](docs/CONFIGURATION.md) and [operations guide](docs/OPERATIONS.md).
 
 ## Testing and reproduction
 
