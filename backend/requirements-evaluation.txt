@@ -1,6 +1,6 @@
 -r requirements-dev.txt
 sentence-transformers==5.7.0
 transformers==5.10.1
-torch==2.13.0
+torch==2.15.0
 filelock==4.2.1
 setuptools==84.1.0
