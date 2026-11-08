@@ -5,7 +5,8 @@
 </p>
 
 <p align="center">
-  <a href="backend/requirements.txt"><img alt="Python 3.12" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" /></a>
+  <a href="docs/RAG_PIPELINE.md"><img alt="BM25 Retrieval" src="https://img.shields.io/badge/BM25-Retrieval-2563EB" /></a>
+  <a href="backend/evaluation/results.json"><img alt="RAG Evaluation" src="https://img.shields.io/badge/RAG-Evaluation-7C3AED" /></a>
   <a href="backend/README.md"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" /></a>
   <a href="https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml"><img alt="CI status on main" src="https://github.com/Thazg/NovaRAGChatBot/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-64748B" /></a>
