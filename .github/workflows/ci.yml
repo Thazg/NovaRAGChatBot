@@ -37,7 +37,7 @@ jobs:
       - name: Audit installed Python dependencies
         run: python -m pip_audit
       - name: Cache checksum-pinned arXiv PDFs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: backend/evaluation/arxiv_corpus/pdfs
           key: arxiv-pdfs-${{ hashFiles('backend/evaluation/arxiv_corpus/checksums.json') }}
@@ -81,7 +81,7 @@ jobs:
         run: npm run e2e
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: frontend/playwright-report/
